@@ -73,11 +73,10 @@ def main():
 
         N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
         f_norm = 1/50
-        n_data = datasets[f"{survey}_DATA_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+        n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
 
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
-
         fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
 
         print(fitobj.x)
