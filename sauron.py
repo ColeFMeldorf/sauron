@@ -45,41 +45,43 @@ def main():
                 datasets[f"{survey}_DATA_CC"], "all")
         print("Done!")
 
-    z_bins = np.arange(0, 1, 0.1)
+    for survey in surveys:
 
-    # Core Collapse Contamination
-    PROB_THRESH = 0.13
+        z_bins = np.arange(0, 1, 0.1)
 
-    IA_frac = (datasets["SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
-               datasets["SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-    N_data = np.sum(datasets["DATA_ALL"].z_counts(z_bins))
-    n_data = np.sum(datasets["DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-    R = n_data / N_data
+        # Core Collapse Contamination
+        PROB_THRESH = 0.13
 
-    N_IA_sim = np.sum(datasets["SIM_IA"].z_counts(z_bins))
-    n_IA_sim = np.sum(datasets["SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
+                   datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        N_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins))
+        n_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        R = n_data / N_data
 
-    N_CC_sim = np.sum(datasets["SIM_CC"].z_counts(z_bins))
-    n_CC_sim = np.sum(datasets["SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+        n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-    S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+        N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
+        n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-    CC_frac = (1 - IA_frac) * S
-    IA_frac = 1 - CC_frac
+        S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
 
-    eff_ij = calculate_transfer_matrix(datasets["DUMP_IA"],  datasets["SIM_IA"], z_bins)
+        CC_frac = (1 - IA_frac) * S
+        IA_frac = 1 - CC_frac
 
-    N_gen = datasets["dump_IA"].z_counts(z_bins)
-    f_norm = 1/50
-    n_data = datasets["data_all"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+        eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
 
-    # How will this work when I am fitting a non-power law?
-    # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
+        N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
+        f_norm = 1/50
+        n_data = datasets[f"{survey}_DATA_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
 
-    fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
+        # How will this work when I am fitting a non-power law?
+        # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
 
-    print(fitobj.x)
-    print(fitobj.fun/(len(z_bins) - 2))
+        fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
+
+        print(fitobj.x)
+        print(fitobj.fun/(len(z_bins) - 2))
 
 
 class SN_dataset():
