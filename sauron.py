@@ -17,7 +17,7 @@ from astropy.cosmology import LambdaCDM
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 # These need to be added to config file later
-corecollapse_are_separate = False
+corecollapse_are_separate = True
 
 
 def main():
