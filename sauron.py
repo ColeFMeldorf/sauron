@@ -21,7 +21,7 @@ corecollapse_are_separate = True
 
 
 def main():
-    files_input = yaml.safe_load(open("sauron_config.yaml"))
+    files_input = yaml.safe_load(open("config_sauron.yml"))
     surveys = list(files_input.keys())
 
     datasets = {}
@@ -32,7 +32,6 @@ def main():
             sntype = "IA" if "IA" in file else "CC"
             datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file], comment="#", sep=r"\s+"), sntype)
 
-    print(datasets)
 
     if corecollapse_are_separate:
         print("Combining IA and CC files..")
@@ -79,8 +78,8 @@ def main():
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
 
-        print(fitobj.x)
-        print(fitobj.fun/(len(z_bins) - 2))
+        print("Delta Alpha and Delta Beta:", fitobj.x)
+        print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
 
 
 class SN_dataset():
@@ -157,6 +156,7 @@ def calculate_transfer_matrix(dump, sim, z_bins):
                                      dump_events_subset[dump_z_col], statistic='count', bins=z_bins)[0]
         simulated_counts_subset = binstat(simulated_events_subset[sim_z_col],
                                           simulated_events_subset[sim_z_col], statistic='count', bins=z_bins)[0]
+        dump_counts_subset[dump_counts_subset == 0] = 1  
         eff_ij[i, :] = simulated_counts_subset / dump_counts_subset
         eff_ij[i, :][np.where(dump_counts_subset == 0)] = 0
 
