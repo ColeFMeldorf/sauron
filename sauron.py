@@ -1,18 +1,85 @@
 # Working title: SAURON
 # Survey-Agnostic volUmetric Rate Of superNovae
 
+# Standard Library
+import yaml
+
+
 import pandas as pd
 import numpy as np
 # from matplotlib import pyplot as plt
+from scipy.optimize import minimize
 from scipy.stats import binned_statistic as binstat
+
 
 # Astronomy
 from astropy.cosmology import LambdaCDM
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
+# These need to be added to config file later
+corecollapse_are_separate = False
+
 
 def main():
-    pass
+    files_input = yaml.safe_load(open("sauron_config.yaml"))
+    surveys = list(files_input.keys())
+
+    datasets = {}
+
+    for survey in surveys:
+        survey_dict = files_input[survey]
+        for i, file in enumerate(list(survey_dict.keys())):
+            sntype = "IA" if "IA" in file else "CC"
+            datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file], comment="#", sep=r"\s+"), sntype)
+
+    print(datasets)
+
+    if corecollapse_are_separate:
+        print("Combining IA and CC files..")
+        for survey in surveys:
+            datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
+                datasets[f"{survey}_DUMP_CC"], "all")
+            datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
+                datasets[f"{survey}_SIM_CC"], "all")
+            datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"].combine_with(
+                datasets[f"{survey}_DATA_CC"], "all")
+        print("Done!")
+
+    z_bins = np.arange(0, 1, 0.1)
+
+    # Core Collapse Contamination
+    PROB_THRESH = 0.13
+
+    IA_frac = (datasets["SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
+               datasets["SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+    N_data = np.sum(datasets["DATA_ALL"].z_counts(z_bins))
+    n_data = np.sum(datasets["DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+    R = n_data / N_data
+
+    N_IA_sim = np.sum(datasets["SIM_IA"].z_counts(z_bins))
+    n_IA_sim = np.sum(datasets["SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+    N_CC_sim = np.sum(datasets["SIM_CC"].z_counts(z_bins))
+    n_CC_sim = np.sum(datasets["SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+    S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+
+    CC_frac = (1 - IA_frac) * S
+    IA_frac = 1 - CC_frac
+
+    eff_ij = calculate_transfer_matrix(datasets["DUMP_IA"],  datasets["SIM_IA"], z_bins)
+
+    N_gen = datasets["dump_IA"].z_counts(z_bins)
+    f_norm = 1/50
+    n_data = datasets["data_all"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+
+    # How will this work when I am fitting a non-power law?
+    # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
+
+    fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
+
+    print(fitobj.x)
+    print(fitobj.fun/(len(z_bins) - 2))
 
 
 class SN_dataset():
@@ -24,12 +91,15 @@ class SN_dataset():
         possible_z_cols = ['zHD', "GENZ"]
         self.z_col = None
         for i in possible_z_cols:
-            self.df[i]
-            if self.z_col is None:
-                self.z_col = i
-                print(f"Found z_col {i}")
-            else:
-                raise ValueError("Multiple valid zcols found")
+            try:
+                self.df[i]
+                if self.z_col is None:
+                    self.z_col = i
+                    print(f"Found z_col {i}")
+                else:
+                    raise ValueError("Multiple valid zcols found")
+            except KeyError:
+                pass
 
         scone_col = []
         for c in self.df.columns:
@@ -108,6 +178,23 @@ def calculate_CC_scale_factor(data_IA, data_CC, sim_IA, sim_CC):
     n_CC_sim = len(mu_res_sim_CC[mu_res_sim_CC > 1])
 
     S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
-    print(S)
 
     return S
+
+
+def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
+    alpha, beta = x
+    zJ = (z_bins[1:] + z_bins[:-1])/2
+    fJ = alpha * (1 + zJ)**beta
+    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=1)
+    var_Ei = Ei
+    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=1)
+    chi_squared = np.sum(
+        (n_data - Ei)**2 /
+        (var_Ei + var_Si)
+    )
+    return chi_squared
+
+
+if __name__ == "__main__":
+    main()
