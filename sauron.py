@@ -21,7 +21,7 @@ corecollapse_are_separate = True
 
 
 def main():
-    files_input = yaml.safe_load(open("config_sauron.yaml"))
+    files_input = yaml.safe_load(open("config_sauron.yml"))
     surveys = list(files_input.keys())
 
     datasets = {}
