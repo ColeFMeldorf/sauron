@@ -171,6 +171,7 @@ def calculate_transfer_matrix(dump, sim, z_bins):
     plt.imshow(eff_ij, origin='lower', aspect='auto', extent=(z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]))
     plt.colorbar(label='Efficiency')
     plt.title('Redshift Transfer Matrix')
+    plt.show()
 
     return eff_ij
 
