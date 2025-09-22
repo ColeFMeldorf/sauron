@@ -89,7 +89,7 @@ class SN_dataset():
         self.sntype = sntype
         if self.sntype not in ["IA", "CC", "all"]:
             print(f"unrecognized type: {self.sntype}")
-        possible_z_cols = ['zHD', "GENZ"]
+        possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
         self.z_col = None
         for i in possible_z_cols:
             try:
