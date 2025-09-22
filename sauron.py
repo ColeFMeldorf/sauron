@@ -30,7 +30,7 @@ def main():
         survey_dict = files_input[survey]
         for i, file in enumerate(list(survey_dict.keys())):
             sntype = "IA" if "IA" in file else "CC"
-            zcol = survey_dict[file].get('ZCOL', None)
+            zcol = survey_dict[file].get("ZCOL", None)
             datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
                                                    sntype, data_name=survey+"_"+file, zcol=zcol)
 
