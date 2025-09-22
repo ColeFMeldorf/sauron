@@ -30,7 +30,8 @@ def main():
         survey_dict = files_input[survey]
         for i, file in enumerate(list(survey_dict.keys())):
             sntype = "IA" if "IA" in file else "CC"
-            datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file], comment="#", sep=r"\s+"), sntype)
+            datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file], comment="#", sep=r"\s+"), sntype,
+                                                   data_name=survey+"_"+file)
 
     print(datasets)
 
@@ -84,12 +85,17 @@ def main():
 
 
 class SN_dataset():
-    def __init__(self, dataframe, sntype):
+    def __init__(self, dataframe, sntype, zcol=None, data_name=None):
         self.df = dataframe
         self.sntype = sntype
         if self.sntype not in ["IA", "CC", "all"]:
             print(f"unrecognized type: {self.sntype}")
-        possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
+
+        if zcol is not None:
+            possible_z_cols = [zcol]
+        else:
+            possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
+
         self.z_col = None
         for i in possible_z_cols:
             try:
@@ -98,7 +104,7 @@ class SN_dataset():
                     self.z_col = i
                     print(f"Found z_col {i}")
                 else:
-                    raise ValueError("Multiple valid zcols found")
+                    raise ValueError(f"Multiple valid zcols found in {data_name}. I found: {self.z_col} and {i}")
             except KeyError:
                 pass
 
@@ -107,10 +113,10 @@ class SN_dataset():
             if "PROB_SCONE" in c:
                 scone_col.append(c)
         if len(scone_col) == 0:
-            print("No valid prob_scone column!")
+            print(f"No valid prob_scone column in {data_name}!")
             self.scone_col = None
         elif len(scone_col) > 1:
-            raise ValueError(f"Multiple Valid scone columns found! Which do I use? I found: {scone_col}")
+            raise ValueError(f"Multiple Valid scone columns found in {data_name}! Which do I use? I found: {scone_col}")
         else:
             self.scone_col = scone_col[0]
             print(f"Using scone col {scone_col}")
