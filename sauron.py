@@ -139,12 +139,12 @@ class SN_dataset():
     def prob_scone(self):
         return self.df[self.scone_col]
 
-    def combine_with(self, dataset, newtype):
+    def combine_with(self, dataset, newtype, data_name=None):
         new_df = pd.concat([self.df, dataset.df], join="inner")
         if self.scone_col is not None and dataset.scone_col is not None:
             scone_prob_col = pd.concat([self.prob_scone(), dataset.prob_scone()])
             new_df["PROB_SCONE"] = scone_prob_col
-        return SN_dataset(new_df, newtype, zcol = [self.z_col]) # Note that this forces the two data sets to have the
+        return SN_dataset(new_df, newtype, zcol=self.z_col, data_name=data_name) # Note that this forces the two data sets to have the
         # same z_col. I can't think of a scenario where this would be a problem, but maybe it could be.
 
 
