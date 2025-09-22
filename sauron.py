@@ -7,7 +7,7 @@ import yaml
 
 import pandas as pd
 import numpy as np
-# from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt
 from scipy.optimize import minimize
 from scipy.stats import binned_statistic as binstat
 
@@ -167,6 +167,10 @@ def calculate_transfer_matrix(dump, sim, z_bins):
                                           simulated_events_subset[sim_z_col], statistic='count', bins=z_bins)[0]
         eff_ij[i, :] = simulated_counts_subset / dump_counts_subset
         eff_ij[i, :][np.where(dump_counts_subset == 0)] = 0
+
+    plt.imshow(eff_ij, origin='lower', aspect='auto', extent=(z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]))
+    plt.colorbar(label='Efficiency')
+    plt.title('Redshift Transfer Matrix')
 
     return eff_ij
 
