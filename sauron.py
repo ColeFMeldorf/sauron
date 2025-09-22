@@ -40,11 +40,11 @@ def main():
         print("Combining IA and CC files..")
         for survey in surveys:
             datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
-                datasets[f"{survey}_DUMP_CC"], "all")
+                datasets[f"{survey}_DUMP_CC"], "all", data_name =survey+"_DUMP_ALL")
             datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
-                datasets[f"{survey}_SIM_CC"], "all")
+                datasets[f"{survey}_SIM_CC"], "all", data_name  =survey+"_SIM_ALL")
             datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"].combine_with(
-                datasets[f"{survey}_DATA_CC"], "all")
+                datasets[f"{survey}_DATA_CC"], "all", data_name =survey+"_DATA_ALL")
         print("Done!")
 
     for survey in surveys:
@@ -100,7 +100,7 @@ class SN_dataset():
         self.z_col = None
         for i in possible_z_cols:
             try:
-                self.df[i]
+                self.df[i] # better way to do this?
                 if self.z_col is None:
                     self.z_col = i
                     print(f"Found z_col {i}")
@@ -144,7 +144,8 @@ class SN_dataset():
         if self.scone_col is not None and dataset.scone_col is not None:
             scone_prob_col = pd.concat([self.prob_scone(), dataset.prob_scone()])
             new_df["PROB_SCONE"] = scone_prob_col
-        return SN_dataset(new_df, newtype)
+        return SN_dataset(new_df, newtype, zcol = [self.z_col]) # Note that this forces the two data sets to have the
+        # same z_col. I can't think of a scenario where this would be a problem, but maybe it could be.
 
 
 def calculate_transfer_matrix(dump, sim, z_bins):
