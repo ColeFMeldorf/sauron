@@ -4,7 +4,7 @@
 # Standard Library
 import yaml
 
-
+import argparse
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
@@ -21,7 +21,11 @@ corecollapse_are_separate = True
 
 
 def main():
-    files_input = yaml.safe_load(open("config_sauron.yml"))
+    parser = argparse.ArgumentParser(description='SAURON: Survey-Agnostic volUmetric Rate Of superNovae')
+    parser.add_argument('config', help='Path to the config file (positional argument)')
+    parser.add_argument('--output', '-o', default='sauron_output.csv', help='Path to the output file (optional)')
+    args = parser.parse_args()
+    files_input = yaml.safe_load(open(args.config, 'r'))
     surveys = list(files_input.keys())
 
     datasets = {}
@@ -88,6 +92,14 @@ def main():
 
         print("Delta Alpha and Delta Beta:", fitobj.x)
         print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
+        output_df = pd.DataFrame({
+            "delta_alpha": fitobj.x[0],
+            "delta_beta": fitobj.x[1],
+            "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
+        }, index = np.array([0]))
+        output_path = args.output
+        print(f"Saving to {output_path}")
+        output_df.to_csv(output_path, index=False)
 
 
 class SN_dataset():
