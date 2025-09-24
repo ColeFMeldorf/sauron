@@ -6,6 +6,7 @@ import yaml
 
 
 import pandas as pd
+import pathlib
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import minimize
@@ -21,7 +22,7 @@ corecollapse_are_separate = True
 
 
 def main():
-    files_input = yaml.safe_load(open("config_sauron.yml"))
+    files_input = yaml.safe_load(open(pathlib.Path(__file__).parent / "config_sauron.yml"))
     surveys = list(files_input.keys())
 
     datasets = {}
@@ -34,7 +35,6 @@ def main():
             datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
                                                    sntype, data_name=survey+"_"+file, zcol=zcol)
 
-    print(datasets)
 
     if corecollapse_are_separate:
         print("Combining IA and CC files..")
@@ -49,7 +49,7 @@ def main():
 
     for survey in surveys:
 
-        z_bins = np.arange(0, 1, 0.1)
+        z_bins = np.linspace(0, 1.2, 10)
 
         # Core Collapse Contamination
         PROB_THRESH = 0.13
@@ -75,11 +75,12 @@ def main():
 
         N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
         f_norm = 1/50
+        #f_norm = 1
         n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
 
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
-        fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
+        fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(None, None), (None, None)])
 
         print(fitobj.x)
         print(fitobj.fun/(len(z_bins) - 2))
@@ -155,23 +156,46 @@ def calculate_transfer_matrix(dump, sim, z_bins):
     simulated_events = sim.df
     dump_z_col = dump.z_col
     sim_z_col = sim.z_col
+    
+    """ 
+    plt.scatter(simulated_events.SIM_ZCMB, simulated_events[sim_z_col])
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.savefig("zscatter.pdf")
+    plt.show()
+    
+    dump_counts = dump.z_counts(z_bins)
 
     for i in range(len(z_bins) - 1):
-        dump_events_subset = dumped_events[(dumped_events[dump_z_col] > z_bins[i])
-                                           & (dumped_events[dump_z_col] < z_bins[i+1])]
+        #dump_events_subset = dumped_events[(dumped_events[dump_z_col] > z_bins[i])
+                                           #& (dumped_events[dump_z_col] < z_bins[i+1])]
+        # All of the events in a certain photometric redshift bin    
         simulated_events_subset = simulated_events[(simulated_events[sim_z_col] > z_bins[i])
                                                    & (simulated_events[sim_z_col] < z_bins[i+1])]
-        dump_counts_subset = binstat(dump_events_subset[dump_z_col],
-                                     dump_events_subset[dump_z_col], statistic='count', bins=z_bins)[0]
-        simulated_counts_subset = binstat(simulated_events_subset[sim_z_col],
-                                          simulated_events_subset[sim_z_col], statistic='count', bins=z_bins)[0]
-        eff_ij[i, :] = simulated_counts_subset / dump_counts_subset
-        eff_ij[i, :][np.where(dump_counts_subset == 0)] = 0
+        simulated_counts_subset = binstat(simulated_events_subset['SIM_ZCMB'],
+                                          simulated_events_subset['SIM_ZCMB'], statistic='count', bins=z_bins)[0]
+        
+        
+        #dump_counts_subset = binstat(dump_events_subset[dump_z_col],
+        #                             dump_events_subset[dump_z_col], statistic='count', bins=z_bins)[0]
+        
+        #print("Simulated counts:", simulated_counts_subset)
+        #print("Dump counts:", dump_counts_subset)
+        #print("------------------------------")
+        eff_ij[i, :] = simulated_counts_subset / dump_counts[i]
+        #eff_ij[i, :][np.where(dump_counts_subset == 0)] = 0
+        print( eff_ij[i, :])
 
     plt.imshow(eff_ij, origin='lower', aspect='auto', extent=(z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]))
     plt.colorbar(label='Efficiency')
     plt.title('Redshift Transfer Matrix')
-    plt.show()
+    plt.savefig('effmat.pdf')
+    """
+    dump_counts = dump.z_counts(z_bins)
+    
+    num,_,_ = np.histogram2d(simulated_events['SIM_ZCMB'], simulated_events[sim_z_col], bins=[z_bins, z_bins])
+    
+    eff_ij = num/dump_counts
 
     return eff_ij
 
@@ -200,9 +224,9 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
     alpha, beta = x
     zJ = (z_bins[1:] + z_bins[:-1])/2
     fJ = alpha * (1 + zJ)**beta
-    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=1)
-    var_Ei = Ei
-    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=1)
+    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
+    var_Ei = np.abs(Ei)
+    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
     chi_squared = np.sum(
         (n_data - Ei)**2 /
         (var_Ei + var_Si)
