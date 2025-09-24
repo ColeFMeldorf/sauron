@@ -36,7 +36,10 @@ def main():
         survey_dict = files_input[survey]
         for i, file in enumerate(list(survey_dict.keys())):
             sntype = "IA" if "IA" in file else "CC"
-            zcol = survey_dict[file].get("ZCOL", None)
+            if isinstance(survey_dict[file], dict):
+                zcol = survey_dict[file].get("ZCOL", None)
+            else:
+                zcol = None
             datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
                                                    sntype, data_name=survey+"_"+file, zcol=zcol)
 
@@ -89,7 +92,7 @@ def main():
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         # Switch to something that returns the covariance matrix.
-        fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
+        fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(None, None), (None, None)])
 
         print("Delta Alpha and Delta Beta:", fitobj.x)
         print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
