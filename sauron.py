@@ -26,6 +26,7 @@ def main():
 
     datasets = {}
 
+    # Make this a function
     for survey in surveys:
         survey_dict = files_input[survey]
         for i, file in enumerate(list(survey_dict.keys())):
@@ -34,7 +35,6 @@ def main():
             datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
                                                    sntype, data_name=survey+"_"+file, zcol=zcol)
 
-    print(datasets)
 
     if corecollapse_are_separate:
         print("Combining IA and CC files..")
@@ -52,6 +52,10 @@ def main():
         z_bins = np.arange(0, 1, 0.1)
 
         # Core Collapse Contamination
+
+        # This goes in config too.
+        # Needs to recognize if there is no CC contamination file. (And log output)
+        # What happens if we treat everything as Ia?
         PROB_THRESH = 0.13
 
         IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
@@ -74,15 +78,16 @@ def main():
         eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
 
         N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
-        f_norm = 1/50
+        f_norm = 1/50  # This can be calculated live.
         n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
 
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
+        # Switch to something that returns the covariance matrix.
         fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
 
         print(fitobj.x)
-        print(fitobj.fun/(len(z_bins) - 2))
+        print(fitobj.fun/(len(z_bins) - 2)) # These dof are hard coded.
 
 
 class SN_dataset():
