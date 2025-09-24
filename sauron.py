@@ -86,8 +86,8 @@ def main():
         # Switch to something that returns the covariance matrix.
         fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(0, None), (0, None)])
 
-        print(fitobj.x)
-        print(fitobj.fun/(len(z_bins) - 2)) # These dof are hard coded.
+        print("Delta Alpha and Delta Beta:", fitobj.x)
+        print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
 
 
 class SN_dataset():
@@ -170,6 +170,7 @@ def calculate_transfer_matrix(dump, sim, z_bins):
                                      dump_events_subset[dump_z_col], statistic='count', bins=z_bins)[0]
         simulated_counts_subset = binstat(simulated_events_subset[sim_z_col],
                                           simulated_events_subset[sim_z_col], statistic='count', bins=z_bins)[0]
+        dump_counts_subset[dump_counts_subset == 0] = 1
         eff_ij[i, :] = simulated_counts_subset / dump_counts_subset
         eff_ij[i, :][np.where(dump_counts_subset == 0)] = 0
 
