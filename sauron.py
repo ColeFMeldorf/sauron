@@ -85,11 +85,10 @@ def main():
         print("Delta Alpha and Delta Beta:", fitobj.x)
         print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
         output_df = pd.DataFrame({
-            "z_bins": z_bins[:-1],
             "delta_alpha": fitobj.x[0],
             "delta_beta": fitobj.x[1],
             "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
-        })
+        }, index = np.array([0]))
         output_path = args.output
         print(f"Saving to {output_path}")
         output_df.to_csv(output_path, index=False)
