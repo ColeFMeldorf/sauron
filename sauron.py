@@ -4,7 +4,7 @@
 # Standard Library
 import yaml
 
-
+import argparse
 import pandas as pd
 import numpy as np
 # from matplotlib import pyplot as plt
@@ -21,7 +21,10 @@ corecollapse_are_separate = True
 
 
 def main():
-    files_input = yaml.safe_load(open("config_sauron.yml"))
+    parser = argparse.ArgumentParser(description='SAURON: Survey-Agnostic volUmetric Rate Of superNovae')
+    parser.add_argument('config', help='Path to the config file (positional argument)')
+    args = parser.parse_args()
+    files_input = yaml.safe_load(open(args.config, 'r'))
     surveys = list(files_input.keys())
 
     datasets = {}
@@ -156,7 +159,7 @@ def calculate_transfer_matrix(dump, sim, z_bins):
                                      dump_events_subset[dump_z_col], statistic='count', bins=z_bins)[0]
         simulated_counts_subset = binstat(simulated_events_subset[sim_z_col],
                                           simulated_events_subset[sim_z_col], statistic='count', bins=z_bins)[0]
-        dump_counts_subset[dump_counts_subset == 0] = 1  
+        dump_counts_subset[dump_counts_subset == 0] = 1
         eff_ij[i, :] = simulated_counts_subset / dump_counts_subset
         eff_ij[i, :][np.where(dump_counts_subset == 0)] = 0
 
