@@ -15,4 +15,4 @@ from astropy.cosmology import LambdaCDM
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 def test_regression_specz():
-    os.system("python sauron.py tests/test_config.yml")
+    os.system("python ../sauron.py ./test_config.yml")
