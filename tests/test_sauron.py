@@ -14,8 +14,9 @@ from scipy.stats import binned_statistic as binstat
 from astropy.cosmology import LambdaCDM
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
+
 def test_regression_specz():
-    os.system("python sauron.py tests/test_config.yml > tests/test_regnopz_output.log")
+    os.system("python sauron.py tests/test_config.yml -o tests/test_regnopz_output.csv")
     with open("tests/test_regnopz_output.log", "r") as f:
         lines = f.readlines()
     string = "Delta Alpha and Delta Beta: [1.00658416 0.        ]"
