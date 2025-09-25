@@ -122,6 +122,7 @@ def main():
             "delta_beta": fitobj.x[1],
             "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
         }, index = np.array([0]))
+        print(output_df)
         output_path = args.output
         print(f"Saving to {output_path}")
         output_df.to_csv(output_path, index=False)
