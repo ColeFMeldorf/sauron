@@ -25,6 +25,7 @@ def main():
     parser = argparse.ArgumentParser(description='SAURON: Survey-Agnostic volUmetric Rate Of superNovae')
     parser.add_argument('config', help='Path to the config file (positional argument)')
     parser.add_argument('--output', '-o', default='sauron_output.csv', help='Path to the output file (optional)')
+    parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as Data_All.")
     args = parser.parse_args()
     files_input = yaml.safe_load(open(args.config, 'r'))
     surveys = list(files_input.keys())
@@ -43,7 +44,7 @@ def main():
             datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
                                                    sntype, data_name=survey+"_"+file, zcol=zcol)
 
-
+    
     if corecollapse_are_separate:
         print("Combining IA and CC files..")
         for survey in surveys:
@@ -57,45 +58,65 @@ def main():
 
     for survey in surveys:
 
-        z_bins = np.linspace(0, 1.2, 10)
-
+        z_bins = np.arange(0, 1.4, 0.1)
         # Core Collapse Contamination
+        if not args.cheat_cc:
+            PROB_THRESH = 0.13
 
-        # This goes in config too.
-        # Needs to recognize if there is no CC contamination file. (And log output)
-        # What happens if we treat everything as Ia?
-        PROB_THRESH = 0.13
+            IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
+                       datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-        IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
-                   datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-        N_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins))
-        n_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-        R = n_data / N_data
 
-        N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-        n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            N_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins))
+            n_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            R = n_data / N_data
 
-        N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
-        n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+            n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-        S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+            N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
+            n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-        CC_frac = (1 - IA_frac) * S
-        IA_frac = 1 - CC_frac
+            S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+            print("S:", S)
+
+            CC_frac = (1 - IA_frac) * S
+            IA_frac = 1 - CC_frac
+            print("Calculated a Ia frac of:", IA_frac)
+            n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+        else:
+            print("CHEATING AROUND CC")
+            IA_frac = np.ones(len(z_bins)-1)
+            datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"]
+            print("Overwriting data with just IAs!")
+            n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins)
 
         eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
 
+        print("-----------------------")
+        print("Setting up for fit")
+
         N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
-        f_norm = 1/50  # This can be calculated live.
-        n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+        print("My N_gen is", N_gen)
+
+        eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
+
+        #f_norm = 1/50  # This can be calculated live.
+        f_norm = 1
+        f_norm =  np.sum(datasets[f"{survey}_DATA_IA"].z_counts(z_bins)) / np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+        print(f"Calculated f_norm to be {f_norm}")
+        
 
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         # Switch to something that returns the covariance matrix.
-        fitobj = minimize(chi2, x0=(2, 1), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(None, None), (None, None)])
+        fitobj = minimize(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(None, None), (None, None)])
 
         print("Delta Alpha and Delta Beta:", fitobj.x)
         print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
+        
+        chi = chi2(np.array([1,0]),N_gen, f_norm, z_bins, eff_ij, n_data)
+        print("Optimal Chi", chi)
         output_df = pd.DataFrame({
             "delta_alpha": fitobj.x[0],
             "delta_beta": fitobj.x[1],
@@ -177,42 +198,9 @@ def calculate_transfer_matrix(dump, sim, z_bins):
     dump_z_col = dump.z_col
     sim_z_col = sim.z_col
 
-    """ 
-    plt.scatter(simulated_events.SIM_ZCMB, simulated_events[sim_z_col])
-    plt.xlim(0, 1)
-    plt.ylim(0, 1)
-    plt.savefig("zscatter.pdf")
-    plt.show()
+    dump_counts = dump.z_counts(z_bins)
     
-    dump_counts = dump.z_counts(z_bins)
-
-    for i in range(len(z_bins) - 1):
-        #dump_events_subset = dumped_events[(dumped_events[dump_z_col] > z_bins[i])
-                                           #& (dumped_events[dump_z_col] < z_bins[i+1])]
-        # All of the events in a certain photometric redshift bin    
-        simulated_events_subset = simulated_events[(simulated_events[sim_z_col] > z_bins[i])
-                                                   & (simulated_events[sim_z_col] < z_bins[i+1])]
-        simulated_counts_subset = binstat(simulated_events_subset['SIM_ZCMB'],
-                                          simulated_events_subset['SIM_ZCMB'], statistic='count', bins=z_bins)[0]
-        
-        
-        #dump_counts_subset = binstat(dump_events_subset[dump_z_col],
-        #                             dump_events_subset[dump_z_col], statistic='count', bins=z_bins)[0]
-        
-        #print("Simulated counts:", simulated_counts_subset)
-        #print("Dump counts:", dump_counts_subset)
-        #print("------------------------------")
-        eff_ij[i, :] = simulated_counts_subset / dump_counts[i]
-        #eff_ij[i, :][np.where(dump_counts_subset == 0)] = 0
-        print( eff_ij[i, :])
-
-    plt.imshow(eff_ij, origin='lower', aspect='auto', extent=(z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]))
-    plt.colorbar(label='Efficiency')
-    plt.title('Redshift Transfer Matrix')
-    plt.savefig('effmat.pdf')
-    """
-    dump_counts = dump.z_counts(z_bins)
-
+    # This can't be hardcoded!!!!
     num,_,_ = np.histogram2d(simulated_events['SIM_ZCMB'], simulated_events[sim_z_col], bins=[z_bins, z_bins])
 
     eff_ij = num/dump_counts
@@ -247,7 +235,7 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
     Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
     var_Ei = np.abs(Ei)
     var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
-    chi_squared = np.sum(
+    chi_squared = np.nansum(
         (n_data - Ei)**2 /
         (var_Ei + var_Si)
     )
