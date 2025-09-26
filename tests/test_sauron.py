@@ -28,6 +28,22 @@ def test_regression_specz():
         np.testing.assert_allclose(results[col], regression_vals[i], rtol=1e-6)
 
 
+def test_regression_pz_5datasets():
+    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
+       This also uses 5 datasets rather than 1 to test that functionality.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_regpz_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    os.system(f"python {sauron_path} {config_path} -o {outpath}")
+    results = pd.read_csv(outpath)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_regression.csv")
+    for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
+        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+
+
 def test_perfect_recovery():
     """In this test, we use the simulation as data (eliminating shot noise) and skip CC decontam.
     Therefore, we should get perfect recovery, i.e. (1, 0) with a chi squared of 0.
