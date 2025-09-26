@@ -7,7 +7,7 @@ import yaml
 import argparse
 import pandas as pd
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit, leastsq
 from scipy.stats import binned_statistic as binstat
 
 
@@ -48,12 +48,12 @@ def main():
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
 
-            fitobj = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
+            alpha, beta, chi = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
 
             results.append(pd.DataFrame({
-                "delta_alpha": fitobj.x[0],
-                "delta_beta": fitobj.x[1],
-                "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
+                "delta_alpha": alpha,
+                "delta_beta": beta,
+                "reduced_chi_squared": chi/(len(z_bins)-2),
                 }, index=np.array([0])))
 
         save_results(results, args)
@@ -244,20 +244,39 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
     return chi_squared
 
 
+def chi2_nosum(x, N_gen, f_norm, z_bins, eff_ij, n_data):
+    alpha, beta = x
+    zJ = (z_bins[1:] + z_bins[:-1])/2
+    fJ = alpha * (1 + zJ)**beta
+    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
+    var_Ei = np.abs(Ei)
+    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
+    chi_squared = np.nan_to_num(
+        (n_data - Ei)**2 /
+        (var_Ei + var_Si)
+    )
+    return chi_squared
+
+
 def fit_rate(N_gen=None, f_norm=None, z_bins=None, eff_ij=None, n_data=None):
     # How will this work when I am fitting a non-power law?
     # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
     # Switch to something that returns the covariance matrix.
-    fitobj = minimize(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
-                      bounds=[(None, None), (None, None)])
+    # fitobj = minimize(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
+    #                   bounds=[(None, None), (None, None)])
+    # print("Old Delta Alpha and Delta Beta:", fitobj.x)
+    # print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
+    result, cov_x, infodict = leastsq(chi2_nosum, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data), full_output=True)[:3]
+    cov_x *= np.var(chi2_nosum(result, N_gen, f_norm, z_bins, eff_ij, n_data))
 
-    print("Delta Alpha and Delta Beta:", fitobj.x)
-    print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
+    print("New Delta Alpha and Delta Beta:", result)
+    print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+    print("Covariance Matrix:", cov_x)
 
     chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
     print("Optimal Chi", chi)
 
-    return fitobj
+    return result[0], result[1], np.sum(infodict['fvec'])
 
 
 def save_results(results, args):
