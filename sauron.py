@@ -39,18 +39,8 @@ def main():
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
             # Core Collapse Contamination
             index = i + 1
-            if not args.cheat_cc:
-                PROB_THRESH = 0.13
-                IA_frac = calculate_CC_contamination(datasets, index, survey, z_bins, PROB_THRESH=PROB_THRESH)
-                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
-            else:
-                print("CHEATING AROUND CC")
-                IA_frac = np.ones(len(z_bins)-1)
-                datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
-                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+            n_data = calculate_CC_contamination(datasets, index, survey, z_bins, args.cheat_cc, PROB_THRESH=0.13)
 
-            print("-----------------------")
-            print("Setting up for fit")
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
             f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
                 np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
@@ -174,28 +164,35 @@ def unpack_dataframes(files_input, corecollapse_are_separate):
     return datasets, surveys, n_datasets
 
 
-def calculate_CC_contamination(datasets, index, survey, z_bins, PROB_THRESH=0.13):
-    IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
-               datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+def calculate_CC_contamination(datasets, index, survey, z_bins, cheat, PROB_THRESH=0.13):
 
-    N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
-    n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-    R = n_data / N_data
+    if not cheat:
+        IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
+                   datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+        n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        R = n_data / N_data
 
-    N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-    n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+        n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-    N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
-    n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
+        n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-    S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
-    print("S:", S)
+        S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+        print("S:", S)
 
-    CC_frac = (1 - IA_frac) * S
-    IA_frac = 1 - CC_frac
-    print("Calculated a Ia frac of:", IA_frac)
+        CC_frac = (1 - IA_frac) * S
+        IA_frac = 1 - CC_frac
+        print("Calculated a Ia frac of:", IA_frac)
+        n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+    else:
+        print("CHEATING AROUND CC")
+        IA_frac = np.ones(len(z_bins)-1)
+        datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
+        n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
-    return IA_frac
+    return n_data
 
 
 def calculate_CC_scale_factor(data_IA, data_CC, sim_IA, sim_CC):
