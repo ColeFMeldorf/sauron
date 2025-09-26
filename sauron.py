@@ -6,9 +6,7 @@ import yaml
 
 import argparse
 import pandas as pd
-import pathlib
 import numpy as np
-from matplotlib import pyplot as plt
 from scipy.optimize import minimize
 from scipy.stats import binned_statistic as binstat
 
@@ -25,107 +23,40 @@ def main():
     parser = argparse.ArgumentParser(description='SAURON: Survey-Agnostic volUmetric Rate Of superNovae')
     parser.add_argument('config', help='Path to the config file (positional argument)')
     parser.add_argument('--output', '-o', default='sauron_output.csv', help='Path to the output file (optional)')
-    parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as Data_All.")
+    parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
+                        " Data_All.")
     args = parser.parse_args()
     files_input = yaml.safe_load(open(args.config, 'r'))
-    surveys = list(files_input.keys())
 
-    datasets = {}
-
-    # Make this a function
-    for survey in surveys:
-        survey_dict = files_input[survey]
-        for i, file in enumerate(list(survey_dict.keys())):
-            sntype = "IA" if "IA" in file else "CC"
-            if isinstance(survey_dict[file], dict):
-                zcol = survey_dict[file].get("ZCOL", None)
-            else:
-                zcol = None
-            datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
-                                                   sntype, data_name=survey+"_"+file, zcol=zcol)
-
-    
-    if corecollapse_are_separate:
-        print("Combining IA and CC files..")
-        for survey in surveys:
-            datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
-                datasets[f"{survey}_DUMP_CC"], "all", data_name =survey+"_DUMP_ALL")
-            datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
-                datasets[f"{survey}_SIM_CC"], "all", data_name  =survey+"_SIM_ALL")
-            datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"].combine_with(
-                datasets[f"{survey}_DATA_CC"], "all", data_name =survey+"_DATA_ALL")
-        print("Done!")
+    datasets, surveys = unpack_dataframes(files_input, corecollapse_are_separate)
 
     for survey in surveys:
-
         z_bins = np.arange(0, 1.4, 0.1)
         # Core Collapse Contamination
         if not args.cheat_cc:
             PROB_THRESH = 0.13
-
-            IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
-                       datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-
-
-            N_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins))
-            n_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-            R = n_data / N_data
-
-            N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-            n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-
-            N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
-            n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-
-            S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
-            print("S:", S)
-
-            CC_frac = (1 - IA_frac) * S
-            IA_frac = 1 - CC_frac
-            print("Calculated a Ia frac of:", IA_frac)
+            IA_frac = calculate_CC_contamination(datasets, survey, z_bins, PROB_THRESH=PROB_THRESH)
             n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
         else:
             print("CHEATING AROUND CC")
             IA_frac = np.ones(len(z_bins)-1)
             datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"]
-            print("Overwriting data with just IAs!")
             n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins)
-
-        eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
 
         print("-----------------------")
         print("Setting up for fit")
 
         N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
-        print("My N_gen is", N_gen)
 
         eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
 
-        #f_norm = 1/50  # This can be calculated live.
-        f_norm = 1
-        f_norm =  np.sum(datasets[f"{survey}_DATA_IA"].z_counts(z_bins)) / np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+        f_norm = np.sum(datasets[f"{survey}_DATA_IA"].z_counts(z_bins)) / \
+            np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
         print(f"Calculated f_norm to be {f_norm}")
-        
 
-        # How will this work when I am fitting a non-power law?
-        # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
-        # Switch to something that returns the covariance matrix.
-        fitobj = minimize(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data), bounds=[(None, None), (None, None)])
+        fitobj = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
 
-        print("Delta Alpha and Delta Beta:", fitobj.x)
-        print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
-        
-        chi = chi2(np.array([1,0]),N_gen, f_norm, z_bins, eff_ij, n_data)
-        print("Optimal Chi", chi)
-        output_df = pd.DataFrame({
-            "delta_alpha": fitobj.x[0],
-            "delta_beta": fitobj.x[1],
-            "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
-        }, index = np.array([0]))
-        print(output_df)
-        output_path = args.output
-        print(f"Saving to {output_path}")
-        output_df.to_csv(output_path, index=False)
+        save_results(fitobj, args, z_bins)
 
 
 class SN_dataset():
@@ -143,7 +74,7 @@ class SN_dataset():
         self.z_col = None
         for i in possible_z_cols:
             try:
-                self.df[i] # better way to do this?
+                self.df[i]  # better way to do this?
                 if self.z_col is None:
                     self.z_col = i
                     print(f"Found z_col {i}")
@@ -187,26 +118,63 @@ class SN_dataset():
         if self.scone_col is not None and dataset.scone_col is not None:
             scone_prob_col = pd.concat([self.prob_scone(), dataset.prob_scone()])
             new_df["PROB_SCONE"] = scone_prob_col
-        return SN_dataset(new_df, newtype, zcol=self.z_col, data_name=data_name) # Note that this forces the two data sets to have the
+        return SN_dataset(new_df, newtype, zcol=self.z_col, data_name=data_name)
+        # Note that this forces the two data sets to have the
         # same z_col. I can't think of a scenario where this would be a problem, but maybe it could be.
 
 
-def calculate_transfer_matrix(dump, sim, z_bins):
+def unpack_dataframes(files_input, corecollapse_are_separate):
+    surveys = list(files_input.keys())
+    datasets = {}
+    # Unpack dataframes into SN_dataset objects
+    for survey in surveys:
+        survey_dict = files_input[survey]
+        for i, file in enumerate(list(survey_dict.keys())):
+            sntype = "IA" if "IA" in file else "CC"
+            if isinstance(survey_dict[file], dict):
+                zcol = survey_dict[file].get("ZCOL", None)
+            else:
+                zcol = None
+            datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
+                                                   sntype, data_name=survey+"_"+file, zcol=zcol)
 
-    eff_ij = np.zeros((len(z_bins) - 1, len(z_bins) - 1))
-    dumped_events = dump.df
-    simulated_events = sim.df
-    dump_z_col = dump.z_col
-    sim_z_col = sim.z_col
+    # Combine IA and CC files if they are separate
+    if corecollapse_are_separate:
+        print("Combining IA and CC files..")
+        for survey in surveys:
+            datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
+                datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
+            datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
+                datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
+            datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"].combine_with(
+                datasets[f"{survey}_DATA_CC"], "all", data_name=survey+"_DATA_ALL")
+        print("Done!")
+    return datasets, surveys
 
-    dump_counts = dump.z_counts(z_bins)
-    
-    # This can't be hardcoded!!!!
-    num,_,_ = np.histogram2d(simulated_events['SIM_ZCMB'], simulated_events[sim_z_col], bins=[z_bins, z_bins])
 
-    eff_ij = num/dump_counts
+def calculate_CC_contamination(datasets, survey, z_bins, PROB_THRESH=0.13):
 
-    return eff_ij
+    IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
+               datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+    N_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins))
+    n_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+    R = n_data / N_data
+
+    N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+    n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+    N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
+    n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+    S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+    print("S:", S)
+
+    CC_frac = (1 - IA_frac) * S
+    IA_frac = 1 - CC_frac
+    print("Calculated a Ia frac of:", IA_frac)
+
+    return IA_frac
 
 
 def calculate_CC_scale_factor(data_IA, data_CC, sim_IA, sim_CC):
@@ -229,6 +197,21 @@ def calculate_CC_scale_factor(data_IA, data_CC, sim_IA, sim_CC):
     return S
 
 
+def calculate_transfer_matrix(dump, sim, z_bins):
+    eff_ij = np.zeros((len(z_bins) - 1, len(z_bins) - 1))
+    simulated_events = sim.df
+    sim_z_col = sim.z_col
+
+    dump_counts = dump.z_counts(z_bins)
+
+    # This can't be hardcoded!!!!
+    num, _, _ = np.histogram2d(simulated_events['SIM_ZCMB'], simulated_events[sim_z_col], bins=[z_bins, z_bins])
+
+    eff_ij = num/dump_counts
+
+    return eff_ij
+
+
 def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
     alpha, beta = x
     zJ = (z_bins[1:] + z_bins[:-1])/2
@@ -241,6 +224,33 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
         (var_Ei + var_Si)
     )
     return chi_squared
+
+
+def fit_rate(N_gen=None, f_norm=None, z_bins=None, eff_ij=None, n_data=None):
+    # How will this work when I am fitting a non-power law?
+    # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
+    # Switch to something that returns the covariance matrix.
+    fitobj = minimize(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
+                      bounds=[(None, None), (None, None)])
+
+    print("Delta Alpha and Delta Beta:", fitobj.x)
+    print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
+
+    chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
+    print("Optimal Chi", chi)
+
+    return fitobj
+
+
+def save_results(fitobj, args, z_bins):
+    output_df = pd.DataFrame({
+        "delta_alpha": fitobj.x[0],
+        "delta_beta": fitobj.x[1],
+        "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
+        }, index=np.array([0]))
+    output_path = args.output
+    print(f"Saving to {output_path}")
+    output_df.to_csv(output_path, index=False)
 
 
 if __name__ == "__main__":
