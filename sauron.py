@@ -28,35 +28,45 @@ def main():
     args = parser.parse_args()
     files_input = yaml.safe_load(open(args.config, 'r'))
 
-    datasets, surveys = unpack_dataframes(files_input, corecollapse_are_separate)
+    datasets, surveys, n_datasets = unpack_dataframes(files_input, corecollapse_are_separate)
 
+    results = []
     for survey in surveys:
         z_bins = np.arange(0, 1.4, 0.1)
-        # Core Collapse Contamination
-        if not args.cheat_cc:
-            PROB_THRESH = 0.13
-            IA_frac = calculate_CC_contamination(datasets, survey, z_bins, PROB_THRESH=PROB_THRESH)
-            n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
-        else:
-            print("CHEATING AROUND CC")
-            IA_frac = np.ones(len(z_bins)-1)
-            datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"]
-            n_data = datasets[f"{survey}_DATA_ALL"].z_counts(z_bins)
-
-        print("-----------------------")
-        print("Setting up for fit")
-
         N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
-
         eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
+        for i in range(n_datasets):
+            print(f"Working on survey {survey}, dataset {i+1} -------------------")
+            # Core Collapse Contamination
+            index = i + 1
+            if not args.cheat_cc:
+                PROB_THRESH = 0.13
+                IA_frac = calculate_CC_contamination(datasets, index, survey, z_bins, PROB_THRESH=PROB_THRESH)
+                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+            else:
+                print("CHEATING AROUND CC")
+                IA_frac = np.ones(len(z_bins)-1)
+                datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
+                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
-        f_norm = np.sum(datasets[f"{survey}_DATA_IA"].z_counts(z_bins)) / \
-            np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-        print(f"Calculated f_norm to be {f_norm}")
+            print("-----------------------")
+            print("Setting up for fit")
+            # This can't stay actually, we can't used DATA_IA because we won't have it irl.
+            f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
+                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+            # f_norm = np.sum(n_data) / \
+            #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+            print(f"Calculated f_norm to be {f_norm}")
 
-        fitobj = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
+            fitobj = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
 
-        save_results(fitobj, args, z_bins)
+            results.append(pd.DataFrame({
+                "delta_alpha": fitobj.x[0],
+                "delta_beta": fitobj.x[1],
+                "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
+                }, index=np.array([0])))
+
+        save_results(results, args)
 
 
 class SN_dataset():
@@ -135,8 +145,20 @@ def unpack_dataframes(files_input, corecollapse_are_separate):
                 zcol = survey_dict[file].get("ZCOL", None)
             else:
                 zcol = None
-            datasets[survey+"_"+file] = SN_dataset(pd.read_csv(survey_dict[file]['PATH'], comment="#", sep=r"\s+"),
-                                                   sntype, data_name=survey+"_"+file, zcol=zcol)
+            if isinstance(survey_dict[file]['PATH'], str):
+                paths = survey_dict[file]['PATH']
+            if "DATA" in file:
+                paths = [survey_dict[file]['PATH']] if isinstance(survey_dict[file]['PATH'], str) \
+                    else survey_dict[file]['PATH']
+                for i, path in enumerate(paths):
+                    datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
+                                                                        sntype, data_name=survey+"_"+file, zcol=zcol)
+                n_datasets = len(paths)
+                print("Found", n_datasets, "data sets for", survey)
+            else:
+                path = survey_dict[file]['PATH']
+                datasets[survey+"_"+file] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
+                                                       sntype, data_name=survey+"_"+file, zcol=zcol)
 
     # Combine IA and CC files if they are separate
     if corecollapse_are_separate:
@@ -146,19 +168,18 @@ def unpack_dataframes(files_input, corecollapse_are_separate):
                 datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
             datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
                 datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
-            datasets[f"{survey}_DATA_ALL"] = datasets[f"{survey}_DATA_IA"].combine_with(
-                datasets[f"{survey}_DATA_CC"], "all", data_name=survey+"_DATA_ALL")
-        print("Done!")
-    return datasets, surveys
+            for i in range(n_datasets):
+                datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
+                    datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
+    return datasets, surveys, n_datasets
 
 
-def calculate_CC_contamination(datasets, survey, z_bins, PROB_THRESH=0.13):
-
+def calculate_CC_contamination(datasets, index, survey, z_bins, PROB_THRESH=0.13):
     IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
                datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-    N_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins))
-    n_data = np.sum(datasets[f"{survey}_DATA_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+    N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+    n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
     R = n_data / N_data
 
     N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
@@ -242,12 +263,13 @@ def fit_rate(N_gen=None, f_norm=None, z_bins=None, eff_ij=None, n_data=None):
     return fitobj
 
 
-def save_results(fitobj, args, z_bins):
-    output_df = pd.DataFrame({
-        "delta_alpha": fitobj.x[0],
-        "delta_beta": fitobj.x[1],
-        "reduced_chi_squared": fitobj.fun/(len(z_bins) - 2)
-        }, index=np.array([0]))
+def save_results(results, args):
+    for i, result in enumerate(results):
+        if i == 0:
+            output_df = result
+        else:
+            output_df = pd.concat([output_df, result], ignore_index=True)
+
     output_path = args.output
     print(f"Saving to {output_path}")
     output_df.to_csv(output_path, index=False)
