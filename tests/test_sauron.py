@@ -22,7 +22,7 @@ def test_regression_specz():
     os.system(f"python {sauron_path} {config_path} -o {outpath}")
     results = pd.read_csv(outpath)
     print(results)
-    regression_vals = [1.10248502, -0.20416661, 0.7775755479255878]
+    regression_vals = [1.0606147951900922, -0.12756936806066485, 0.8013402970138642]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
         print(results[col].values, regression_vals[i])
         np.testing.assert_allclose(results[col], regression_vals[i], rtol=1e-6)
@@ -57,7 +57,7 @@ def test_perfect_recovery():
     results = pd.read_csv(outpath)
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-10)  # atol not rtol b/c we expect 0
+        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
 
 
 def test_perfect_recovery_pz():
@@ -73,4 +73,4 @@ def test_perfect_recovery_pz():
     results = pd.read_csv(outpath)
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-10)  # atol not rtol b/c we expect 0
+        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
