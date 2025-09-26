@@ -7,7 +7,7 @@ import yaml
 import argparse
 import pandas as pd
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import minimize, curve_fit, leastsq
 from scipy.stats import binned_statistic as binstat
 
 
@@ -225,6 +225,32 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
     )
     return chi_squared
 
+def chi2_nosum(x, N_gen, f_norm, z_bins, eff_ij, n_data):
+    alpha, beta = x
+    zJ = (z_bins[1:] + z_bins[:-1])/2
+    fJ = alpha * (1 + zJ)**beta
+    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
+    var_Ei = np.abs(Ei)
+    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
+    chi_squared = np.nan_to_num(
+        (n_data - Ei)**2 /
+        (var_Ei + var_Si)
+    )
+    return chi_squared
+
+# optimize curve_fit does not allow for passing additional args easily so we define a class
+# that can hold the additional args and define the fit function as a method.
+class fitClass:
+    def __init__(self, N_gen, eff_ij, f_norm):
+        self.N_gen = N_gen
+        self.eff_ij = eff_ij
+        self.f_norm = f_norm
+
+    def fitfun(self, zJ, alpha, beta):
+        fJ = alpha * (1 + zJ)**beta
+        Ei = np.sum(self.N_gen * self.eff_ij * self.f_norm * fJ, axis=0)
+        return Ei
+
 
 def fit_rate(N_gen=None, f_norm=None, z_bins=None, eff_ij=None, n_data=None):
     # How will this work when I am fitting a non-power law?
@@ -232,9 +258,26 @@ def fit_rate(N_gen=None, f_norm=None, z_bins=None, eff_ij=None, n_data=None):
     # Switch to something that returns the covariance matrix.
     fitobj = minimize(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
                       bounds=[(None, None), (None, None)])
-
     print("Delta Alpha and Delta Beta:", fitobj.x)
     print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
+    result, cov_x = leastsq(chi2_nosum, x0=(1.3, 0.3), args=(N_gen, f_norm, z_bins, eff_ij, n_data), full_output=True)[:2]
+    cov_x *= np.var(chi2_nosum(result, N_gen, f_norm, z_bins, eff_ij, n_data))
+    # inst = fitClass(N_gen, eff_ij, f_norm)
+    # zJ = (z_bins[1:] + z_bins[:-1])/2
+    # n_data = np.nan_to_num(n_data, nan=0.0)
+    # var_Ei = np.abs(Ei)
+    # var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
+    # sigma=np.sqrt(var_Ei + var_Si)
+    # popt, pcov = curve_fit(inst.fitfun, zJ, n_data, absolute_sigma=True, p0=(1, 0), sigma=sigma)
+    # print("Curve Fit Results:")
+    # print("Delta Alpha and Delta Beta:", popt)
+    # print("Covariance Matrix:", pcov)
+    print(f"multiplied by var {np.var(chi2_nosum(result, N_gen, f_norm, z_bins, eff_ij, n_data))}")
+
+    print("Delta Alpha and Delta Beta:", result)
+    print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+    print("Covariance Matrix:", cov_x)
+    #print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
 
     chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
     print("Optimal Chi", chi)
