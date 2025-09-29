@@ -7,7 +7,8 @@ import yaml
 import argparse
 import pandas as pd
 import numpy as np
-from scipy.optimize import minimize, curve_fit, leastsq
+from matplotlib import pyplot as plt
+from scipy.optimize import leastsq
 from scipy.stats import binned_statistic as binstat
 
 
@@ -31,15 +32,22 @@ def main():
     datasets, surveys, n_datasets = unpack_dataframes(files_input, corecollapse_are_separate)
 
     results = []
+    expected_counts = []
+
     for survey in surveys:
         z_bins = np.arange(0, 1.4, 0.1)
         N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
         eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
+
+        # Covariance calculations
+        calculate_covariance_matrix_term(calculate_CC_contamination, [0.05, 0.1, 0.15], z_bins, datasets, 1,
+                                         survey, z_bins, args.cheat_cc)
+
         for i in range(n_datasets):
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
             # Core Collapse Contamination
             index = i + 1
-            n_data = calculate_CC_contamination(datasets, index, survey, z_bins, args.cheat_cc, PROB_THRESH=0.13)
+            n_data = calculate_CC_contamination(0.13, datasets, index, survey, z_bins, args.cheat_cc)
 
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
             f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
@@ -48,13 +56,17 @@ def main():
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
 
-            alpha, beta, chi = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
+            alpha, beta, chi, Ei = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
+
+            print("Expected Counts:", Ei)
 
             results.append(pd.DataFrame({
                 "delta_alpha": alpha,
                 "delta_beta": beta,
                 "reduced_chi_squared": chi/(len(z_bins)-2),
                 }, index=np.array([0])))
+
+            expected_counts.append(Ei)
 
         save_results(results, args)
 
@@ -164,7 +176,7 @@ def unpack_dataframes(files_input, corecollapse_are_separate):
     return datasets, surveys, n_datasets
 
 
-def calculate_CC_contamination(datasets, index, survey, z_bins, cheat, PROB_THRESH=0.13):
+def calculate_CC_contamination(PROB_THRESH, datasets, index, survey, z_bins, cheat):
 
     if not cheat:
         IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
@@ -183,7 +195,7 @@ def calculate_CC_contamination(datasets, index, survey, z_bins, cheat, PROB_THRE
         print("S:", S)
 
         CC_frac = (1 - IA_frac) * S
-        IA_frac = 1 - CC_frac
+        IA_frac = np.nan_to_num(1 - CC_frac)
         print("Calculated a Ia frac of:", IA_frac)
         n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
     else:
@@ -230,53 +242,43 @@ def calculate_transfer_matrix(dump, sim, z_bins):
     return eff_ij
 
 
-def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data):
+def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
     alpha, beta = x
     zJ = (z_bins[1:] + z_bins[:-1])/2
     fJ = alpha * (1 + zJ)**beta
     Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
     var_Ei = np.abs(Ei)
     var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
-    chi_squared = np.nansum(
-        (n_data - Ei)**2 /
-        (var_Ei + var_Si)
-    )
-    return chi_squared
 
+    cov_stat = np.diag(var_Ei + var_Si)
+    cov = cov_stat + cov_sys
+    inv_cov = np.linalg.pinv(cov)
+    resid_matrix = np.outer(n_data - Ei, n_data - Ei)
+    chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
-def chi2_nosum(x, N_gen, f_norm, z_bins, eff_ij, n_data):
-    alpha, beta = x
-    zJ = (z_bins[1:] + z_bins[:-1])/2
-    fJ = alpha * (1 + zJ)**beta
-    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
-    var_Ei = np.abs(Ei)
-    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
-    chi_squared = np.nan_to_num(
-        (n_data - Ei)**2 /
-        (var_Ei + var_Si)
-    )
     return chi_squared
 
 
 def fit_rate(N_gen=None, f_norm=None, z_bins=None, eff_ij=None, n_data=None):
     # How will this work when I am fitting a non-power law?
     # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
-    # Switch to something that returns the covariance matrix.
-    # fitobj = minimize(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
-    #                   bounds=[(None, None), (None, None)])
-    # print("Old Delta Alpha and Delta Beta:", fitobj.x)
-    # print("Reduced Chi Squared:", fitobj.fun/(len(z_bins) - 2))
-    result, cov_x, infodict = leastsq(chi2_nosum, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data), full_output=True)[:3]
-    cov_x *= np.var(chi2_nosum(result, N_gen, f_norm, z_bins, eff_ij, n_data))
 
-    print("New Delta Alpha and Delta Beta:", result)
+    result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
+                                      full_output=True)[:3]
+    print("Cov_x:", cov_x)
+    cov_x *= np.var(chi2(result, N_gen, f_norm, z_bins, eff_ij, n_data))
+
+    print("Delta Alpha and Delta Beta:", result)
     print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
     print("Covariance Matrix:", cov_x)
 
     chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
     print("Optimal Chi", chi)
 
-    return result[0], result[1], np.sum(infodict['fvec'])
+    fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
+    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
+
+    return result[0], result[1], np.sum(infodict['fvec']), Ei
 
 
 def save_results(results, args):
@@ -290,6 +292,46 @@ def save_results(results, args):
     print(f"Saving to {output_path}")
     output_df.to_csv(output_path, index=False)
 
+
+def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
+    # Calculate covariance matrix term for a given systematic function and its parameters
+    # sys_func should be a function that takes sys_params and returns expected counts
+    # args are additional arguments needed for sys_func.
+    print("Calculating Covariance Matrix Term...")
+    expected_counts = []
+    for i, param in enumerate(sys_params):
+        expected_counts.append(sys_func(param, *args))
+
+    for i, E in enumerate(expected_counts):
+        if i == 0:
+            fiducial = E
+            C_ij = np.zeros((len(E), len(E)))
+        else:
+            print(E - fiducial)
+            C_ij_term = np.outer(E - fiducial, E - fiducial) * 1/(len(expected_counts)-1)
+            C_ij += C_ij_term
+
+    var = np.diag(C_ij)
+    denominator = np.outer(np.sqrt(var), np.sqrt(var))
+    denominator[denominator == 0] = 1  # Avoid division by zero
+
+    # plt.subplot(2,1,1)
+    # for i in expected_counts:
+    #     plt.plot(z_bins[:-1], i)
+    # plt.xlabel('Redshift Bin')
+    # plt.ylabel('Expected Counts')
+    # plt.legend()
+    # plt.title("Expected Counts vs Redshift Bins")
+
+    # plt.subplot(2,1,2)
+    # plt.imshow(C_ij, extent=(0, np.max(z_bins), 0, np.max(z_bins)), origin='lower', aspect='auto')
+    # plt.colorbar()
+    # plt.title("Covariance Matrix of Expected Counts")
+    # plt.xlabel("Redshift Bin")
+    # plt.ylabel("Redshift Bin")
+    # plt.savefig("covariance_matrix.png")
+
+    return C_ij
 
 if __name__ == "__main__":
     main()

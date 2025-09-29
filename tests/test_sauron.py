@@ -1,6 +1,15 @@
+
+# Sauron
+from sauron import (unpack_dataframes,
+                    calculate_CC_contamination,
+                    calculate_covariance_matrix_term,
+                    calculate_transfer_matrix,
+                    chi2)
+
 # Standard Library
 import os
 import pathlib
+import yaml
 
 import numpy as np
 import pandas as pd
@@ -21,11 +30,9 @@ def test_regression_specz():
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
     os.system(f"python {sauron_path} {config_path} -o {outpath}")
     results = pd.read_csv(outpath)
-    print(results)
-    regression_vals = [1.0606147951900922, -0.12756936806066485, 0.8013402970138642]
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regnopz_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        print(results[col].values, regression_vals[i])
-        np.testing.assert_allclose(results[col], regression_vals[i], rtol=1e-6)
+        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
 
 
 def test_regression_pz_5datasets():
@@ -74,3 +81,32 @@ def test_perfect_recovery_pz():
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
+
+
+def test_calc_cov_term():
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    files_input = yaml.safe_load(open(config_path, 'r'))
+    datasets, surveys, n_datasets = unpack_dataframes(files_input, corecollapse_are_separate=True)
+    survey = "DES"
+    z_bins = np.arange(0, 1.4, 0.1)
+    cov_mat = calculate_covariance_matrix_term(calculate_CC_contamination, [0.05, 0.1, 0.15], z_bins, datasets, 1,
+                                     survey, z_bins, False)
+    regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
+    np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
+
+
+def test_chi():
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    files_input = yaml.safe_load(open(config_path, 'r'))
+    datasets, surveys, n_datasets = unpack_dataframes(files_input, corecollapse_are_separate=True)
+    z_bins = np.arange(0, 1.4, 0.1)
+    survey = "DES"
+    index = 1
+    N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
+    eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
+    f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
+                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+    n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
+    x = np.array([1.0, 0.0])
+    regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
+    np.testing.assert_allclose(chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data), regression_chi, atol=1e-7)
