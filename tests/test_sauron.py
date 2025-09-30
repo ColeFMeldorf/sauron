@@ -1,15 +1,14 @@
 
 # Sauron
-from sauron import (unpack_dataframes,
-                    calculate_CC_contamination,
-                    calculate_covariance_matrix_term,
-                    calculate_transfer_matrix,
-                    chi2)
+from sauron import (calculate_covariance_matrix_term,
+                    chi2,
+                    sauron_runner)
 
 # Standard Library
 import os
 import pathlib
-import yaml
+from types import SimpleNamespace
+
 
 import numpy as np
 import pandas as pd
@@ -76,7 +75,7 @@ def test_perfect_recovery_pz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
-    os.system(f"python {sauron_path} {config_path} --cheat_cc -o {outpath}")
+    print(os.system(f"python {sauron_path} {config_path} --cheat_cc -o {outpath}"))
     results = pd.read_csv(outpath)
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -84,29 +83,34 @@ def test_perfect_recovery_pz():
 
 
 def test_calc_cov_term():
+    args = SimpleNamespace()
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    files_input = yaml.safe_load(open(config_path, 'r'))
-    datasets, surveys, n_datasets = unpack_dataframes(files_input, corecollapse_are_separate=True)
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate=True)
     survey = "DES"
-    z_bins = np.arange(0, 1.4, 0.1)
-    cov_mat = calculate_covariance_matrix_term(calculate_CC_contamination, [0.05, 0.1, 0.15], z_bins, datasets, 1,
-                                     survey, z_bins, False)
+    runner.z_bins = np.arange(0, 1.4, 0.1)
+    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
+                                               survey)
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
 
 def test_chi():
+    args = SimpleNamespace()
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    files_input = yaml.safe_load(open(config_path, 'r'))
-    datasets, surveys, n_datasets = unpack_dataframes(files_input, corecollapse_are_separate=True)
-    z_bins = np.arange(0, 1.4, 0.1)
+    args.config = config_path
+    runner = sauron_runner(args)
+    datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate=True)
+    runner.z_bins = np.arange(0, 1.4, 0.1)
     survey = "DES"
     index = 1
-    N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
-    eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
-    f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
-                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-    n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
+    N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(runner.z_bins)
+    eff_ij = runner.calculate_transfer_matrix(survey)
+    f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
+                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
+    n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
     x = np.array([1.0, 0.0])
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-    np.testing.assert_allclose(chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data), regression_chi, atol=1e-7)
+    np.testing.assert_allclose(chi2(x, N_gen, f_norm, runner.z_bins, eff_ij, n_data), regression_chi, atol=1e-7)
