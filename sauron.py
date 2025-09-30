@@ -27,48 +27,50 @@ def main():
     parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
                         " Data_All.")
     args = parser.parse_args()
-    files_input = yaml.safe_load(open(args.config, 'r'))
 
-    datasets, surveys, n_datasets = unpack_dataframes(files_input, corecollapse_are_separate)
+    runner = sauron_runner(args)
 
-    results = []
+    datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate)
+
+
     expected_counts = []
 
     for survey in surveys:
-        z_bins = np.arange(0, 1.4, 0.1)
-        N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
-        eff_ij = calculate_transfer_matrix(datasets[f"{survey}_DUMP_IA"],  datasets[f"{survey}_SIM_IA"], z_bins)
+        runner.z_bins = np.arange(0, 1.4, 0.1)
+        runner.get_counts(survey)
+        runner.results = []
+        runner.calculate_transfer_matrix(survey)
 
         # Covariance calculations
-        calculate_covariance_matrix_term(calculate_CC_contamination, [0.05, 0.1, 0.15], z_bins, datasets, 1,
-                                         survey, z_bins, args.cheat_cc)
+        calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
+                                         survey)
 
         for i in range(n_datasets):
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
             # Core Collapse Contamination
             index = i + 1
-            n_data = calculate_CC_contamination(0.13, datasets, index, survey, z_bins, args.cheat_cc)
+            n_data = runner.calculate_CC_contamination(0.13, index, survey)
 
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
-            f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
-                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+            f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
+                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
             # f_norm = np.sum(n_data) / \
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
 
-            alpha, beta, chi, Ei = fit_rate(N_gen=N_gen, f_norm=f_norm, z_bins=z_bins, eff_ij=eff_ij, n_data=n_data)
+            alpha, beta, chi, Ei = runner.fit_rate(f_norm=f_norm, n_data=n_data)
 
             print("Expected Counts:", Ei)
 
-            results.append(pd.DataFrame({
+            runner.results.append(pd.DataFrame({
                 "delta_alpha": alpha,
                 "delta_beta": beta,
-                "reduced_chi_squared": chi/(len(z_bins)-2),
+                "reduced_chi_squared": chi/(len(runner.z_bins)-2),
                 }, index=np.array([0])))
 
             expected_counts.append(Ei)
 
-        save_results(results, args)
+        runner.save_results()
 
 
 class SN_dataset():
@@ -135,111 +137,143 @@ class SN_dataset():
         # same z_col. I can't think of a scenario where this would be a problem, but maybe it could be.
 
 
-def unpack_dataframes(files_input, corecollapse_are_separate):
-    surveys = list(files_input.keys())
-    datasets = {}
-    # Unpack dataframes into SN_dataset objects
-    for survey in surveys:
-        survey_dict = files_input[survey]
-        for i, file in enumerate(list(survey_dict.keys())):
-            sntype = "IA" if "IA" in file else "CC"
-            if isinstance(survey_dict[file], dict):
-                zcol = survey_dict[file].get("ZCOL", None)
-            else:
-                zcol = None
-            if isinstance(survey_dict[file]['PATH'], str):
-                paths = survey_dict[file]['PATH']
-            if "DATA" in file:
-                paths = [survey_dict[file]['PATH']] if isinstance(survey_dict[file]['PATH'], str) \
-                    else survey_dict[file]['PATH']
-                for i, path in enumerate(paths):
-                    datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
-                                                                        sntype, data_name=survey+"_"+file, zcol=zcol)
-                n_datasets = len(paths)
-                print("Found", n_datasets, "data sets for", survey)
-            else:
-                path = survey_dict[file]['PATH']
-                datasets[survey+"_"+file] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
-                                                       sntype, data_name=survey+"_"+file, zcol=zcol)
+class sauron_runner():
+    def __init__(self, args):
+        self.args = args
 
-    # Combine IA and CC files if they are separate
-    if corecollapse_are_separate:
-        print("Combining IA and CC files..")
+    def unpack_dataframes(self, corecollapse_are_separate):
+        files_input = yaml.safe_load(open(self.args.config, 'r'))
+        surveys = list(files_input.keys())
+        datasets = {}
+        # Unpack dataframes into SN_dataset objects
         for survey in surveys:
-            datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
-                datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
-            datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
-                datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
-            for i in range(n_datasets):
-                datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
-                    datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
-    return datasets, surveys, n_datasets
+            survey_dict = files_input[survey]
+            for i, file in enumerate(list(survey_dict.keys())):
+                sntype = "IA" if "IA" in file else "CC"
+                if isinstance(survey_dict[file], dict):
+                    zcol = survey_dict[file].get("ZCOL", None)
+                else:
+                    zcol = None
+                if isinstance(survey_dict[file]['PATH'], str):
+                    paths = survey_dict[file]['PATH']
+                if "DATA" in file:
+                    paths = [survey_dict[file]['PATH']] if isinstance(survey_dict[file]['PATH'], str) \
+                        else survey_dict[file]['PATH']
+                    for i, path in enumerate(paths):
+                        datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
+                                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
+                    n_datasets = len(paths)
+                    print("Found", n_datasets, "data sets for", survey)
+                else:
+                    path = survey_dict[file]['PATH']
+                    datasets[survey+"_"+file] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
+                                                           sntype, data_name=survey+"_"+file, zcol=zcol)
 
+        # Combine IA and CC files if they are separate
+        if corecollapse_are_separate:
+            print("Combining IA and CC files..")
+            for survey in surveys:
+                datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
+                    datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
+                datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
+                    datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
+                for i in range(n_datasets):
+                    datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
+                        datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
 
-def calculate_CC_contamination(PROB_THRESH, datasets, index, survey, z_bins, cheat):
+        self.datasets = datasets
+        self.surveys = surveys
+        self.n_datasets = n_datasets
+        return datasets, surveys, n_datasets
 
-    if not cheat:
-        IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
-                   datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-        N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
-        n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-        R = n_data / N_data
+    def get_counts(self, survey):
+        z_bins = self.z_bins
+        self.N_gen = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
 
-        N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-        n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+    def calculate_transfer_matrix(self, survey):
+        dump = self.datasets[f"{survey}_DUMP_IA"]
+        sim = self.datasets[f"{survey}_SIM_IA"]
+        eff_ij = np.zeros((len(self.z_bins) - 1, len(self.z_bins) - 1))
+        simulated_events = sim.df
+        sim_z_col = sim.z_col
 
-        N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
-        n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        dump_counts = dump.z_counts(self.z_bins)
 
-        S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
-        print("S:", S)
+        # This can't be hardcoded!!!! -------------------V
+        num, _, _ = np.histogram2d(simulated_events['SIM_ZCMB'], simulated_events[sim_z_col],
+                                   bins=[self.z_bins, self.z_bins])
 
-        CC_frac = (1 - IA_frac) * S
-        IA_frac = np.nan_to_num(1 - CC_frac)
-        print("Calculated a Ia frac of:", IA_frac)
-        n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
-    else:
-        print("CHEATING AROUND CC")
-        IA_frac = np.ones(len(z_bins)-1)
-        datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
-        n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+        eff_ij = num/dump_counts
 
-    return n_data
+        self.eff_ij = eff_ij
+        return eff_ij
 
+    def fit_rate(self, f_norm=None, n_data=None):
+        # How will this work when I am fitting a non-power law?
+        # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
+        z_bins = self.z_bins
+        N_gen = self.N_gen
+        eff_ij = self.eff_ij
+        result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
+                                          full_output=True)[:3]
+        print("Cov_x:", cov_x)
+        cov_x *= np.var(chi2(result, N_gen, f_norm, z_bins, eff_ij, n_data))
 
-def calculate_CC_scale_factor(data_IA, data_CC, sim_IA, sim_CC):
-    mu_res = data_IA.mu_res()
-    mu_res_CC = data_CC.mu_res()
-    mu_res_sim = sim_IA.mu_res()
-    mu_res_sim_CC = sim_CC.mu_res()
-    N_data = len(mu_res) + len(mu_res_CC)
-    n_data = len(mu_res[mu_res > 1]) + len(mu_res_CC[mu_res_CC > 1])
-    R = n_data / N_data
+        print("Delta Alpha and Delta Beta:", result)
+        print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+        print("Covariance Matrix:", cov_x)
 
-    N_IA_sim = len(mu_res_sim)
-    n_IA_sim = len(mu_res_sim[mu_res_sim > 1])
+        chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
+        print("Optimal Chi", chi)
 
-    N_CC_sim = len(mu_res_sim_CC)
-    n_CC_sim = len(mu_res_sim_CC[mu_res_sim_CC > 1])
+        fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
+        Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
 
-    S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+        return result[0], result[1], np.sum(infodict['fvec']), Ei
 
-    return S
+    def save_results(self):
+        for i, result in enumerate(self.results):
+            if i == 0:
+                output_df = result
+            else:
+                output_df = pd.concat([output_df, result], ignore_index=True)
 
+        output_path = self.args.output
+        print(f"Saving to {output_path}")
+        output_df.to_csv(output_path, index=False)
 
-def calculate_transfer_matrix(dump, sim, z_bins):
-    eff_ij = np.zeros((len(z_bins) - 1, len(z_bins) - 1))
-    simulated_events = sim.df
-    sim_z_col = sim.z_col
+    def calculate_CC_contamination(self, PROB_THRESH, index, survey):
+        datasets = self.datasets
+        z_bins = self.z_bins
+        cheat = self.args.cheat_cc
 
-    dump_counts = dump.z_counts(z_bins)
+        if not cheat:
+            IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
+                       datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+            n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            R = n_data / N_data
 
-    # This can't be hardcoded!!!!
-    num, _, _ = np.histogram2d(simulated_events['SIM_ZCMB'], simulated_events[sim_z_col], bins=[z_bins, z_bins])
+            N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+            n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-    eff_ij = num/dump_counts
+            N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
+            n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-    return eff_ij
+            S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+            print("S:", S)
+
+            CC_frac = (1 - IA_frac) * S
+            IA_frac = np.nan_to_num(1 - CC_frac)
+            print("Calculated a Ia frac of:", IA_frac)
+            n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+        else:
+            print("CHEATING AROUND CC")
+            IA_frac = np.ones(len(z_bins)-1)
+            datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
+            n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+
+        return n_data
 
 
 def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
@@ -257,40 +291,6 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
     chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
     return chi_squared
-
-
-def fit_rate(N_gen=None, f_norm=None, z_bins=None, eff_ij=None, n_data=None):
-    # How will this work when I am fitting a non-power law?
-    # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
-
-    result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
-                                      full_output=True)[:3]
-    print("Cov_x:", cov_x)
-    cov_x *= np.var(chi2(result, N_gen, f_norm, z_bins, eff_ij, n_data))
-
-    print("Delta Alpha and Delta Beta:", result)
-    print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-    print("Covariance Matrix:", cov_x)
-
-    chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
-    print("Optimal Chi", chi)
-
-    fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
-    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
-
-    return result[0], result[1], np.sum(infodict['fvec']), Ei
-
-
-def save_results(results, args):
-    for i, result in enumerate(results):
-        if i == 0:
-            output_df = result
-        else:
-            output_df = pd.concat([output_df, result], ignore_index=True)
-
-    output_path = args.output
-    print(f"Saving to {output_path}")
-    output_df.to_csv(output_path, index=False)
 
 
 def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
@@ -332,6 +332,7 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # plt.savefig("covariance_matrix.png")
 
     return C_ij
+
 
 if __name__ == "__main__":
     main()
