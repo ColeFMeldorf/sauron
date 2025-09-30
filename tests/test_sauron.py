@@ -1,9 +1,6 @@
 
 # Sauron
-from sauron import (#unpack_dataframes,
-                    #calculate_CC_contamination,
-                    calculate_covariance_matrix_term,
-                    #calculate_transfer_matrix,
+from sauron import (calculate_covariance_matrix_term,
                     chi2,
                     sauron_runner)
 
