@@ -5,6 +5,7 @@
 import yaml
 
 import argparse
+import glob
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
@@ -58,7 +59,7 @@ def main():
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
 
-            alpha, beta, chi, Ei = runner.fit_rate(f_norm=f_norm, n_data=n_data)
+            alpha, beta, chi, Ei, cov = runner.fit_rate(f_norm=f_norm, n_data=n_data)
 
             print("Expected Counts:", Ei)
 
@@ -66,7 +67,11 @@ def main():
                 "delta_alpha": alpha,
                 "delta_beta": beta,
                 "reduced_chi_squared": chi/(len(runner.z_bins)-2),
+                "alpha_error": np.sqrt(cov[0, 0]),
+                "beta_error": np.sqrt(cov[1, 1]),
+                "cov_alpha_beta": cov[0, 1],
                 }, index=np.array([0])))
+
 
             expected_counts.append(Ei)
 
@@ -150,15 +155,26 @@ class sauron_runner():
             survey_dict = files_input[survey]
             for i, file in enumerate(list(survey_dict.keys())):
                 sntype = "IA" if "IA" in file else "CC"
+
                 if isinstance(survey_dict[file], dict):
                     zcol = survey_dict[file].get("ZCOL", None)
                 else:
                     zcol = None
-                if isinstance(survey_dict[file]['PATH'], str):
+
+                # Either use the paths provided or glob the directory provided
+                if survey_dict[file].get('PATH') is not None:
+                    print("Using provided PATH")
                     paths = survey_dict[file]['PATH']
+                    paths = [paths] if type(paths) != list else paths # Make it a list for later
+                elif survey_dict[file].get('DIR') is not None:
+                    print("Using provided DIR")
+                    paths = []
+                    for dir in survey_dict[file]['DIR']:
+                        print(f"Looking in {dir} for files")
+                        paths.extend(glob.glob(dir + "/**/*.gz")) # This extension can't be hardcoded
+                    print(f"Found {len(paths)} files in {survey_dict[file]['DIR']}")
+
                 if "DATA" in file:
-                    paths = [survey_dict[file]['PATH']] if isinstance(survey_dict[file]['PATH'], str) \
-                        else survey_dict[file]['PATH']
                     for i, path in enumerate(paths):
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
                                                                             sntype, data_name=survey+"_"+file, zcol=zcol)
@@ -229,7 +245,7 @@ class sauron_runner():
         fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
         Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
 
-        return result[0], result[1], np.sum(infodict['fvec']), Ei
+        return result[0], result[1], np.sum(infodict['fvec']), Ei, cov_x
 
     def save_results(self):
         for i, result in enumerate(self.results):
