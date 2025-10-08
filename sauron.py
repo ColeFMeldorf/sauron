@@ -161,8 +161,6 @@ class sauron_runner():
                 else:
                     zcol = None
 
-                print(f"I think DIR is {survey_dict[file].get('DIR')} for file {file}")
-                print(f"I think PATH is {survey_dict[file].get('PATH')} for file {file}")
                 # Either use the paths provided or glob the directory provided
                 if survey_dict[file].get('PATH') is not None:
                     print("Using provided PATH")
@@ -177,8 +175,6 @@ class sauron_runner():
                     print(f"Found {len(paths)} files in {survey_dict[file]['DIR']}")
 
                 if "DATA" in file:
-                    # paths = [survey_dict[file]['PATH']] if isinstance(survey_dict[file]['PATH'], str) \
-                    #     else survey_dict[file]['PATH']
                     for i, path in enumerate(paths):
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
                                                                             sntype, data_name=survey+"_"+file, zcol=zcol)
