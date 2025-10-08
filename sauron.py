@@ -32,9 +32,6 @@ def main():
 
     datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate)
 
-
-    expected_counts = []
-
     for survey in surveys:
         runner.z_bins = np.arange(0, 1.4, 0.1)
         runner.get_counts(survey)
@@ -42,8 +39,35 @@ def main():
         runner.calculate_transfer_matrix(survey)
 
         # Covariance calculations
-        calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
-                                         survey)
+        # cov_thresh = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15],
+        #                                               runner.z_bins, 1, survey)
+        # cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, [0.8, 0.9, 1.0, 1.1, 1.2], runner.z_bins,
+        #                                                  0.13, 1, survey, datasets, runner.z_bins, args.cheat_cc)
+
+        # plt.show()
+        # plt.subplot(2, 1, 1)
+        # var = np.diag(cov_thresh)
+        # denominator = np.outer(np.sqrt(var), np.sqrt(var))
+        # denominator[denominator == 0] = 1  # Avoid division by zero
+        # plt.imshow(cov_thresh/denominator, extent=(0, np.max(runner.z_bins), 0, np.max(runner.z_bins)),
+        #            origin='lower', aspect='auto')
+        # plt.colorbar()
+        # plt.title("Covariance Matrix from Varying CC Threshold")
+        # plt.xlabel("Redshift Bin")
+        # plt.ylabel("Redshift Bin")
+        # plt.subplot(2, 1, 2)
+        # var = np.diag(cov_rate_norm)
+        # denominator = np.outer(np.sqrt(var), np.sqrt(var))
+        # denominator[denominator == 0] = 1  # Avoid division by zero
+        # plt.imshow(cov_rate_norm/denominator, extent=(0, np.max(runner.z_bins), 0, np.max(runner.z_bins)),
+        #            origin='lower', aspect='auto')
+        # print(cov_rate_norm/denominator)
+        # plt.colorbar()
+        # plt.title("Covariance Matrix from Varying CC Rate Normalization")
+        # plt.xlabel("Redshift Bin")
+        # plt.ylabel("Redshift Bin")
+        # plt.savefig("covariance_matrices.png")
+        # print("Covariance matrices saved to covariance_matrices.png")
 
         for i in range(n_datasets):
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
@@ -58,7 +82,10 @@ def main():
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
 
-            alpha, beta, chi, Ei = runner.fit_rate(f_norm=f_norm, n_data=n_data)
+            #cov_sys = cov_thresh + cov_rate_norm
+            cov_sys = None
+            #print("cov sys outside fit:", cov_sys)
+            alpha, beta, chi, Ei = runner.fit_rate(f_norm=f_norm, n_data=n_data, cov_sys=cov_sys)
 
             print("Expected Counts:", Ei)
 
@@ -67,8 +94,6 @@ def main():
                 "delta_beta": beta,
                 "reduced_chi_squared": chi/(len(runner.z_bins)-2),
                 }, index=np.array([0])))
-
-            expected_counts.append(Ei)
 
         runner.save_results()
 
@@ -161,9 +186,13 @@ class sauron_runner():
                         else survey_dict[file]['PATH']
                     for i, path in enumerate(paths):
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
-                                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
+                                                                            sntype, data_name=survey+"_"+file,
+                                                                            zcol=zcol)
+                        for c in datasets[survey+"_"+file+"_"+str(i+1)].df.columns:
+                            print(c)
                     n_datasets = len(paths)
                     print("Found", n_datasets, "data sets for", survey)
+
                 else:
                     path = survey_dict[file]['PATH']
                     datasets[survey+"_"+file] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
@@ -208,13 +237,13 @@ class sauron_runner():
         self.eff_ij = eff_ij
         return eff_ij
 
-    def fit_rate(self, f_norm=None, n_data=None):
+    def fit_rate(self, f_norm=None, n_data=None, cov_sys=0):
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         z_bins = self.z_bins
         N_gen = self.N_gen
         eff_ij = self.eff_ij
-        result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
+        result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys),
                                           full_output=True)[:3]
         print("Cov_x:", cov_x)
         cov_x *= np.var(chi2(result, N_gen, f_norm, z_bins, eff_ij, n_data))
@@ -223,7 +252,7 @@ class sauron_runner():
         print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
         print("Covariance Matrix:", cov_x)
 
-        chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
+        chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=cov_sys)
         print("Optimal Chi", chi)
 
         fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
@@ -248,11 +277,15 @@ class sauron_runner():
         cheat = self.args.cheat_cc
 
         if not cheat:
+            print("IA frac numerator", datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            print("IA frac denominator", datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
                        datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            print("Initial IA frac:", IA_frac)
             N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
             n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             R = n_data / N_data
+            print("R:", R)
 
             N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
@@ -260,10 +293,12 @@ class sauron_runner():
             N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
             n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
+
             S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
             print("S:", S)
 
             CC_frac = (1 - IA_frac) * S
+            print("Calculated a CC frac of:", CC_frac)
             IA_frac = np.nan_to_num(1 - CC_frac)
             print("Calculated a Ia frac of:", IA_frac)
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
@@ -284,7 +319,10 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
     var_Ei = np.abs(Ei)
     var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
 
+    fig = plt.figure(figsize=(10, 8))
     cov_stat = np.diag(var_Ei + var_Si)
+    if cov_sys is None:
+        cov_sys = 0
     cov = cov_stat + cov_sys
     inv_cov = np.linalg.pinv(cov)
     resid_matrix = np.outer(n_data - Ei, n_data - Ei)
@@ -300,6 +338,8 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     print("Calculating Covariance Matrix Term...")
     expected_counts = []
     for i, param in enumerate(sys_params):
+        print(param)
+        print(args)
         expected_counts.append(sys_func(param, *args))
 
     for i, E in enumerate(expected_counts):
@@ -308,7 +348,7 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
             C_ij = np.zeros((len(E), len(E)))
         else:
             print(E - fiducial)
-            C_ij_term = np.outer(E - fiducial, E - fiducial) * 1/(len(expected_counts)-1)
+            C_ij_term = np.outer(E - fiducial, E - fiducial) * 1/(len(sys_params)-1) # Fixed this error
             C_ij += C_ij_term
 
     var = np.diag(C_ij)
@@ -332,6 +372,8 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # plt.savefig("covariance_matrix.png")
 
     return C_ij
+
+
 
 
 if __name__ == "__main__":
