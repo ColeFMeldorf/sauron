@@ -8,6 +8,8 @@ from sauron import (calculate_covariance_matrix_term,
 import os
 import pathlib
 from types import SimpleNamespace
+import subprocess
+from scipy.stats import chi2 as scipy_chi2
 
 
 import numpy as np
@@ -114,3 +116,112 @@ def test_chi():
     x = np.array([1.0, 0.0])
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
     np.testing.assert_allclose(chi2(x, N_gen, f_norm, runner.z_bins, eff_ij, n_data), regression_chi, atol=1e-7)
+
+
+def test_regression_pz_5datasets_covariance():
+    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
+       This also uses 5 datasets rather than 1 to test that functionality.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_regpz_sys_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    os.system(f"python {sauron_path} {config_path} -o {outpath} -c")  # Added -c flag here
+    results = pd.read_csv(outpath)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
+    for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
+        np.testing.assert_allclose(results[col], regression[col], atol=5e-3)
+    # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
+    # The rescale CC for cov uses random numbers.
+
+def test_coverage_no_sys():
+    """In this test we check the coverage properties of SAURON when there are no systematics.
+        We should recover the truth (1, 0) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_coverage_nosys_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    df = pd.read_csv(outpath)
+
+    sigma_1 = scipy_chi2.ppf([0.68], 2)
+    sigma_2 = scipy_chi2.ppf([0.95], 2)
+
+    a = np.mean(df["alpha_error"]**2)
+    b = np.mean(df["beta_error"]**2)
+    c = np.mean(df["cov_alpha_beta"])
+
+    mean_cov = np.array([[a, c], [c, b]])
+
+    all_alpha = df["delta_alpha"] - 1
+    all_beta = df["delta_beta"]
+    inv_cov = np.linalg.inv(mean_cov)
+    all_pos = np.vstack([all_alpha, all_beta])
+    product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
+    product_2 = np.einsum("il,il->l", all_pos, product_1)
+
+    sub_one_sigma = np.where(product_2 < sigma_1)
+    sub_two_sigma = np.where(product_2 < sigma_2)
+
+    print("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
+    print("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
+
+    np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.1)
+    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.1)
+
+
+def test_coverage_with_sys():
+    """In this test we check the coverage properties of SAURON when there are no systematics.
+        We should recover the truth (1, 0) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_coverage_sys_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '-c']  # Added -c flag here
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    df = pd.read_csv(outpath)
+
+    sigma_1 = scipy_chi2.ppf([0.68], 2)
+    sigma_2 = scipy_chi2.ppf([0.95], 2)
+
+    a = np.mean(df["alpha_error"]**2)
+    b = np.mean(df["beta_error"]**2)
+    c = np.mean(df["cov_alpha_beta"])
+
+    mean_cov = np.array([[a, c], [c, b]])
+
+    all_alpha = df["delta_alpha"] - 1
+    all_beta = df["delta_beta"]
+    inv_cov = np.linalg.inv(mean_cov)
+    all_pos = np.vstack([all_alpha, all_beta])
+    product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
+    product_2 = np.einsum("il,il->l", all_pos, product_1)
+
+    sub_one_sigma = np.where(product_2 < sigma_1)
+    sub_two_sigma = np.where(product_2 < sigma_2)
+
+    print("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
+    print("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
+
+    np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.05)
+    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.05) # Note the stricter
+    # tolerance here. We expect better coverage when systematics are included because they inflate the error bars.
+
