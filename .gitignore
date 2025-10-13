@@ -209,3 +209,5 @@ __marimo__/
 # Cole added
 *.png
 *output*
+*ipynb
+*old*
