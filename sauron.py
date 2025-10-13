@@ -8,6 +8,7 @@ import argparse
 import glob
 import pandas as pd
 import numpy as np
+import os
 from matplotlib import pyplot as plt
 from scipy.optimize import leastsq
 from scipy.stats import binned_statistic as binstat
@@ -27,30 +28,65 @@ def main():
     parser.add_argument('--output', '-o', default='sauron_output.csv', help='Path to the output file (optional)')
     parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
                         " Data_All.")
+    parser.add_argument("-c", "--covariance", action="store_true", help="Calculate covariance matrix terms.")
     args = parser.parse_args()
 
     runner = sauron_runner(args)
 
     datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate)
 
-
-    expected_counts = []
-
     for survey in surveys:
         runner.z_bins = np.arange(0, 1.4, 0.1)
         runner.get_counts(survey)
         runner.results = []
         runner.calculate_transfer_matrix(survey)
+        PROB_THRESH = 0.13
 
         # Covariance calculations
-        calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
-                                         survey)
+        if args.covariance:
+            cov_thresh = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15],
+                                                          runner.z_bins, 1, survey)
+
+            rescale_vals = []
+            for i in range(100):
+                rescale_vals.append(np.random.normal(1, 0.2, size=3))
+            cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals, runner.z_bins, PROB_THRESH,
+                                                             1, survey, datasets, runner.z_bins, False)
+            # Hard coding index to one neeeds to change. I don't think this fcn should need index at all.
+            cov_sys = cov_thresh + cov_rate_norm
+        else:
+            cov_sys = None
+
+        # plt.show()
+        # plt.subplot(2, 1, 1)
+        # var = np.diag(cov_thresh)
+        # denominator = np.outer(np.sqrt(var), np.sqrt(var))
+        # denominator[denominator == 0] = 1  # Avoid division by zero
+        # plt.imshow(cov_thresh/denominator, extent=(0, np.max(runner.z_bins), 0, np.max(runner.z_bins)),
+        #            origin='lower', aspect='auto')
+        # plt.colorbar()
+        # plt.title("Covariance Matrix from Varying CC Threshold")
+        # plt.xlabel("Redshift Bin")
+        # plt.ylabel("Redshift Bin")
+        # plt.subplot(2, 1, 2)
+        # var = np.diag(cov_rate_norm)
+        # denominator = np.outer(np.sqrt(var), np.sqrt(var))
+        # denominator[denominator == 0] = 1  # Avoid division by zero
+        # plt.imshow(cov_rate_norm/denominator, extent=(0, np.max(runner.z_bins), 0, np.max(runner.z_bins)),
+        #            origin='lower', aspect='auto')
+        # print(cov_rate_norm/denominator)
+        # plt.colorbar()
+        # plt.title("Covariance Matrix from Varying CC Rate Normalization")
+        # plt.xlabel("Redshift Bin")
+        # plt.ylabel("Redshift Bin")
+        # plt.savefig("covariance_matrices.png")
+        # print("Covariance matrices saved to covariance_matrices.png")
 
         for i in range(n_datasets):
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
             # Core Collapse Contamination
             index = i + 1
-            n_data = runner.calculate_CC_contamination(0.13, index, survey)
+            n_data = runner.calculate_CC_contamination(PROB_THRESH, index, survey)
 
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
             f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
@@ -58,8 +94,7 @@ def main():
             # f_norm = np.sum(n_data) / \
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
-
-            alpha, beta, chi, Ei, cov = runner.fit_rate(f_norm=f_norm, n_data=n_data)
+            alpha, beta, chi, Ei, cov = runner.fit_rate(f_norm=f_norm, n_data=n_data, cov_sys=cov_sys)
 
             print("Expected Counts:", Ei)
 
@@ -71,9 +106,6 @@ def main():
                 "beta_error": np.sqrt(cov[1, 1]),
                 "cov_alpha_beta": cov[0, 1],
                 }, index=np.array([0])))
-
-
-            expected_counts.append(Ei)
 
         runner.save_results()
 
@@ -163,23 +195,25 @@ class sauron_runner():
 
                 # Either use the paths provided or glob the directory provided
                 if survey_dict[file].get('PATH') is not None:
-                    print("Using provided PATH")
                     paths = survey_dict[file]['PATH']
-                    paths = [paths] if type(paths) != list else paths # Make it a list for later
+                    paths = [paths] if type(paths) is not list else paths # Make it a list for later
                 elif survey_dict[file].get('DIR') is not None:
-                    print("Using provided DIR")
                     paths = []
                     for dir in survey_dict[file]['DIR']:
                         print(f"Looking in {dir} for files")
-                        paths.extend(glob.glob(dir + "/**/*.gz")) # This extension can't be hardcoded
+                        print(os.listdir(dir))
+                        paths.extend(glob.glob(dir + "/**/*.gz"))
+                        paths.extend(glob.glob(dir + "*.gz"))  # This extension can't be hardcoded
                     print(f"Found {len(paths)} files in {survey_dict[file]['DIR']}")
 
                 if "DATA" in file:
                     for i, path in enumerate(paths):
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
-                                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
+                                                                            sntype, data_name=survey+"_"+file,
+                                                                            zcol=zcol)
                     n_datasets = len(paths)
                     print("Found", n_datasets, "data sets for", survey)
+
                 else:
                     path = survey_dict[file]['PATH']
                     datasets[survey+"_"+file] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
@@ -224,22 +258,23 @@ class sauron_runner():
         self.eff_ij = eff_ij
         return eff_ij
 
-    def fit_rate(self, f_norm=None, n_data=None):
+    def fit_rate(self, f_norm=None, n_data=None, cov_sys=0):
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         z_bins = self.z_bins
         N_gen = self.N_gen
         eff_ij = self.eff_ij
-        result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data),
+        result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys),
                                           full_output=True)[:3]
-        print("Cov_x:", cov_x)
-        cov_x *= np.var(chi2(result, N_gen, f_norm, z_bins, eff_ij, n_data))
-
+        N = len(n_data)
+        n = len(result)
+        cov_x *= (infodict['fvec']**2).sum()/ (N-n)
+        # See scipy doc for leastsq for explanation of this covariance rescaling
         print("Delta Alpha and Delta Beta:", result)
         print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
         print("Covariance Matrix:", cov_x)
 
-        chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data)
+        chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=cov_sys)
         print("Optimal Chi", chi)
 
         fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
@@ -277,7 +312,6 @@ class sauron_runner():
             n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
             S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
-            print("S:", S)
 
             CC_frac = (1 - IA_frac) * S
             IA_frac = np.nan_to_num(1 - CC_frac)
@@ -301,6 +335,8 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
     var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
 
     cov_stat = np.diag(var_Ei + var_Si)
+    if cov_sys is None:
+        cov_sys = 0
     cov = cov_stat + cov_sys
     inv_cov = np.linalg.pinv(cov)
     resid_matrix = np.outer(n_data - Ei, n_data - Ei)
@@ -323,8 +359,7 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
             fiducial = E
             C_ij = np.zeros((len(E), len(E)))
         else:
-            print(E - fiducial)
-            C_ij_term = np.outer(E - fiducial, E - fiducial) * 1/(len(expected_counts)-1)
+            C_ij_term = np.outer(E - fiducial, E - fiducial) * 1/(len(sys_params)-1) # Fixed this error
             C_ij += C_ij_term
 
     var = np.diag(C_ij)
@@ -348,6 +383,83 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # plt.savefig("covariance_matrix.png")
 
     return C_ij
+
+
+def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bins, cheat):
+    if cheat:
+        IA_frac = np.ones(len(z_bins)-1)
+        datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
+        n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+    else:
+        C_ij = np.zeros((len(z_bins)-1, len(z_bins)-1))
+        sim_IA = datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+
+        print("Sim IA counts:", sim_IA)
+
+        sim_CC_df_no_cut = datasets[f"{survey}_SIM_CC"].df
+        sim_CC_df = sim_CC_df_no_cut[datasets[f"{survey}_SIM_CC"].prob_scone() > PROB_THRESH]
+        types = sim_CC_df_no_cut.TYPE.unique()
+        assert(rescale_vals.shape[0] == len(types)), "I got the wrong number of rescale values compared to contamination types" \
+            f"({rescale_vals.shape[0]} vs {len(types)})"
+
+
+        N_CC_sim = np.zeros((len(z_bins)-1, len(types)))
+        sim_CC = np.zeros((len(z_bins)-1, len(types)))
+
+        for i,t in enumerate(types):
+            rescale_factor = rescale_vals[i]
+            #print("Rescale factor:", rescale_factor)
+            raw_counts = binstat(sim_CC_df[sim_CC_df.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
+                                sim_CC_df[sim_CC_df.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
+                                statistic='count', bins=z_bins)[0]
+            raw_counts = raw_counts * rescale_factor
+            sim_CC[:,i] = raw_counts
+
+            raw_counts = binstat(sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
+                                sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
+                                statistic='count', bins=z_bins)[0]
+            raw_counts = raw_counts * rescale_factor
+            N_CC_sim[:,i] = raw_counts
+            #print(f"Type {t} counts (rescaled):", raw_counts)
+
+        sim_CC = np.sum(sim_CC, axis = 1)
+        print("sim_CC:", sim_CC)
+
+
+        IA_frac = np.nan_to_num(sim_IA / (sim_IA + sim_CC))
+        print("Ia frac denom:", sim_IA + sim_CC)
+        print("IA_frac:", IA_frac)
+        N_CC_sim = np.sum(N_CC_sim)
+        n_CC_sim = np.sum(sim_CC)
+
+        N_Ia_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
+        N_CC_data = datasets[f"{survey}_DATA_CC_{index}"].z_counts(z_bins)
+
+        n_Ia_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+        n_CC_data = datasets[f"{survey}_DATA_CC_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+
+
+        N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+        n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+        R = n_data / N_data
+        print("R:", R)
+
+        N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+        n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+        S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+        print("S:", S)
+
+        CC_frac = (1 - IA_frac) * S
+        print("Calculated a CC frac of:", CC_frac)
+        IA_frac = np.nan_to_num(1 - CC_frac)
+        print("Calculated a Ia frac of:", IA_frac)
+
+        n_true_Ia = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+        n_true_CC = datasets[f"{survey}_DATA_CC_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+        n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+
+    return n_data
 
 
 if __name__ == "__main__":
