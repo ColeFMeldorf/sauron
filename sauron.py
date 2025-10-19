@@ -16,10 +16,12 @@ from scipy.stats import binned_statistic as binstat
 
 # Astronomy
 from astropy.cosmology import LambdaCDM
+from astropy.io import fits
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 # These need to be added to config file later
-corecollapse_are_separate = True
+corecollapse_are_separate = False
+
 
 
 def main():
@@ -57,30 +59,6 @@ def main():
         else:
             cov_sys = None
 
-        # plt.show()
-        # plt.subplot(2, 1, 1)
-        # var = np.diag(cov_thresh)
-        # denominator = np.outer(np.sqrt(var), np.sqrt(var))
-        # denominator[denominator == 0] = 1  # Avoid division by zero
-        # plt.imshow(cov_thresh/denominator, extent=(0, np.max(runner.z_bins), 0, np.max(runner.z_bins)),
-        #            origin='lower', aspect='auto')
-        # plt.colorbar()
-        # plt.title("Covariance Matrix from Varying CC Threshold")
-        # plt.xlabel("Redshift Bin")
-        # plt.ylabel("Redshift Bin")
-        # plt.subplot(2, 1, 2)
-        # var = np.diag(cov_rate_norm)
-        # denominator = np.outer(np.sqrt(var), np.sqrt(var))
-        # denominator[denominator == 0] = 1  # Avoid division by zero
-        # plt.imshow(cov_rate_norm/denominator, extent=(0, np.max(runner.z_bins), 0, np.max(runner.z_bins)),
-        #            origin='lower', aspect='auto')
-        # print(cov_rate_norm/denominator)
-        # plt.colorbar()
-        # plt.title("Covariance Matrix from Varying CC Rate Normalization")
-        # plt.xlabel("Redshift Bin")
-        # plt.ylabel("Redshift Bin")
-        # plt.savefig("covariance_matrices.png")
-        # print("Covariance matrices saved to covariance_matrices.png")
 
         for i in range(n_datasets):
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
@@ -89,8 +67,15 @@ def main():
             n_data = runner.calculate_CC_contamination(PROB_THRESH, index, survey)
 
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
-            f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
-                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
+
+            if corecollapse_are_separate:
+                f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
+                    np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
+            else:
+                f_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins)) / \
+                    np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins))
+
+
             # f_norm = np.sum(n_data) / \
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
@@ -111,16 +96,19 @@ def main():
 
 
 class SN_dataset():
-    def __init__(self, dataframe, sntype, zcol=None, data_name=None):
+    def __init__(self, dataframe, sntype, zcol=None, data_name=None, true_z_col=None):
         self.df = dataframe
         self.sntype = sntype
+        self._true_z_col = true_z_col
         if self.sntype not in ["IA", "CC", "all"]:
             print(f"unrecognized type: {self.sntype}")
 
         if zcol is not None:
             possible_z_cols = [zcol]
+            z_col_specified = True
         else:
             possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
+            z_col_specified = False
 
         self.z_col = None
         for i in possible_z_cols:
@@ -128,24 +116,38 @@ class SN_dataset():
                 self.df[i]  # better way to do this?
                 if self.z_col is None:
                     self.z_col = i
-                    print(f"Found z_col {i}")
+                    if not z_col_specified:
+                        print(f"Found z_col {i}")
                 else:
                     raise ValueError(f"Multiple valid zcols found in {data_name}. I found: {self.z_col} and {i}")
             except KeyError:
-                pass
+                raise KeyError(f"Couldn't find z col {i} in dataframe")
 
         scone_col = []
         for c in self.df.columns:
-            if "PROB_SCONE" in c:
+            if "PROB_SCONE" in c or "SCONE_pred" in c:
                 scone_col.append(c)
         if len(scone_col) == 0:
-            print(f"No valid prob_scone column in {data_name}!")
             self.scone_col = None
         elif len(scone_col) > 1:
             raise ValueError(f"Multiple Valid scone columns found in {data_name}! Which do I use? I found: {scone_col}")
         else:
             self.scone_col = scone_col[0]
             print(f"Using scone col {scone_col}")
+
+    @property
+    def true_z_col(self):
+        return self._true_z_col
+
+    @true_z_col.setter
+    def true_z_col(self, value):
+        try:
+            if value is not None:
+                self.df[value]
+        except KeyError:
+            raise KeyError(f"Couldn't find true z col {value} in dataframe")
+        self._true_z_col = value
+
 
     def z_counts(self, z_bins, prob_thresh=None):
         if prob_thresh is not None:
@@ -162,6 +164,8 @@ class SN_dataset():
         return mu_res
 
     def prob_scone(self):
+        if self.scone_col is None:
+            raise ValueError("No valid prob_scone column!")
         return self.df[self.scone_col]
 
     def combine_with(self, dataset, newtype, data_name=None):
@@ -186,6 +190,7 @@ class sauron_runner():
         for survey in surveys:
             survey_dict = files_input[survey]
             for i, file in enumerate(list(survey_dict.keys())):
+                print(f"Loading {file} for {survey}...")
                 sntype = "IA" if "IA" in file else "CC"
 
                 if isinstance(survey_dict[file], dict):
@@ -208,7 +213,15 @@ class sauron_runner():
 
                 if "DATA" in file:
                     for i, path in enumerate(paths):
-                        datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
+                        if ".FITS" in path:
+                            dataframe = fits.open(path)[1].data
+                            dataframe = pd.DataFrame(np.array(dataframe))
+                        elif ".csv" in path:
+                            print("Reading csv file")
+                            dataframe = pd.read_csv(path, comment="#")
+                        else:
+                            dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
+                        datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(dataframe,
                                                                             sntype, data_name=survey+"_"+file,
                                                                             zcol=zcol)
                     n_datasets = len(paths)
@@ -216,13 +229,23 @@ class sauron_runner():
 
                 else:
                     path = survey_dict[file]['PATH']
-                    datasets[survey+"_"+file] = SN_dataset(pd.read_csv(path, comment="#", sep=r"\s+"),
+                    if ".FITS" in path:
+                        dataframe = fits.open(path)[1].data
+                        dataframe = pd.DataFrame(np.array(dataframe))
+                    elif ".csv" in path:
+                        print("Reading csv file")
+                        dataframe = pd.read_csv(path, comment="#")
+                    else:
+                        dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
+                    datasets[survey+"_"+file] = SN_dataset(dataframe,
                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
 
-        # Combine IA and CC files if they are separate
-        if corecollapse_are_separate:
-            print("Combining IA and CC files..")
-            for survey in surveys:
+                    datasets[survey+"_"+file].true_z_col = survey_dict[file].get("TRUEZCOL", None)
+                    print(f"Setting true z col for {survey}_{file} to {survey_dict[file].get("TRUEZCOL", None)}")
+
+            # Combine IA and CC files if they are separate
+            if corecollapse_are_separate:
+                print("Combining IA and CC files..")
                 datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
                     datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
                 datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
@@ -230,6 +253,38 @@ class sauron_runner():
                 for i in range(n_datasets):
                     datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
                         datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
+            # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
+            else:
+                print("Splitting DUMP and SIM files into IA and CC...")
+                try:
+                    dump_df = datasets[f"{survey}_DUMP_ALL"].df
+                    sim_df = datasets[f"{survey}_SIM_ALL"].df
+                except KeyError:
+                    raise KeyError(f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL. If your DUMP and SIM files are "
+                                "separate for IA and CC, set corecollapse_are_separate to True.")
+
+                try:
+                    dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
+                    ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
+                    sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
+                    ia_vals_sim = survey_dict["SIM_ALL"]["IA_VALS"]
+                except KeyError:
+                    raise KeyError(f"Couldn't find SNTYPECOL or IA_VALS in config for {survey}. These are needed to "
+                                   "separate DUMP and SIM into IA and CC.")
+
+                dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
+                dump_cc_df = dump_df[dump_df[dump_sn_col].isin(ia_vals) == False]
+                sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
+                sim_cc_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim) == False]
+
+                datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
+                                                           data_name=survey+"_DUMP_IA")
+                datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
+                                                           data_name=survey+"_DUMP_CC")
+                datasets[f"{survey}_SIM_IA"] = SN_dataset(sim_ia_df, "IA", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
+                                                           data_name=survey+"_SIM_IA", true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
+                                                           data_name=survey+"_SIM_CC", true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
 
         self.datasets = datasets
         self.surveys = surveys
@@ -246,11 +301,11 @@ class sauron_runner():
         eff_ij = np.zeros((len(self.z_bins) - 1, len(self.z_bins) - 1))
         simulated_events = sim.df
         sim_z_col = sim.z_col
+        true_z_col = sim.true_z_col
 
         dump_counts = dump.z_counts(self.z_bins)
 
-        # This can't be hardcoded!!!! -------------------V
-        num, _, _ = np.histogram2d(simulated_events['SIM_ZCMB'], simulated_events[sim_z_col],
+        num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
                                    bins=[self.z_bins, self.z_bins])
 
         eff_ij = num/dump_counts
