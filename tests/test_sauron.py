@@ -111,7 +111,7 @@ def test_chi():
     N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(runner.z_bins)
     eff_ij = runner.calculate_transfer_matrix(survey)
     f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
-                np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
+             np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
     n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
     x = np.array([1.0, 0.0])
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")

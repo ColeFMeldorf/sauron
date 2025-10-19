@@ -20,7 +20,7 @@ from astropy.io import fits
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 # These need to be added to config file later
-corecollapse_are_separate = False
+corecollapse_are_separate = True
 
 
 
@@ -54,11 +54,10 @@ def main():
                 rescale_vals.append(np.random.normal(1, 0.2, size=3))
             cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals, runner.z_bins, PROB_THRESH,
                                                              1, survey, datasets, runner.z_bins, False)
-            # Hard coding index to one neeeds to change. I don't think this fcn should need index at all.
+            # Hard coding index to one neeeds to change. I don't think this fcn should need index at all. TODO
             cov_sys = cov_thresh + cov_rate_norm
         else:
             cov_sys = None
-
 
         for i in range(n_datasets):
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
@@ -79,9 +78,13 @@ def main():
             # f_norm = np.sum(n_data) / \
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
-            alpha, beta, chi, Ei, cov = runner.fit_rate(f_norm=f_norm, n_data=n_data, cov_sys=cov_sys)
+            alpha, beta, chi, Ei, cov, Ei_err = runner.fit_rate(f_norm=f_norm, n_data=n_data, cov_sys=cov_sys)
 
             print("Expected Counts:", Ei)
+
+            runner.predicted_counts = Ei
+            runner.predicted_counts_err = Ei_err
+            runner.n_data = n_data
 
             runner.results.append(pd.DataFrame({
                 "delta_alpha": alpha,
@@ -93,6 +96,7 @@ def main():
                 }, index=np.array([0])))
 
         runner.save_results()
+        runner.summary_plot()
 
 
 class SN_dataset():
@@ -112,16 +116,17 @@ class SN_dataset():
 
         self.z_col = None
         for i in possible_z_cols:
-            try:
-                self.df[i]  # better way to do this?
+            if i in self.df.columns:
                 if self.z_col is None:
                     self.z_col = i
-                    if not z_col_specified:
-                        print(f"Found z_col {i}")
                 else:
                     raise ValueError(f"Multiple valid zcols found in {data_name}. I found: {self.z_col} and {i}")
-            except KeyError:
-                raise KeyError(f"Couldn't find z col {i} in dataframe")
+        if self.z_col is None:
+            if z_col_specified:
+                raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
+            else:
+                raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!" \
+                    f" I checked: {possible_z_cols}")
 
         scone_col = []
         for c in self.df.columns:
@@ -147,7 +152,6 @@ class SN_dataset():
         except KeyError:
             raise KeyError(f"Couldn't find true z col {value} in dataframe")
         self._true_z_col = value
-
 
     def z_counts(self, z_bins, prob_thresh=None):
         if prob_thresh is not None:
@@ -241,6 +245,15 @@ class sauron_runner():
                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
 
                     datasets[survey+"_"+file].true_z_col = survey_dict[file].get("TRUEZCOL", None)
+                    if datasets[survey+"_"+file].true_z_col is None:
+                        possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
+                        cols_in_df = [col for col in possible_true_z_cols if col in datasets[survey+"_"+file].df.columns]
+                        if len(cols_in_df) > 1:
+                            raise ValueError(f"Multiple possible true z cols found for {survey}_{file}: {cols_in_df}. "
+                                             "Please specify TRUEZCOL in config file.")
+                        elif len(cols_in_df) == 1:
+                            datasets[survey+"_"+file].true_z_col = cols_in_df[0]
+                            print(f"Auto-setting true z col for {survey}_{file} to {cols_in_df[0]}")
                     print(f"Setting true z col for {survey}_{file} to {survey_dict[file].get("TRUEZCOL", None)}")
 
             # Combine IA and CC files if they are separate
@@ -299,9 +312,15 @@ class sauron_runner():
         dump = self.datasets[f"{survey}_DUMP_IA"]
         sim = self.datasets[f"{survey}_SIM_IA"]
         eff_ij = np.zeros((len(self.z_bins) - 1, len(self.z_bins) - 1))
+
+        print("Using true col:", sim.true_z_col, "and recovered col:", sim.z_col)
         simulated_events = sim.df
         sim_z_col = sim.z_col
         true_z_col = sim.true_z_col
+
+        #plt.errorbar(simulated_events[true_z_col], simulated_events[sim_z_col],
+        #            yerr=sim.df['REDSHIFT_FINAL_ERR'], fmt='.', alpha=0.1)
+        # plt.savefig("transfer_scatter.png")
 
         dump_counts = dump.z_counts(self.z_bins)
 
@@ -333,9 +352,27 @@ class sauron_runner():
         print("Optimal Chi", chi)
 
         fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
+        print("fJ", np.shape(fJ))
+        print("Eff_ij", np.shape(eff_ij))
+        print("f_norm", f_norm)
+        print("N_gen", np.shape(N_gen))
         Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
 
-        return result[0], result[1], np.sum(infodict['fvec']), Ei, cov_x
+        # Estimate errors on Ei
+        alpha_draws = np.random.normal(result[0], np.sqrt(cov_x[0, 0]), size=1000)
+        beta_draws = np.random.normal(result[1], np.sqrt(cov_x[1, 1]), size=1000)
+        fJ_draws = alpha_draws * (1 + (z_bins[1:] + z_bins[:-1])/2)[:,np.newaxis]**beta_draws
+        print("fJ_draws", np.shape(fJ_draws))
+        N_gen = N_gen[:, np.newaxis]  # for broadcasting
+        eff_ij = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
+        print("N_gen for broadcasting", np.shape(N_gen))
+        print("eff_ij for broadcasting", np.shape(N_gen * eff_ij))
+
+        Ei_draws = np.sum(N_gen * eff_ij * f_norm * fJ_draws, axis=0)
+        Ei_err = np.std(Ei_draws, axis=1)
+        print("Ei_err", Ei_err)
+
+        return result[0], result[1], np.sum(infodict['fvec']), Ei, cov_x, Ei_err
 
     def save_results(self):
         for i, result in enumerate(self.results):
@@ -379,6 +416,26 @@ class sauron_runner():
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
         return n_data
+
+    def summary_plot(self):
+
+        plt.subplot(1, 2, 1)
+        z_centers = (self.z_bins[1:] + self.z_bins[:-1]) / 2
+        plt.errorbar(z_centers, self.predicted_counts, yerr=self.predicted_counts_err,  fmt='o', label = "Sauron Prediction")
+        plt.errorbar(z_centers, self.n_data, yerr=np.sqrt(self.n_data), fmt='o', label = "Data")
+        plt.yscale("log")
+        plt.legend()
+        plt.xlabel("Redshift")
+        plt.ylabel("Counts")
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(self.eff_ij, extent=(0, np.max(self.z_bins), 0, np.max(self.z_bins)), origin='lower', aspect='auto')
+        plt.colorbar()
+        plt.title("Efficiency Matrix")
+        plt.xlabel("Observed Redshift Bin")
+        plt.ylabel("True Redshift Bin")
+
+        plt.savefig("summary_plot.png")
 
 
 def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
