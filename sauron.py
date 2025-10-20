@@ -20,8 +20,6 @@ from astropy.io import fits
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 # These need to be added to config file later
-corecollapse_are_separate = True
-
 
 
 def main():
@@ -34,11 +32,11 @@ def main():
     args = parser.parse_args()
 
     runner = sauron_runner(args)
+    runner.parse_fit_options()
 
-    datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate)
+    datasets, surveys, n_datasets = runner.unpack_dataframes()
 
     for survey in surveys:
-        runner.z_bins = np.arange(0, 1.4, 0.1)
         runner.get_counts(survey)
         runner.results = []
         runner.calculate_transfer_matrix(survey)
@@ -52,7 +50,8 @@ def main():
             rescale_vals = []
             for i in range(100):
                 rescale_vals.append(np.random.normal(1, 0.2, size=3))
-            cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals, runner.z_bins, PROB_THRESH,
+            cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
+                                                             runner.z_bins, PROB_THRESH,
                                                              1, survey, datasets, runner.z_bins, False)
             # Hard coding index to one neeeds to change. I don't think this fcn should need index at all. TODO
             cov_sys = cov_thresh + cov_rate_norm
@@ -67,7 +66,7 @@ def main():
 
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
 
-            if corecollapse_are_separate:
+            if runner.corecollapse_are_separate:
                 f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
                     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
             else:
@@ -125,8 +124,8 @@ class SN_dataset():
             if z_col_specified:
                 raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
             else:
-                raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!" \
-                    f" I checked: {possible_z_cols}")
+                raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!"
+                                 f" I checked: {possible_z_cols}")
 
         scone_col = []
         for c in self.df.columns:
@@ -186,9 +185,52 @@ class sauron_runner():
     def __init__(self, args):
         self.args = args
 
-    def unpack_dataframes(self, corecollapse_are_separate):
+    def parse_fit_options(self):
+        files_input = yaml.safe_load(open(self.args.config, 'r'))
+        fit_options = files_input.get("FIT_OPTIONS", {})
+        if fit_options.get("RATE_FUNCTION") == "power_law":
+            self.rate_function = power_law
+            self.x0 = (1, 0)
+        elif fit_options.get("RATE_FUNCTION") in ["turnover_power_law", "dual_power_law"]:
+            self.rate_function = turnover_power_law
+            self.x0 = (1, 0, 1, -2)  # Need to make this configurable later
+        else:
+            print("WARNING: No valid RATE_FUNCTION specified in FIT_OPTIONS. Defaulting to power_law.")
+            self.rate_function = power_law
+            self.x0 = (1, 0)
+
+        if "X0" in fit_options:
+            self.x0 = fit_options["X0"]
+        else:
+            print(f"WARNING: No X0 specified in FIT_OPTIONS. Using default initial guess {self.x0}.")
+
+        self.z_bins = np.arange(0, 1.4, 0.1)
+        if "Z_BINS" in fit_options:
+            if isinstance(fit_options["Z_BINS"], list):
+                self.z_bins = np.array(fit_options["Z_BINS"])
+            elif isinstance(fit_options["Z_BINS"], int):
+                if "MIN_Z" not in fit_options or "MAX_Z" not in fit_options:
+                    print("WARNING: When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
+                          " Defaulting to MIN_Z=0 and MAX_Z=1.4")
+                min_z = fit_options.get("MIN_Z", 0)
+                max_z = fit_options.get("MAX_Z", 1.4)
+                self.z_bins = np.linspace(min_z, max_z, fit_options["Z_BINS"] + 1)
+        else:
+            print(f"WARNING: No Z_BINS specified in FIT_OPTIONS. Using default z_bins:")
+
+        print("Z BINS", self.z_bins)
+
+        if "CC_ARE_SEPARATE" in fit_options:
+            self.corecollapse_are_separate = fit_options["CC_ARE_SEPARATE"]
+        else:
+            print("WARNING: No CC_ARE_SEPARATE specified in FIT_OPTIONS. Defaulting to True.")
+            self.corecollapse_are_separate = True
+
+    def unpack_dataframes(self):
         files_input = yaml.safe_load(open(self.args.config, 'r'))
         surveys = list(files_input.keys())
+        if "FIT_OPTIONS" in surveys:
+            surveys.remove("FIT_OPTIONS")
         datasets = {}
         # Unpack dataframes into SN_dataset objects
         for survey in surveys:
@@ -205,7 +247,7 @@ class sauron_runner():
                 # Either use the paths provided or glob the directory provided
                 if survey_dict[file].get('PATH') is not None:
                     paths = survey_dict[file]['PATH']
-                    paths = [paths] if type(paths) is not list else paths # Make it a list for later
+                    paths = [paths] if type(paths) is not list else paths  # Make it a list for later
                 elif survey_dict[file].get('DIR') is not None:
                     paths = []
                     for dir in survey_dict[file]['DIR']:
@@ -247,7 +289,8 @@ class sauron_runner():
                     datasets[survey+"_"+file].true_z_col = survey_dict[file].get("TRUEZCOL", None)
                     if datasets[survey+"_"+file].true_z_col is None:
                         possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
-                        cols_in_df = [col for col in possible_true_z_cols if col in datasets[survey+"_"+file].df.columns]
+                        cols_in_df = [col for col in possible_true_z_cols if
+                                      col in datasets[survey+"_"+file].df.columns]
                         if len(cols_in_df) > 1:
                             raise ValueError(f"Multiple possible true z cols found for {survey}_{file}: {cols_in_df}. "
                                              "Please specify TRUEZCOL in config file.")
@@ -257,7 +300,7 @@ class sauron_runner():
                     print(f"Setting true z col for {survey}_{file} to {survey_dict[file].get("TRUEZCOL", None)}")
 
             # Combine IA and CC files if they are separate
-            if corecollapse_are_separate:
+            if self.corecollapse_are_separate:
                 print("Combining IA and CC files..")
                 datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
                     datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
@@ -273,8 +316,9 @@ class sauron_runner():
                     dump_df = datasets[f"{survey}_DUMP_ALL"].df
                     sim_df = datasets[f"{survey}_SIM_ALL"].df
                 except KeyError:
-                    raise KeyError(f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL. If your DUMP and SIM files are "
-                                "separate for IA and CC, set corecollapse_are_separate to True.")
+                    raise KeyError(f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL."
+                                   " If your DUMP and SIM files are "
+                                   "separate for IA and CC, set corecollapse_are_separate to True.")
 
                 try:
                     dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
@@ -318,7 +362,7 @@ class sauron_runner():
         sim_z_col = sim.z_col
         true_z_col = sim.true_z_col
 
-        #plt.errorbar(simulated_events[true_z_col], simulated_events[sim_z_col],
+        # plt.errorbar(simulated_events[true_z_col], simulated_events[sim_z_col],
         #            yerr=sim.df['REDSHIFT_FINAL_ERR'], fmt='.', alpha=0.1)
         # plt.savefig("transfer_scatter.png")
 
@@ -338,39 +382,34 @@ class sauron_runner():
         z_bins = self.z_bins
         N_gen = self.N_gen
         eff_ij = self.eff_ij
-        result, cov_x, infodict = leastsq(chi2, x0=(1, 0), args=(N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys),
+        result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(N_gen, f_norm, z_bins, eff_ij,
+                                          n_data, self.rate_function, cov_sys),
                                           full_output=True)[:3]
+        print("Least Squares Result:", result)
         N = len(n_data)
         n = len(result)
-        cov_x *= (infodict['fvec']**2).sum()/ (N-n)
+        cov_x *= (infodict['fvec']**2).sum() / (N-n)
         # See scipy doc for leastsq for explanation of this covariance rescaling
         print("Delta Alpha and Delta Beta:", result)
         print(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
         print("Covariance Matrix:", cov_x)
 
-        chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=cov_sys)
-        print("Optimal Chi", chi)
+        print("skipping optimal chi for now")
+        # chi = chi2(np.array([1, 0]), N_gen, f_norm, z_bins, eff_ij, n_data, self.rate_function, cov_sys=cov_sys)
+        # print("Optimal Chi", chi)
 
         fJ = result[0] * (1 + (z_bins[1:] + z_bins[:-1])/2)**result[1]
-        print("fJ", np.shape(fJ))
-        print("Eff_ij", np.shape(eff_ij))
-        print("f_norm", f_norm)
-        print("N_gen", np.shape(N_gen))
         Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
 
         # Estimate errors on Ei
         alpha_draws = np.random.normal(result[0], np.sqrt(cov_x[0, 0]), size=1000)
         beta_draws = np.random.normal(result[1], np.sqrt(cov_x[1, 1]), size=1000)
         fJ_draws = alpha_draws * (1 + (z_bins[1:] + z_bins[:-1])/2)[:,np.newaxis]**beta_draws
-        print("fJ_draws", np.shape(fJ_draws))
         N_gen = N_gen[:, np.newaxis]  # for broadcasting
         eff_ij = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
-        print("N_gen for broadcasting", np.shape(N_gen))
-        print("eff_ij for broadcasting", np.shape(N_gen * eff_ij))
 
         Ei_draws = np.sum(N_gen * eff_ij * f_norm * fJ_draws, axis=0)
         Ei_err = np.std(Ei_draws, axis=1)
-        print("Ei_err", Ei_err)
 
         return result[0], result[1], np.sum(infodict['fvec']), Ei, cov_x, Ei_err
 
@@ -423,7 +462,6 @@ class sauron_runner():
         z_centers = (self.z_bins[1:] + self.z_bins[:-1]) / 2
         plt.errorbar(z_centers, self.predicted_counts, yerr=self.predicted_counts_err,  fmt='o', label = "Sauron Prediction")
         plt.errorbar(z_centers, self.n_data, yerr=np.sqrt(self.n_data), fmt='o', label = "Data")
-        plt.yscale("log")
         plt.legend()
         plt.xlabel("Redshift")
         plt.ylabel("Counts")
@@ -438,10 +476,9 @@ class sauron_runner():
         plt.savefig("summary_plot.png")
 
 
-def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
-    alpha, beta = x
+def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = (z_bins[1:] + z_bins[:-1])/2
-    fJ = alpha * (1 + zJ)**beta
+    fJ = rate_function(zJ, x)
     Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
     var_Ei = np.abs(Ei)
     var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
@@ -455,6 +492,19 @@ def chi2(x, N_gen, f_norm, z_bins, eff_ij, n_data, cov_sys=0):
     chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
     return chi_squared
+
+
+def power_law(z, x):
+    alpha, beta = x
+    return alpha * (1 + z)**beta
+
+def turnover_power_law(z, x):
+    alpha1, beta1, alpha2, beta2 = x
+    z_turn = 1
+    fJ = np.where(z < z_turn,
+                  alpha1 * (1 + z)**beta1,
+                  alpha2 * (1 + z)**beta2)
+    return fJ
 
 
 def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):

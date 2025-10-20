@@ -90,7 +90,8 @@ def test_calc_cov_term():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate=True)
+    runner.corecollapse_are_separate = True
+    datasets, surveys, n_datasets = runner.unpack_dataframes()
     survey = "DES"
     runner.z_bins = np.arange(0, 1.4, 0.1)
     cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
@@ -99,12 +100,18 @@ def test_calc_cov_term():
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
 
+def power_law(z, x):
+    alpha, beta = x
+    return alpha * (1 + z)**beta
+
+
 def test_chi():
     args = SimpleNamespace()
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     args.config = config_path
     runner = sauron_runner(args)
-    datasets, surveys, n_datasets = runner.unpack_dataframes(corecollapse_are_separate=True)
+    runner.corecollapse_are_separate = True
+    datasets, surveys, n_datasets = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
     survey = "DES"
     index = 1
@@ -115,7 +122,7 @@ def test_chi():
     n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
     x = np.array([1.0, 0.0])
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-    np.testing.assert_allclose(chi2(x, N_gen, f_norm, runner.z_bins, eff_ij, n_data), regression_chi, atol=1e-7)
+    np.testing.assert_allclose(chi2(x, N_gen, f_norm, runner.z_bins, eff_ij, n_data, power_law), regression_chi, atol=1e-7)
 
 
 def test_regression_pz_5datasets_covariance():
