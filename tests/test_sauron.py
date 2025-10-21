@@ -109,6 +109,7 @@ def test_chi():
     args = SimpleNamespace()
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     args.config = config_path
+    args.cheat_cc = False
     runner = sauron_runner(args)
     runner.corecollapse_are_separate = True
     datasets, surveys, n_datasets = runner.unpack_dataframes()
@@ -118,11 +119,12 @@ def test_chi():
     N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(runner.z_bins)
     eff_ij = runner.calculate_transfer_matrix(survey)
     f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
-             np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
+        np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
     n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
     x = np.array([1.0, 0.0])
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-    np.testing.assert_allclose(chi2(x, N_gen, f_norm, runner.z_bins, eff_ij, n_data, power_law), regression_chi, atol=1e-7)
+    np.testing.assert_allclose(chi2(x, N_gen, f_norm, runner.z_bins, eff_ij, n_data, power_law),
+                               regression_chi, atol=1e-7)
 
 
 def test_regression_pz_5datasets_covariance():
@@ -141,6 +143,7 @@ def test_regression_pz_5datasets_covariance():
         np.testing.assert_allclose(results[col], regression[col], atol=5e-3)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
     # The rescale CC for cov uses random numbers.
+
 
 def test_coverage_no_sys():
     """In this test we check the coverage properties of SAURON when there are no systematics.
@@ -229,6 +232,5 @@ def test_coverage_with_sys():
     print("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.05)
-    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.05) # Note the stricter
+    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.05)  # Note the stricter
     # tolerance here. We expect better coverage when systematics are included because they inflate the error bars.
-
