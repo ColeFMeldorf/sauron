@@ -122,8 +122,9 @@ def test_chi():
         np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
     n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
     x = np.array([1.0, 0.0])
+    z_centers = 0.5 * (runner.z_bins[1:] + runner.z_bins[:-1])
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-    np.testing.assert_allclose(chi2(x, N_gen, f_norm, runner.z_bins, eff_ij, n_data, power_law),
+    np.testing.assert_allclose(chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, power_law),
                                regression_chi, atol=1e-7)
 
 
@@ -140,6 +141,9 @@ def test_regression_pz_5datasets_covariance():
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
+        print("COL: ", col)
+        print(results[col])
+        print(regression[col])
         np.testing.assert_allclose(results[col], regression[col], atol=5e-3)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
     # The rescale CC for cov uses random numbers.

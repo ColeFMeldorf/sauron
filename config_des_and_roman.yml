@@ -2,9 +2,6 @@
 # The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
 
 FIT_OPTIONS:
-  MIN_Z: 0.2
-  MAX_Z: 1.4
-  Z_BINS: 10
   RATE_FUNCTION: power_law
 
 
@@ -38,7 +35,7 @@ ROMAN:
     # SNTYPECOL: SNTYPE
     # IA_VALS:
     #   - 10
-    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM_ROTAC/1_SIM/SUPERNOVA/PIP_CFM_ROTAC_SUPERNOVA/PIP_CFM_ROTAC_SUPERNOVA.DUMP.gz 
+    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM_ROTAC/1_SIM/SUPERNOVA/PIP_CFM_ROTAC_SUPERNOVA/PIP_CFM_ROTAC_SUPERNOVA.DUMP.gz
     ZCOL: ZCMB
     SNTYPECOL: SNTYPE
     IA_VALS:
