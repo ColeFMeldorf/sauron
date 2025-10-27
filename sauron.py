@@ -39,7 +39,7 @@ def main():
 
     for survey in surveys:
         runner.get_counts(survey)
-        runner.results = []
+        runner.results[survey] = []
         runner.calculate_transfer_matrix(survey)
         PROB_THRESH = 0.13
 
@@ -101,7 +101,7 @@ def main():
             runner.n_data = n_data
 
             # This needs to be updated for more parameters later
-            runner.results.append(pd.DataFrame({
+            runner.results[survey].append(pd.DataFrame({
                 "delta_alpha": result[0],
                 "delta_beta": result[1],
                 "reduced_chi_squared": chi/(len(runner.z_bins)-2),
@@ -110,11 +110,53 @@ def main():
                 "cov_alpha_beta": cov[0, 1],
                 }, index=np.array([0])))
 
-        runner.save_results()
+        runner.save_results(survey)
         runner.summary_plot(survey)
 
     # Fit all surveys together
     runner.fit_rate(surveys)
+
+    plt.close()
+    surveys.extend(["combined"])
+    print("RESULTS")
+    print(runner.results)
+    cmaps= ['grey', 'jet', 'viridis']
+    for i, s in enumerate(surveys):
+        chi2_map = runner.generate_chi2_map(s)
+
+        normalized_map = np.log10(chi2_map - np.min(chi2_map) + 0.0001)
+        plt.subplot(1, len(surveys), i + 1)
+        plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
+        #plt.scatter(0.0167, 0.99)
+        plt.axvline(0, color='white', linestyle='--')
+        plt.axhline(1, color='white', linestyle='--')
+        plt.title(s)
+        from scipy.stats import multivariate_normal
+        from scipy.stats import chi2 as chi2_scipy
+        if i != 2:
+            df = runner.results[s][0]
+            print("df:", df)
+            a = np.mean(df["alpha_error"]**2)
+            b = np.mean(df["beta_error"]**2)
+            c = np.mean(df["cov_alpha_beta"])
+            cov = np.array([[a, c], [c, b]])
+            sigma_1 = chi2_scipy.ppf([0.68], 2)
+            sigma_2 = chi2_scipy.ppf([0.95], 2)
+            mean = [df["delta_beta"].values[0], df["delta_alpha"].values[0]]
+            rv = multivariate_normal(mean, cov)
+            norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
+
+            sigma_1_exp = np.exp((-1/2) * sigma_1)
+            sigma_1_exp = sigma_1_exp[0] / norm
+            sigma_2_exp = np.exp((-1/2) * sigma_2)
+            sigma_2_exp = sigma_2_exp[0] / norm
+            y = np.linspace(0.9, 1.1, 100)
+            x = np.linspace(-0.1, 0.1, 100)
+            x, y = np.meshgrid(x, y)
+            pos = np.dstack((x, y))
+            #plt.contour(x, y, rv.pdf(pos), levels=[sigma_2_exp, sigma_1_exp], colors='black')
+
+    plt.savefig("chi2_maps.png")
 
 
 class SN_dataset():
@@ -210,6 +252,7 @@ class sauron_runner():
         self.fit_args_dict['n_data'] = {}
         self.fit_args_dict['cov_sys'] = {}
         self.fit_args_dict['cc_are_sep'] = {}
+        self.results = {}
 
     def parse_fit_options(self):
         files_input = yaml.safe_load(open(self.args.config, 'r'))
@@ -477,8 +520,8 @@ class sauron_runner():
 
         return result, np.sum(infodict['fvec']), Ei, cov_x, Ei_err
 
-    def save_results(self):
-        for i, result in enumerate(self.results):
+    def save_results(self, survey):
+        for i, result in enumerate(self.results[survey]):
             if i == 0:
                 output_df = result
             else:
@@ -520,6 +563,33 @@ class sauron_runner():
 
         return n_data
 
+    def generate_chi2_map(self, survey):
+
+        # This only for now works with the power law fit function
+        fit_args_dict = self.fit_args_dict
+        chi2_map = np.empty((50, 50))
+        z_centers = (self.z_bins[1:] + self.z_bins[:-1]) / 2
+
+        if len(fit_args_dict['N_gen'][survey]) != len(z_centers):
+            num_surveys = len(fit_args_dict['N_gen'][survey]) / len(z_centers)
+            assert (num_surveys % 1 == 0), "N_gen length is not a multiple of z_centers length!"
+            z_centers = np.tile(z_centers, int(num_surveys))
+            print("updated z_centers for chi2 map:", z_centers)
+
+        for i, a in enumerate(np.linspace(0.9, 1.1, 50)):
+            for j, b in enumerate(np.linspace(-0.1, 0.1, 50)):
+
+                values = (a, b)
+
+                chi2_result = chi2(values, fit_args_dict['N_gen'][survey], fit_args_dict['f_norm'][survey],
+                                      z_centers,
+                                      fit_args_dict['eff_ij'][survey],
+                                      fit_args_dict['n_data'][survey],
+                                      self.rate_function,
+                                      fit_args_dict['cov_sys'][survey])
+                chi2_map[i][j] = np.sum(chi2_result**2)
+        return chi2_map
+
     def summary_plot(self, survey):
 
         plt.subplot(1, 2, 1)
@@ -533,11 +603,12 @@ class sauron_runner():
         plt.ylim(np.min(self.predicted_counts) * 0.8, np.max(self.n_data) * 1.2)
 
         plt.subplot(1, 2, 2)
-        plt.imshow(self.fit_args_dict['eff_ij'][survey], extent=(0, np.max(self.z_bins), 0, np.max(self.z_bins)), origin='lower', aspect='auto')
-        plt.colorbar()
-        plt.title("Efficiency Matrix")
-        plt.xlabel("Observed Redshift Bin")
-        plt.ylabel("True Redshift Bin")
+        if survey == "ROMAN":
+            plt.imshow(self.fit_args_dict['eff_ij'][survey], extent=(0, np.max(self.z_bins), 0, np.max(self.z_bins)), origin='lower', aspect='auto')
+            plt.colorbar()
+            plt.title("Efficiency Matrix")
+            plt.xlabel("Observed Redshift Bin")
+            plt.ylabel("True Redshift Bin")
 
         plt.savefig("summary_plot.png")
 
