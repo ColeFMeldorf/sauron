@@ -114,49 +114,50 @@ def main():
         runner.summary_plot(survey)
 
     # Fit all surveys together
-    runner.fit_rate(surveys)
+    if len(surveys) > 1:
+        runner.fit_rate(surveys)
 
-    plt.close()
-    surveys.extend(["combined"])
-    print("RESULTS")
-    print(runner.results)
-    cmaps= ['grey', 'jet', 'viridis']
-    for i, s in enumerate(surveys):
-        chi2_map = runner.generate_chi2_map(s)
+        plt.close()
+        surveys.extend(["combined"])
+        print("RESULTS")
+        print(runner.results)
+        cmaps= ['grey', 'jet', 'viridis']
+        for i, s in enumerate(surveys):
+            chi2_map = runner.generate_chi2_map(s)
 
-        normalized_map = np.log10(chi2_map - np.min(chi2_map) + 0.0001)
-        plt.subplot(1, len(surveys), i + 1)
-        plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
-        #plt.scatter(0.0167, 0.99)
-        plt.axvline(0, color='white', linestyle='--')
-        plt.axhline(1, color='white', linestyle='--')
-        plt.title(s)
-        from scipy.stats import multivariate_normal
-        from scipy.stats import chi2 as chi2_scipy
-        if i != 2:
-            df = runner.results[s][0]
-            print("df:", df)
-            a = np.mean(df["alpha_error"]**2)
-            b = np.mean(df["beta_error"]**2)
-            c = np.mean(df["cov_alpha_beta"])
-            cov = np.array([[a, c], [c, b]])
-            sigma_1 = chi2_scipy.ppf([0.68], 2)
-            sigma_2 = chi2_scipy.ppf([0.95], 2)
-            mean = [df["delta_beta"].values[0], df["delta_alpha"].values[0]]
-            rv = multivariate_normal(mean, cov)
-            norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
+            normalized_map = np.log10(chi2_map - np.min(chi2_map) + 0.0001)
+            plt.subplot(1, len(surveys), i + 1)
+            plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
+            #plt.scatter(0.0167, 0.99)
+            plt.axvline(0, color='white', linestyle='--')
+            plt.axhline(1, color='white', linestyle='--')
+            plt.title(s)
+            from scipy.stats import multivariate_normal
+            from scipy.stats import chi2 as chi2_scipy
+            if i != 2:
+                df = runner.results[s][0]
+                print("df:", df)
+                a = np.mean(df["alpha_error"]**2)
+                b = np.mean(df["beta_error"]**2)
+                c = np.mean(df["cov_alpha_beta"])
+                cov = np.array([[a, c], [c, b]])
+                sigma_1 = chi2_scipy.ppf([0.68], 2)
+                sigma_2 = chi2_scipy.ppf([0.95], 2)
+                mean = [df["delta_beta"].values[0], df["delta_alpha"].values[0]]
+                rv = multivariate_normal(mean, cov)
+                norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
 
-            sigma_1_exp = np.exp((-1/2) * sigma_1)
-            sigma_1_exp = sigma_1_exp[0] / norm
-            sigma_2_exp = np.exp((-1/2) * sigma_2)
-            sigma_2_exp = sigma_2_exp[0] / norm
-            y = np.linspace(0.9, 1.1, 100)
-            x = np.linspace(-0.1, 0.1, 100)
-            x, y = np.meshgrid(x, y)
-            pos = np.dstack((x, y))
-            #plt.contour(x, y, rv.pdf(pos), levels=[sigma_2_exp, sigma_1_exp], colors='black')
+                sigma_1_exp = np.exp((-1/2) * sigma_1)
+                sigma_1_exp = sigma_1_exp[0] / norm
+                sigma_2_exp = np.exp((-1/2) * sigma_2)
+                sigma_2_exp = sigma_2_exp[0] / norm
+                y = np.linspace(0.9, 1.1, 100)
+                x = np.linspace(-0.1, 0.1, 100)
+                x, y = np.meshgrid(x, y)
+                pos = np.dstack((x, y))
+                #plt.contour(x, y, rv.pdf(pos), levels=[sigma_2_exp, sigma_1_exp], colors='black')
 
-    plt.savefig("chi2_maps.png")
+        plt.savefig("chi2_maps.png")
 
 
 class SN_dataset():
