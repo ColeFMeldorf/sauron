@@ -33,11 +33,13 @@ def main():
     args = parser.parse_args()
 
     runner = sauron_runner(args)
-    runner.parse_fit_options()
+    runner.parse_global_fit_options()
 
     datasets, surveys, n_datasets = runner.unpack_dataframes()
 
     for survey in surveys:
+        print(f"Processing survey: {survey} ========================")
+        print(runner.fit_args_dict['z_bins'][survey])
         runner.get_counts(survey)
         runner.results[survey] = []
         runner.calculate_transfer_matrix(survey)
@@ -46,14 +48,14 @@ def main():
         # Covariance calculations
         if args.covariance:
             cov_thresh = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15],
-                                                          runner.z_bins, 1, survey)
+                                                          runner.fit_args_dict["z_bins"][survey], 1, survey)
 
             rescale_vals = []
             for i in range(100):
                 rescale_vals.append(np.random.normal(1, 0.2, size=3))
             cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
-                                                             runner.z_bins, PROB_THRESH,
-                                                             1, survey, datasets, runner.z_bins, False)
+                                                             runner.fit_args_dict["z_bins"][survey], PROB_THRESH,
+                                                             1, survey, datasets, runner.fit_args_dict["z_bins"][survey], False)
             # Hard coding index to one neeeds to change. I don't think this fcn should need index at all. TODO
             cov_sys = cov_thresh + cov_rate_norm
         else:
@@ -71,19 +73,19 @@ def main():
 
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
 
+            z_bins = runner.fit_args_dict['z_bins'][survey]
             if runner.fit_args_dict["cc_are_sep"][survey]:
                 print("corecollapse_are_separate is True")
-                f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
-                    np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
-
-                print("NUM:", np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) )
-                print("DENOM:", np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins)))
+                f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
+                    np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+                print("NUM:", np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) )
+                print("DENOM:", np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins)))
             else:
                 print("corecollapse_are_separate is False")
-                f_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins)) / \
-                    np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins))
-                print("NUM:", np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins)) )
-                print("DENOM:", np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins)))
+                f_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
+                    np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
+                print("NUM:", np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) )
+                print("DENOM:", np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)))
 
             runner.fit_args_dict['f_norm'][survey] = f_norm
 
@@ -99,12 +101,13 @@ def main():
             runner.predicted_counts = Ei
             runner.predicted_counts_err = Ei_err
             runner.n_data = n_data
+            z_bins = runner.fit_args_dict['z_bins'][survey]
 
             # This needs to be updated for more parameters later
             runner.results[survey].append(pd.DataFrame({
                 "delta_alpha": result[0],
                 "delta_beta": result[1],
-                "reduced_chi_squared": chi/(len(runner.z_bins)-2),
+                "reduced_chi_squared": chi/(len(z_bins)-2),
                 "alpha_error": np.sqrt(cov[0, 0]),
                 "beta_error": np.sqrt(cov[1, 1]),
                 "cov_alpha_beta": cov[0, 1],
@@ -120,14 +123,12 @@ def main():
     surveys.extend(["combined"])
     print("RESULTS")
     print(runner.results)
-    cmaps= ['grey', 'jet', 'viridis']
     for i, s in enumerate(surveys):
         chi2_map = runner.generate_chi2_map(s)
 
         normalized_map = np.log10(chi2_map - np.min(chi2_map) + 0.0001)
         plt.subplot(1, len(surveys), i + 1)
         plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
-        #plt.scatter(0.0167, 0.99)
         plt.axvline(0, color='white', linestyle='--')
         plt.axhline(1, color='white', linestyle='--')
         plt.title(s)
@@ -182,9 +183,12 @@ class SN_dataset():
                 else:
                     raise ValueError(f"Multiple valid zcols found in {data_name}. I found: {self.z_col} and {i}")
         if self.z_col is None:
+            for c in self.df.columns:
+                print("Available column:", c)
             if z_col_specified:
                 raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
             else:
+
                 raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!"
                                  f" I checked: {possible_z_cols}")
 
@@ -252,9 +256,11 @@ class sauron_runner():
         self.fit_args_dict['n_data'] = {}
         self.fit_args_dict['cov_sys'] = {}
         self.fit_args_dict['cc_are_sep'] = {}
+        self.fit_args_dict['z_bins'] = {}
+        self.fit_args_dict['z_centers'] = {}
         self.results = {}
 
-    def parse_fit_options(self):
+    def parse_global_fit_options(self):
         files_input = yaml.safe_load(open(self.args.config, 'r'))
         fit_options = files_input.get("FIT_OPTIONS", {})
         if fit_options.get("RATE_FUNCTION") == "power_law":
@@ -273,21 +279,26 @@ class sauron_runner():
         else:
             print(f"WARNING: No X0 specified in FIT_OPTIONS. Using default initial guess {self.x0}.")
 
-        self.z_bins = np.arange(0, 1.4, 0.1)
-        if "Z_BINS" in fit_options:
-            if isinstance(fit_options["Z_BINS"], list):
-                self.z_bins = np.array(fit_options["Z_BINS"])
-            elif isinstance(fit_options["Z_BINS"], int):
-                if "MIN_Z" not in fit_options or "MAX_Z" not in fit_options:
+    def parse_survey_fit_options(self, args_dict, survey):
+        self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
+        print("Setting CC_ARE_SEPARATE for", survey, "to", args_dict.get("CC_ARE_SEPARATE", None))
+        self.fit_args_dict["z_bins"][survey] = np.arange(0, 1.4, 0.1)
+        self.z_bins = "YOU SHOULD NOT BE SEEING THIS"
+        if "Z_BINS" in args_dict:
+            if isinstance(args_dict["Z_BINS"], list):
+                self.fit_args_dict["z_bins"][survey] = np.array(args_dict["Z_BINS"])
+            elif isinstance(args_dict["Z_BINS"], int):
+                if "MIN_Z" not in args_dict or "MAX_Z" not in args_dict:
                     print("WARNING: When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
                           " Defaulting to MIN_Z=0 and MAX_Z=1.4")
-                min_z = fit_options.get("MIN_Z", 0)
-                max_z = fit_options.get("MAX_Z", 1.4)
-                self.z_bins = np.linspace(min_z, max_z, fit_options["Z_BINS"] + 1)
-        else:
-            print("WARNING: No Z_BINS specified in FIT_OPTIONS. Using default z_bins:")
+                min_z = args_dict.get("MIN_Z", 0)
+                max_z = args_dict.get("MAX_Z", 1.4)
+                self.fit_args_dict["z_bins"][survey] = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
 
-        print("Z BINS", self.z_bins)
+        else:
+            print(f"WARNING: No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
+        print("Z BINS", self.fit_args_dict["z_bins"][survey])
+        self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] + self.fit_args_dict["z_bins"][survey][:-1]) / 2
 
     def unpack_dataframes(self):
         files_input = yaml.safe_load(open(self.args.config, 'r'))
@@ -300,9 +311,9 @@ class sauron_runner():
             survey_dict = files_input[survey]
             for i, file in enumerate(list(survey_dict.keys())):
 
-                if file == "CC_ARE_SEPARATE":
-                    self.fit_args_dict["cc_are_sep"][survey] = survey_dict[file]
-                    print("Setting CC_ARE_SEPARATE for", survey, "to", survey_dict[file])
+                if file == "FIT_OPTIONS":
+                    fit_args_dict = survey_dict["FIT_OPTIONS"]
+                    self.parse_survey_fit_options(fit_args_dict, survey)
                     continue
 
                 print(f"Loading {file} for {survey}...")
@@ -370,7 +381,7 @@ class sauron_runner():
 
             # Combine IA and CC files if they are separate
             if self.fit_args_dict["cc_are_sep"][survey]:
-                if not self.args.cheat_cc:
+                if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
                     print("Combining IA and CC files..")
                     datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
                         datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
@@ -380,7 +391,11 @@ class sauron_runner():
                         datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
                             datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
                 else:
-                    print("Skipping combining IA and CC files because --cheat_cc was set.")
+                    if self.args.cheat_cc:
+                        print("Skipping combining IA and CC files because --cheat_cc was set.")
+                    elif datasets.get(f"{survey}_DUMP_CC") is None:
+                        print(f"WARNING: Couldn't find {survey}_DUMP_CC to combine with IA file.")
+
 
 
             # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
@@ -423,13 +438,14 @@ class sauron_runner():
         return datasets, surveys, n_datasets
 
     def get_counts(self, survey):
-        z_bins = self.z_bins
+        z_bins = self.fit_args_dict['z_bins'][survey]
         self.fit_args_dict['N_gen'][survey] = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
 
     def calculate_transfer_matrix(self, survey):
         dump = self.datasets[f"{survey}_DUMP_IA"]
         sim = self.datasets[f"{survey}_SIM_IA"]
-        eff_ij = np.zeros((len(self.z_bins) - 1, len(self.z_bins) - 1))
+        z_bins = self.fit_args_dict['z_bins'][survey]
+        eff_ij = np.zeros((len(z_bins) - 1, len(z_bins) - 1))
 
         print("Using true col:", sim.true_z_col, "and recovered col:", sim.z_col)
         simulated_events = sim.df
@@ -440,10 +456,17 @@ class sauron_runner():
         #            yerr=sim.df['REDSHIFT_FINAL_ERR'], fmt='.', alpha=0.1)
         # plt.savefig("transfer_scatter.png")
 
-        dump_counts = dump.z_counts(self.z_bins)
+        z_bins = self.fit_args_dict['z_bins'][survey]
+        dump_counts = dump.z_counts(z_bins)
 
         num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
-                                   bins=[self.z_bins, self.z_bins])
+                                   bins=[z_bins, z_bins])
+        if np.any(dump_counts == 0):
+            print("WARNING: Some redshift bins have zero simulated events! This may cause issues.")
+            bad_bins = np.where(dump_counts == 0)[0]
+            upper_bad_bins = bad_bins + 1
+            unique_bad_bins = np.sort(np.unique(np.concatenate((bad_bins, upper_bad_bins))))
+            print("Specifically, these are the bin edges of the zero count bins:", z_bins[unique_bad_bins])
 
         eff_ij = num/dump_counts
 
@@ -465,12 +488,23 @@ class sauron_runner():
         #     cov_sys = self.fit_args_dict['cov_sys'][survey]
         # else:
         print("Fitting survey(s):", survey, "###########################")
-        z_centers = (self.z_bins[1:] + self.z_bins[:-1]) / 2
-        z_centers_list = [z_centers for s in survey]
-        z_centers = np.concatenate(z_centers_list)
-        # Make it so you pass in z_centers instead.
-        f_norm = np.array([self.fit_args_dict['f_norm'][s] for s in survey])
-        f_norm = np.concatenate([np.repeat(f_norm[i], len(self.z_bins)-1) for i in range(len(f_norm))])
+        z_centers = []
+        z_bins_list = []
+        f_norms = []
+        for s in survey:
+            z_bins = self.fit_args_dict['z_bins'][s]
+            z_bins_list.extend(z_bins)
+            z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
+            f_norm = self.fit_args_dict['f_norm'][s]
+            print("f_norm for survey", s, "is", f_norm)
+            print(np.repeat(f_norm, len(z_bins)-1))
+            f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
+            print(f_norms)
+
+        f_norm = None
+        z_centers = np.array(z_centers)
+        f_norms = np.array(f_norms)
+        # This needs to be done survey by survey because f_norm is per survey
         n_data = np.concatenate([self.fit_args_dict['n_data'][s] for s in survey])
         N_gen = np.concatenate([self.fit_args_dict['N_gen'][s] for s in survey])
         eff_ij_list = [self.fit_args_dict['eff_ij'][s] for s in survey]
@@ -481,14 +515,24 @@ class sauron_runner():
                 cov_sys_list[i] = np.zeros_like(eff_ij_list[i])
         cov_sys = block_diag(cov_sys_list).toarray()
 
-        self.fit_args_dict['f_norm']['combined'] = f_norm
+        print("Shapes:")
+        print("z_centers:", z_centers.shape)
+        print("f_norm:", f_norms.shape)
+        print("n_data:", n_data.shape)
+        print("N_gen:", N_gen.shape)
+        print("eff_ij:", eff_ij.shape)
+        print("cov_sys:", cov_sys.shape)
+
+        self.fit_args_dict['f_norm']['combined'] = f_norms
+        self.fit_args_dict['z_bins']['combined'] = z_bins_list
         self.fit_args_dict['n_data']['combined'] = n_data
         self.fit_args_dict['N_gen']['combined'] = N_gen
         self.fit_args_dict['eff_ij']['combined'] = eff_ij
         self.fit_args_dict['cov_sys']['combined'] = cov_sys
+        self.fit_args_dict['z_centers']['combined'] = z_centers
         # The above are only really needed for debugging.
 
-        result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(N_gen, f_norm, z_centers, eff_ij,
+        result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(N_gen, f_norms, z_centers, eff_ij,
                                           n_data, self.rate_function, cov_sys),
                                           full_output=True)[:3]
         print("Least Squares Result:", result)
@@ -502,7 +546,7 @@ class sauron_runner():
         # print("Optimal Chi", chi)
 
         fJ = result[0] * (1 + z_centers)**result[1]
-        Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
+        Ei = np.sum(N_gen * eff_ij * f_norms * fJ, axis=0)
 
         # Estimate errors on Ei
         alpha_draws = np.random.normal(result[0], np.sqrt(cov_x[0, 0]), size=1000)
@@ -510,12 +554,12 @@ class sauron_runner():
         fJ_draws = alpha_draws * (1 + z_centers)[:, np.newaxis]**beta_draws
         N_gen = N_gen[:, np.newaxis]  # for broadcasting
         eff_ij = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
-        f_norm = np.atleast_1d(f_norm)
-        f_norm = f_norm[:, np.newaxis]  # for broadcasting
+        f_norms = np.atleast_1d(f_norms)
+        f_norms = f_norms[:, np.newaxis]  # for broadcasting
 
         # I am not confident this
 
-        Ei_draws = np.sum(N_gen * eff_ij * f_norm * fJ_draws, axis=0)
+        Ei_draws = np.sum(N_gen * eff_ij * f_norms * fJ_draws, axis=0)
         Ei_err = np.std(Ei_draws, axis=1)
 
         return result, np.sum(infodict['fvec']), Ei, cov_x, Ei_err
@@ -533,10 +577,10 @@ class sauron_runner():
 
     def calculate_CC_contamination(self, PROB_THRESH, index, survey):
         datasets = self.datasets
-        z_bins = self.z_bins
+        z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
 
-        if not cheat:
+        if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
                        datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
@@ -556,7 +600,7 @@ class sauron_runner():
             print("Calculated a Ia frac of:", IA_frac)
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
         else:
-            print("CHEATING AROUND CC")
+            print("SKIPPING CC CONTAMINATION STEP. USING DATA_IA AS DATA_ALL.")
             IA_frac = np.ones(len(z_bins)-1)
             datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
@@ -568,7 +612,9 @@ class sauron_runner():
         # This only for now works with the power law fit function
         fit_args_dict = self.fit_args_dict
         chi2_map = np.empty((50, 50))
-        z_centers = (self.z_bins[1:] + self.z_bins[:-1]) / 2
+        print("Generating chi2 map for survey:", survey)
+        print(fit_args_dict['z_bins'][survey])
+        z_centers = self.fit_args_dict['z_centers'][survey]
 
         if len(fit_args_dict['N_gen'][survey]) != len(z_centers):
             num_surveys = len(fit_args_dict['N_gen'][survey]) / len(z_centers)
@@ -593,9 +639,10 @@ class sauron_runner():
     def summary_plot(self, survey):
 
         plt.subplot(1, 2, 1)
-        z_centers = (self.z_bins[1:] + self.z_bins[:-1]) / 2
+        z_bins = self.fit_args_dict['z_bins'][survey]
+        z_centers = (z_bins[1:] + z_bins[:-1]) / 2
         plt.errorbar(z_centers, self.predicted_counts, yerr=self.predicted_counts_err,  fmt='o',
-            label=f" {survey} Sauron Prediction ")
+                     label=f" {survey} Sauron Prediction ")
         plt.errorbar(z_centers, self.n_data, yerr=np.sqrt(self.n_data), fmt='o', label=f" {survey} Data")
         plt.legend()
         plt.xlabel("Redshift")
@@ -604,7 +651,8 @@ class sauron_runner():
 
         plt.subplot(1, 2, 2)
         if survey == "ROMAN":
-            plt.imshow(self.fit_args_dict['eff_ij'][survey], extent=(0, np.max(self.z_bins), 0, np.max(self.z_bins)), origin='lower', aspect='auto')
+            plt.imshow(self.fit_args_dict['eff_ij'][survey], extent=(0, np.max(z_bins), 0, np.max(z_bins)),
+                       origin='lower', aspect='auto')
             plt.colorbar()
             plt.title("Efficiency Matrix")
             plt.xlabel("Observed Redshift Bin")
