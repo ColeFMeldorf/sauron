@@ -39,6 +39,7 @@ def main():
 
     for survey in surveys:
         print(f"Processing survey: {survey} ========================")
+        print(runner.fit_args_dict['z_bins'])
         print(runner.fit_args_dict['z_bins'][survey])
         runner.get_counts(survey)
         runner.results[survey] = []
@@ -120,9 +121,13 @@ def main():
     runner.fit_rate(surveys)
 
     plt.close()
-    surveys.extend(["combined"])
+
     print("RESULTS")
     print(runner.results)
+
+    if len(surveys) > 1:
+        surveys.extend(["combined"])
+
     for i, s in enumerate(surveys):
         chi2_map = runner.generate_chi2_map(s)
 
@@ -311,10 +316,8 @@ class sauron_runner():
             survey_dict = files_input[survey]
             for i, file in enumerate(list(survey_dict.keys())):
 
-                if file == "FIT_OPTIONS":
-                    fit_args_dict = survey_dict["FIT_OPTIONS"]
-                    self.parse_survey_fit_options(fit_args_dict, survey)
-                    continue
+                fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
+                self.parse_survey_fit_options(fit_args_dict, survey)
 
                 print(f"Loading {file} for {survey}...")
                 sntype = "IA" if "IA" in file else "CC"
@@ -478,15 +481,7 @@ class sauron_runner():
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         if not isinstance(survey, list):
             survey = [survey]
-        # if not isinstance(survey, list):
-        #     print("Fitting for survey:", survey)
-        #     z_centers = (self.z_bins[1:] + self.z_bins[:-1]) / 2
-        #     N_gen = self.fit_args_dict['N_gen'][survey]
-        #     eff_ij = self.fit_args_dict['eff_ij'][survey]
-        #     f_norm = self.fit_args_dict['f_norm'][survey]
-        #     n_data = self.fit_args_dict['n_data'][survey]
-        #     cov_sys = self.fit_args_dict['cov_sys'][survey]
-        # else:
+
         print("Fitting survey(s):", survey, "###########################")
         z_centers = []
         z_bins_list = []
@@ -496,10 +491,7 @@ class sauron_runner():
             z_bins_list.extend(z_bins)
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
             f_norm = self.fit_args_dict['f_norm'][s]
-            print("f_norm for survey", s, "is", f_norm)
-            print(np.repeat(f_norm, len(z_bins)-1))
             f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
-            print(f_norms)
 
         f_norm = None
         z_centers = np.array(z_centers)
@@ -523,13 +515,16 @@ class sauron_runner():
         print("eff_ij:", eff_ij.shape)
         print("cov_sys:", cov_sys.shape)
 
-        self.fit_args_dict['f_norm']['combined'] = f_norms
-        self.fit_args_dict['z_bins']['combined'] = z_bins_list
-        self.fit_args_dict['n_data']['combined'] = n_data
-        self.fit_args_dict['N_gen']['combined'] = N_gen
-        self.fit_args_dict['eff_ij']['combined'] = eff_ij
-        self.fit_args_dict['cov_sys']['combined'] = cov_sys
-        self.fit_args_dict['z_centers']['combined'] = z_centers
+        survey = survey[0] if len(survey) == 1 else "combined"
+        # Note this only allows for individual surveys or all, no subsets. Fix this later.
+        if survey == "combined":
+            self.fit_args_dict['f_norm'][survey] = f_norms
+            self.fit_args_dict['z_bins'][survey] = z_bins_list
+            self.fit_args_dict['n_data'][survey] = n_data
+            self.fit_args_dict['N_gen'][survey] = N_gen
+            self.fit_args_dict['eff_ij'][survey] = eff_ij
+            self.fit_args_dict['cov_sys'][survey] = cov_sys
+            self.fit_args_dict['z_centers'][survey] = z_centers
         # The above are only really needed for debugging.
 
         result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(N_gen, f_norms, z_centers, eff_ij,
