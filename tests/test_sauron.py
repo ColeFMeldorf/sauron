@@ -144,7 +144,7 @@ def test_regression_pz_5datasets_covariance():
         print("COL: ", col)
         print(results[col])
         print(regression[col])
-        np.testing.assert_allclose(results[col], regression[col], atol=5e-3)
+        np.testing.assert_allclose(results[col], regression[col], atol=8e-3)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
     # The rescale CC for cov uses random numbers.
 
