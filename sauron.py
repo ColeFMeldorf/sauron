@@ -35,12 +35,10 @@ def main():
     runner = sauron_runner(args)
     runner.parse_global_fit_options()
 
-    datasets, surveys, n_datasets = runner.unpack_dataframes()
+    datasets, surveys = runner.unpack_dataframes()
 
     for survey in surveys:
         print(f"Processing survey: {survey} ========================")
-        print(runner.fit_args_dict['z_bins'])
-        print(runner.fit_args_dict['z_bins'][survey])
         runner.get_counts(survey)
         runner.results[survey] = []
         runner.calculate_transfer_matrix(survey)
@@ -63,7 +61,7 @@ def main():
             cov_sys = None
 
         runner.fit_args_dict['cov_sys'][survey] = cov_sys
-
+        n_datasets = runner.fit_args_dict["n_datasets"][survey]
         for i in range(n_datasets):
             print(f"Working on survey {survey}, dataset {i+1} -------------------")
             # Core Collapse Contamination
@@ -77,20 +75,20 @@ def main():
             z_bins = runner.fit_args_dict['z_bins'][survey]
 
             if runner.fit_args_dict["cc_are_sep"][survey]:
-                print("corecollapse_are_separate is True")
+                # print("corecollapse_are_separate is True")
                 f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
                     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-                print("NUM:", np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) )
-                print("DENOM:", np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins)))
-                print("DUMP SIZE:", np.sum(datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)))
+                # print("NUM:", np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) )
+                # print("DENOM:", np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins)))
+                # print("DUMP SIZE:", np.sum(datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)))
 
             else:
-                print("corecollapse_are_separate is False")
+                # print("corecollapse_are_separate is False")
                 f_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
                     np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
-                print("NUM:", np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) )
-                print("DENOM:", np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)))
-                print("DUMP SIZE:", np.sum(datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)))
+                # print("NUM:", np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) )
+                # print("DENOM:", np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)))
+                # print("DUMP SIZE:", np.sum(datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)))
 
             runner.fit_args_dict['f_norm'][survey] = f_norm
 
@@ -98,10 +96,7 @@ def main():
             #     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             print(f"Calculated f_norm to be {f_norm}")
 
-            print("n_data:", n_data)
             result, chi, Ei, cov, Ei_err = runner.fit_rate(survey)
-
-            print("Expected Counts:", Ei)
 
             runner.predicted_counts = Ei
             runner.predicted_counts_err = Ei_err
@@ -109,6 +104,11 @@ def main():
             z_bins = runner.fit_args_dict['z_bins'][survey]
 
             # This needs to be updated for more parameters later
+            if n_datasets > 1:
+                survey_name = survey + f"_dataset_{i+1}"
+            else:
+                survey_name = survey
+
             runner.results[survey].append(pd.DataFrame({
                 "delta_alpha": result[0],
                 "delta_beta": result[1],
@@ -116,55 +116,64 @@ def main():
                 "alpha_error": np.sqrt(cov[0, 0]),
                 "beta_error": np.sqrt(cov[1, 1]),
                 "cov_alpha_beta": cov[0, 1],
+                "survey": survey_name
                 }, index=np.array([0])))
+            print("Runner results now:", runner.results[survey])
 
-        runner.save_results(survey)
         runner.summary_plot(survey)
 
     # Fit all surveys together
-    runner.fit_rate(surveys)
-
-    print("RESULTS")
-    print(runner.results)
 
     if len(surveys) > 1:
+        result, chi, Ei, cov, Ei_err = runner.fit_rate(surveys)
+        runner.results["combined"] = pd.DataFrame({
+                "delta_alpha": result[0],
+                "delta_beta": result[1],
+                "reduced_chi_squared": chi/(len(z_bins)-2),
+                "alpha_error": np.sqrt(cov[0, 0]),
+                "beta_error": np.sqrt(cov[1, 1]),
+                "cov_alpha_beta": cov[0, 1],
+                "survey": "combined"
+                }, index=np.array([0]))
         surveys.extend(["combined"])
 
-    for i, s in enumerate(surveys):
-        chi2_map = runner.generate_chi2_map(s)
+    runner.save_results()
 
-        normalized_map = np.log10(chi2_map - np.min(chi2_map) + 0.0001)
-        plt.subplot(1, len(surveys), i + 1)
-        plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
-        plt.axvline(0, color='white', linestyle='--')
-        plt.axhline(1, color='white', linestyle='--')
-        plt.title(s)
-        from scipy.stats import multivariate_normal
-        from scipy.stats import chi2 as chi2_scipy
-        if i != 2:
-            df = runner.results[s][0]
-            print("df:", df)
-            a = np.mean(df["alpha_error"]**2)
-            b = np.mean(df["beta_error"]**2)
-            c = np.mean(df["cov_alpha_beta"])
-            cov = np.array([[a, c], [c, b]])
-            sigma_1 = chi2_scipy.ppf([0.68], 2)
-            sigma_2 = chi2_scipy.ppf([0.95], 2)
-            mean = [df["delta_beta"].values[0], df["delta_alpha"].values[0]]
-            rv = multivariate_normal(mean, cov)
-            norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
+    # for i, s in enumerate(surveys):
+    #     chi2_map = runner.generate_chi2_map(s)
 
-            sigma_1_exp = np.exp((-1/2) * sigma_1)
-            sigma_1_exp = sigma_1_exp[0] / norm
-            sigma_2_exp = np.exp((-1/2) * sigma_2)
-            sigma_2_exp = sigma_2_exp[0] / norm
-            y = np.linspace(0.9, 1.1, 100)
-            x = np.linspace(-0.1, 0.1, 100)
-            x, y = np.meshgrid(x, y)
-            pos = np.dstack((x, y))
-            #plt.contour(x, y, rv.pdf(pos), levels=[sigma_2_exp, sigma_1_exp], colors='black')
+    #     normalized_map = np.log10(chi2_map - np.min(chi2_map) + 0.0001)
+    #     plt.subplot(1, len(surveys), i + 1)
+    #     plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
+    #     plt.axvline(0, color='white', linestyle='--')
+    #     plt.axhline(1, color='white', linestyle='--')
+    #     plt.title(s)
+    #     from scipy.stats import multivariate_normal
+    #     from scipy.stats import chi2 as chi2_scipy
+    #     if i != 2:
+    #         df = runner.results[s][0]
+    #         print("df:", df)
+    #         a = np.mean(df["alpha_error"]**2)
+    #         b = np.mean(df["beta_error"]**2)
+    #         c = np.mean(df["cov_alpha_beta"])
+    #         cov = np.array([[a, c], [c, b]])
+    #         sigma_1 = chi2_scipy.ppf([0.68], 2)
+    #         sigma_2 = chi2_scipy.ppf([0.95], 2)
+    #         mean = [df["delta_beta"].values[0], df["delta_alpha"].values[0]]
+    #         rv = multivariate_normal(mean, cov)
+    #         norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
 
-    plt.savefig("chi2_maps.png")
+    #         sigma_1_exp = np.exp((-1/2) * sigma_1)
+    #         sigma_1_exp = sigma_1_exp[0] / norm
+    #         sigma_2_exp = np.exp((-1/2) * sigma_2)
+    #         sigma_2_exp = sigma_2_exp[0] / norm
+    #         y = np.linspace(0.9, 1.1, 100)
+    #         x = np.linspace(-0.1, 0.1, 100)
+    #         x, y = np.meshgrid(x, y)
+    #         pos = np.dstack((x, y))
+    #         #plt.contour(x, y, rv.pdf(pos), levels=[sigma_2_exp, sigma_1_exp], colors='black')
+
+    # plt.savefig("chi2_maps.png")
 
 
 class SN_dataset():
@@ -265,6 +274,7 @@ class sauron_runner():
         self.fit_args_dict['cc_are_sep'] = {}
         self.fit_args_dict['z_bins'] = {}
         self.fit_args_dict['z_centers'] = {}
+        self.fit_args_dict['n_datasets'] = {}
         self.results = {}
 
     def parse_global_fit_options(self):
@@ -335,7 +345,7 @@ class sauron_runner():
                 if survey_dict[file].get('PATH') is not None:
                     paths = survey_dict[file]['PATH']
                     paths = [paths] if type(paths) is not list else paths  # Make it a list for later
-                    paths = glob.glob(paths[0]) if len(paths) == 1 else paths # Check to see if they meant to glob
+                    paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
                 elif survey_dict[file].get('DIR') is not None:
                     paths = []
                     for dir in survey_dict[file]['DIR']:
@@ -356,19 +366,18 @@ class sauron_runner():
                                                                             sntype, data_name=survey+"_"+file,
                                                                             zcol=zcol)
                     n_datasets = len(paths)
+                    self.fit_args_dict["n_datasets"][survey] = n_datasets
                     print("Found", n_datasets, "data sets for", survey)
 
                 else:
                     dataframe = pd.DataFrame()
                     for path in paths:
-                        print("Using path:", path)
                         if ".FITS" in path:
                             dataframe = pd.concat([dataframe, pd.DataFrame(np.array(fits.open(path)[1].data))])
                         elif ".csv" in path:
                             dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#")])
                         else:
                             dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#", sep=r"\s+")])
-                        print(np.shape(dataframe))
                     datasets[survey+"_"+file] = SN_dataset(dataframe,
                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
 
@@ -444,8 +453,8 @@ class sauron_runner():
 
         self.datasets = datasets
         self.surveys = surveys
-        self.n_datasets = n_datasets
-        return datasets, surveys, n_datasets
+
+        return datasets, surveys
 
     def get_counts(self, survey):
         z_bins = self.fit_args_dict['z_bins'][survey]
@@ -481,8 +490,6 @@ class sauron_runner():
         eff_ij = num/dump_counts
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
-        print("Transfer Matrix eff_ij for", survey, ":")
-        print(eff_ij)
         return eff_ij
 
     def fit_rate(self, survey):
@@ -573,11 +580,13 @@ class sauron_runner():
 
         return result, np.sum(infodict['fvec']), Ei, cov_x, Ei_err
 
-    def save_results(self, survey):
-        for i, result in enumerate(self.results[survey]):
-            if i == 0:
-                output_df = result
-            else:
+    def save_results(self):
+        output_df = pd.DataFrame()
+        surveys = self.results.keys()
+        for survey in surveys:
+            results = self.results[survey]
+            results = [results] if not isinstance(results, list) else results
+            for i, result in enumerate(results):
                 output_df = pd.concat([output_df, result], ignore_index=True)
 
         output_path = self.args.output
