@@ -75,18 +75,22 @@ def main():
             # This can't stay actually, we can't used DATA_IA because we won't have it irl.
 
             z_bins = runner.fit_args_dict['z_bins'][survey]
+
             if runner.fit_args_dict["cc_are_sep"][survey]:
                 print("corecollapse_are_separate is True")
                 f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
                     np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
                 print("NUM:", np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) )
                 print("DENOM:", np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins)))
+                print("DUMP SIZE:", np.sum(datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)))
+
             else:
                 print("corecollapse_are_separate is False")
                 f_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
                     np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
                 print("NUM:", np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) )
                 print("DENOM:", np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)))
+                print("DUMP SIZE:", np.sum(datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)))
 
             runner.fit_args_dict['f_norm'][survey] = f_norm
 
@@ -119,8 +123,6 @@ def main():
 
     # Fit all surveys together
     runner.fit_rate(surveys)
-
-    plt.close()
 
     print("RESULTS")
     print(runner.results)
@@ -314,10 +316,12 @@ class sauron_runner():
         # Unpack dataframes into SN_dataset objects
         for survey in surveys:
             survey_dict = files_input[survey]
+            fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
+            self.parse_survey_fit_options(fit_args_dict, survey)
             for i, file in enumerate(list(survey_dict.keys())):
 
-                fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
-                self.parse_survey_fit_options(fit_args_dict, survey)
+                if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
+                    continue  # Skip non-data files
 
                 print(f"Loading {file} for {survey}...")
                 sntype = "IA" if "IA" in file else "CC"
@@ -331,6 +335,7 @@ class sauron_runner():
                 if survey_dict[file].get('PATH') is not None:
                     paths = survey_dict[file]['PATH']
                     paths = [paths] if type(paths) is not list else paths  # Make it a list for later
+                    paths = glob.glob(paths[0]) if len(paths) == 1 else paths # Check to see if they meant to glob
                 elif survey_dict[file].get('DIR') is not None:
                     paths = []
                     for dir in survey_dict[file]['DIR']:
@@ -354,14 +359,16 @@ class sauron_runner():
                     print("Found", n_datasets, "data sets for", survey)
 
                 else:
-                    path = survey_dict[file]['PATH']
-                    if ".FITS" in path:
-                        dataframe = fits.open(path)[1].data
-                        dataframe = pd.DataFrame(np.array(dataframe))
-                    elif ".csv" in path:
-                        dataframe = pd.read_csv(path, comment="#")
-                    else:
-                        dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
+                    dataframe = pd.DataFrame()
+                    for path in paths:
+                        print("Using path:", path)
+                        if ".FITS" in path:
+                            dataframe = pd.concat([dataframe, pd.DataFrame(np.array(fits.open(path)[1].data))])
+                        elif ".csv" in path:
+                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#")])
+                        else:
+                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#", sep=r"\s+")])
+                        print(np.shape(dataframe))
                     datasets[survey+"_"+file] = SN_dataset(dataframe,
                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
 
@@ -474,6 +481,8 @@ class sauron_runner():
         eff_ij = num/dump_counts
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
+        print("Transfer Matrix eff_ij for", survey, ":")
+        print(eff_ij)
         return eff_ij
 
     def fit_rate(self, survey):
@@ -542,6 +551,11 @@ class sauron_runner():
 
         fJ = result[0] * (1 + z_centers)**result[1]
         Ei = np.sum(N_gen * eff_ij * f_norms * fJ, axis=0)
+
+        print("Predicted Counts Ei:", Ei)
+        fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
+        x0_counts = np.sum(N_gen * eff_ij * f_norms * fJ_0, axis=0)
+        print("Counts with x0:", x0_counts)
 
         # Estimate errors on Ei
         alpha_draws = np.random.normal(result[0], np.sqrt(cov_x[0, 0]), size=1000)
