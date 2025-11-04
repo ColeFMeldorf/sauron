@@ -91,7 +91,7 @@ def test_calc_cov_term():
     args.cheat_cc = False
     runner = sauron_runner(args)
     runner.corecollapse_are_separate = True
-    datasets, surveys, n_datasets = runner.unpack_dataframes()
+    datasets, surveys = runner.unpack_dataframes()
     survey = "DES"
     runner.z_bins = np.arange(0, 1.4, 0.1)
     cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
@@ -112,7 +112,7 @@ def test_chi():
     args.cheat_cc = False
     runner = sauron_runner(args)
     runner.corecollapse_are_separate = True
-    datasets, surveys, n_datasets = runner.unpack_dataframes()
+    datasets, surveys = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
     survey = "DES"
     index = 1
