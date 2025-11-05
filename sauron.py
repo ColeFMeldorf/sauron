@@ -30,6 +30,7 @@ def main():
     parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
                         " Data_All.")
     parser.add_argument("-c", "--covariance", action="store_true", help="Calculate covariance matrix terms.")
+    parser.add_argument("-p", "--plot", action="store_true", help="Generate diagnostic plots.", default=False)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -41,6 +42,7 @@ def main():
         print(f"Processing survey: {survey} ========================")
         runner.get_counts(survey)
         runner.results[survey] = []
+        runner.final_counts[survey] = {}
         runner.calculate_transfer_matrix(survey)
         PROB_THRESH = 0.13
 
@@ -98,8 +100,9 @@ def main():
 
             result, chi, Ei, cov, Ei_err = runner.fit_rate(survey)
 
-            runner.predicted_counts = Ei
-            runner.predicted_counts_err = Ei_err
+            runner.final_counts[survey]["predicted_counts"] = Ei
+            runner.final_counts[survey]["observed_counts"] = n_data
+            runner.final_counts[survey]["predicted_counts_err"] = Ei_err
             runner.n_data = n_data
             z_bins = runner.fit_args_dict['z_bins'][survey]
 
@@ -118,9 +121,6 @@ def main():
                 "cov_alpha_beta": cov[0, 1],
                 "survey": survey_name
                 }, index=np.array([0])))
-            print("Runner results now:", runner.results[survey])
-
-        runner.summary_plot(survey)
 
     # Fit all surveys together
 
@@ -137,6 +137,8 @@ def main():
                 }, index=np.array([0]))
         surveys.extend(["combined"])
 
+    if args.plot:
+        runner.summary_plot()
     runner.save_results()
 
     # for i, s in enumerate(surveys):
@@ -276,6 +278,7 @@ class sauron_runner():
         self.fit_args_dict['z_centers'] = {}
         self.fit_args_dict['n_datasets'] = {}
         self.results = {}
+        self.final_counts = {}
 
     def parse_global_fit_options(self):
         files_input = yaml.safe_load(open(self.args.config, 'r'))
@@ -414,7 +417,6 @@ class sauron_runner():
                         print("Skipping combining IA and CC files because --cheat_cc was set.")
                     elif datasets.get(f"{survey}_DUMP_CC") is None:
                         print(f"WARNING: Couldn't find {survey}_DUMP_CC to combine with IA file.")
-
 
 
             # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
@@ -640,8 +642,8 @@ class sauron_runner():
             z_centers = np.tile(z_centers, int(num_surveys))
             print("updated z_centers for chi2 map:", z_centers)
 
-        for i, a in enumerate(np.linspace(0.9, 1.1, 50)):
-            for j, b in enumerate(np.linspace(-0.1, 0.1, 50)):
+        for i, a in enumerate(np.linspace(0.7, 1.3, 50)):
+            for j, b in enumerate(np.linspace(-0.3, 0.3, 50)):
 
                 values = (a, b)
 
@@ -654,29 +656,82 @@ class sauron_runner():
                 chi2_map[i][j] = np.sum(chi2_result**2)
         return chi2_map
 
-    def summary_plot(self, survey):
+    def summary_plot(self):
+        print("Results:", self.results)
+        surveys = self.results.keys()
+        print("Generating summary plots for surveys:", list(surveys))
+        num_plots = len(surveys) + 1
+        sides = int(np.ceil(num_plots/2))
+        fig, ax = plt.subplots(2, sides, figsize=(12, 6))
+        ax = ax.flatten()
+        for i, survey in enumerate(surveys):
+            print("Generating summary plot for", survey)
+            s = survey
+            if survey != "combined":
+                ax1 = ax[0]
+                z_centers = np.array(self.fit_args_dict['z_centers'][survey])
+                print("Sizes")
+                print("z_centers:", z_centers.shape
+                      , "predicted_counts:", self.final_counts[survey]["predicted_counts"].shape
+                      , "observed_counts:", self.final_counts[survey]["observed_counts"].shape)
 
-        plt.subplot(1, 2, 1)
-        z_bins = self.fit_args_dict['z_bins'][survey]
-        z_centers = (z_bins[1:] + z_bins[:-1]) / 2
-        plt.errorbar(z_centers, self.predicted_counts, yerr=self.predicted_counts_err,  fmt='o',
-                     label=f" {survey} Sauron Prediction ")
-        plt.errorbar(z_centers, self.n_data, yerr=np.sqrt(self.n_data), fmt='o', label=f" {survey} Data")
-        plt.legend()
-        plt.xlabel("Redshift")
-        plt.ylabel("Counts")
-        plt.ylim(np.min(self.predicted_counts) * 0.8, np.max(self.n_data) * 1.2)
+                ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"], yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
+                            label=f" {survey} Sauron Prediction ")
+                ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"], yerr=np.sqrt(self.final_counts[survey]["observed_counts"]), fmt='o', label=f" {survey} Data")
+                ax1.legend()
+                ax1.set_xlabel("Redshift")
+                ax1.set_ylabel("Counts")
+                ax1.set_yscale("log")
 
-        plt.subplot(1, 2, 2)
-        if survey == "ROMAN":
-            plt.imshow(self.fit_args_dict['eff_ij'][survey], extent=(0, np.max(z_bins), 0, np.max(z_bins)),
-                       origin='lower', aspect='auto')
-            plt.colorbar()
-            plt.title("Efficiency Matrix")
-            plt.xlabel("Observed Redshift Bin")
-            plt.ylabel("True Redshift Bin")
+            ax2 = ax[i+1]
+            chi2_map = self.generate_chi2_map(s)
+            normalized_map = chi2_map - np.min(chi2_map) + 0.0001
+            # plt.subplot(1, len(surveys), i + 1)
+            # plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
+            ax2.axvline(0, color='black', linestyle='--')
+            ax2.axhline(1, color='black', linestyle='--')
+            from scipy.stats import multivariate_normal
+            from scipy.stats import chi2 as chi2_scipy
 
-        plt.savefig("summary_plot.png")
+            if isinstance(self.results[s], list):
+                df = self.results[s][0]
+            else:
+                df = self.results[s]
+
+            print("df:", df)
+
+            a = np.mean(df["alpha_error"]**2)
+            b = np.mean(df["beta_error"]**2)
+            c = np.mean(df["cov_alpha_beta"])
+            cov = np.array([[a, c], [c, b]])
+            sigma_1 = chi2_scipy.ppf([0.68], 2)
+            sigma_2 = chi2_scipy.ppf([0.95], 2)
+            mean = [df["delta_beta"].values[0], df["delta_alpha"].values[0]]
+            rv = multivariate_normal(mean, cov)
+            norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
+
+            sigma_1_exp = np.exp((-1/2) * sigma_1)
+            sigma_1_exp = sigma_1_exp[0] / norm
+            sigma_2_exp = np.exp((-1/2) * sigma_2)
+            sigma_2_exp = sigma_2_exp[0] / norm
+            y = np.linspace(0.7, 1.3, 50)
+            x = np.linspace(-0.3, 0.3, 50)
+            x, y = np.meshgrid(x, y)
+            pos = np.dstack((x, y))
+            CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors = "C" + str(i+1))
+            # label the contours by survey
+            fmt = {}
+            strs = [f'1 sigma {survey}', f'2 sigma {survey}']
+            for l, s in zip(CS.levels, strs):
+                fmt[l] = s
+
+            # pick a random colormap
+            m = plt.cm.get_cmap('viridis')
+            m = m.reversed()
+
+            ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
+            ax2.legend()
+        fig.savefig("summary_plot.png")
 
 
 def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
