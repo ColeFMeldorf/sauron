@@ -30,6 +30,7 @@ def main():
     parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
                         " Data_All.")
     parser.add_argument("-c", "--covariance", action="store_true", help="Calculate covariance matrix terms.")
+    parser.add_argument("-p", "--plot", action="store_true", help="Generate diagnostic plots.", default=False)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -136,7 +137,8 @@ def main():
                 }, index=np.array([0]))
         surveys.extend(["combined"])
 
-    runner.summary_plot()
+    if args.plot:
+        runner.summary_plot()
     runner.save_results()
 
     # for i, s in enumerate(surveys):
