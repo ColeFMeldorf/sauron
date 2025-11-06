@@ -105,6 +105,43 @@ def power_law(z, x):
     return alpha * (1 + z)**beta
 
 
+def test_calc_effij():
+    args = SimpleNamespace()
+    config_path = pathlib.Path(__file__).parent / "test_config.yml"
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    runner.corecollapse_are_separate = True
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+    eff_ij = runner.calculate_transfer_matrix(survey, sim_z_col="SIM_ZCMB")
+    # Check that it is purely diagonal for this test case
+    print("EFF IJ: ", eff_ij)
+    for i in range(eff_ij.shape[0]):
+        for j in range(eff_ij.shape[1]):
+            if i != j:
+                np.testing.assert_allclose(eff_ij[i, j], 0.0, atol=1e-7)
+
+    eff_ij = runner.calculate_transfer_matrix(survey)
+    # Check that it is purely diagonal for this test case
+    print("EFF IJ: ", eff_ij)
+    for i in range(eff_ij.shape[0]):
+        for j in range(eff_ij.shape[1]):
+            if i != j:
+                np.testing.assert_allclose(eff_ij[i, j], 0.0, atol=1e-2)
+
+    config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
+    args.config = config_path
+    runner = sauron_runner(args)
+    runner.corecollapse_are_separate = True
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+    eff_ij = runner.calculate_transfer_matrix(survey)
+    regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
+    np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
+
+
+
 def test_chi():
     args = SimpleNamespace()
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"

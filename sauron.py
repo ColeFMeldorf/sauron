@@ -462,16 +462,18 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
         self.fit_args_dict['N_gen'][survey] = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
 
-    def calculate_transfer_matrix(self, survey):
+    def calculate_transfer_matrix(self, survey, sim_z_col=None):
         dump = self.datasets[f"{survey}_DUMP_IA"]
         sim = self.datasets[f"{survey}_SIM_IA"]
         z_bins = self.fit_args_dict['z_bins'][survey]
         eff_ij = np.zeros((len(z_bins) - 1, len(z_bins) - 1))
 
-        print("Using true col:", sim.true_z_col, "and recovered col:", sim.z_col)
         simulated_events = sim.df
-        sim_z_col = sim.z_col
         true_z_col = sim.true_z_col
+        if sim_z_col is not None:
+            print("WARNING: MANUALLY OVERRIDING sim_z_col to", sim_z_col)
+        sim_z_col = sim.z_col if sim_z_col is None else sim_z_col
+        print("Using true col:", true_z_col, "and recovered col:", sim_z_col)
 
         # plt.errorbar(simulated_events[true_z_col], simulated_events[sim_z_col],
         #            yerr=sim.df['REDSHIFT_FINAL_ERR'], fmt='.', alpha=0.1)
@@ -479,6 +481,18 @@ class sauron_runner():
 
         z_bins = self.fit_args_dict['z_bins'][survey]
         dump_counts = dump.z_counts(z_bins)
+
+        plt.scatter(simulated_events[true_z_col], simulated_events[sim_z_col], alpha=0.1)
+        plt.xlabel("True Redshift")
+        plt.ylabel("Simulated (Measured) Redshift")
+        plt.xlim(z_bins[0], z_bins[-1])
+        plt.ylim(z_bins[0], z_bins[-1])
+        plt.plot(z_bins, z_bins, color='red', linestyle='--')
+        plt.title(f"Redshift Transfer Matrix Scatter Plot for {survey}")
+        plt.savefig(f"transfer_matrix_scatter_{survey}.png")
+
+        print("Maximum difference between true and sim redshift:",
+              np.max(np.abs(simulated_events[true_z_col] - simulated_events[sim_z_col])))
 
         num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
                                    bins=[z_bins, z_bins])
