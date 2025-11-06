@@ -1,8 +1,7 @@
 
 # Sauron
-from sauron import (calculate_covariance_matrix_term,
-                    chi2,
-                    sauron_runner)
+from funcs import chi2, calculate_covariance_matrix_term
+from runner import sauron_runner
 
 # Standard Library
 import os
