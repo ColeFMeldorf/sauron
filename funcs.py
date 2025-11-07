@@ -50,11 +50,9 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
 
 def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bins, cheat):
     if cheat:
-        IA_frac = np.ones(len(z_bins)-1)
         datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
         n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
     else:
-        C_ij = np.zeros((len(z_bins)-1, len(z_bins)-1))
         sim_IA = datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH)
 
         sim_CC_df_no_cut = datasets[f"{survey}_SIM_CC"].df
@@ -89,12 +87,6 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
         N_CC_sim = np.sum(N_CC_sim)
         n_CC_sim = np.sum(sim_CC)
 
-        N_Ia_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
-        N_CC_data = datasets[f"{survey}_DATA_CC_{index}"].z_counts(z_bins)
-
-        n_Ia_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-        n_CC_data = datasets[f"{survey}_DATA_CC_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-
         N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
         n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
         R = n_data / N_data
@@ -108,8 +100,6 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
         IA_frac = np.nan_to_num(1 - CC_frac)
         print("Calculated a Ia frac of:", IA_frac)
 
-        n_true_Ia = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-        n_true_CC = datasets[f"{survey}_DATA_CC_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
         n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
 
     return n_data

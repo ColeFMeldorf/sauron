@@ -36,9 +36,9 @@ class sauron_runner():
         self.results = {}
         self.final_counts = {}
 
-
     def parse_global_fit_options(self):
-        files_input = yaml.safe_load(open(self.args.config, 'r'))
+        with open(self.args.config, 'r') as f:
+            files_input = yaml.safe_load(f)
         fit_options = files_input.get("FIT_OPTIONS", {})
         if fit_options.get("RATE_FUNCTION") == "power_law":
             self.rate_function = power_law
@@ -225,7 +225,6 @@ class sauron_runner():
         dump = self.datasets[f"{survey}_DUMP_IA"]
         sim = self.datasets[f"{survey}_SIM_IA"]
         z_bins = self.fit_args_dict['z_bins'][survey]
-        eff_ij = np.zeros((len(z_bins) - 1, len(z_bins) - 1))
 
         print("Using true col:", sim.true_z_col, "and recovered col:", sim.z_col)
         simulated_events = sim.df
@@ -270,7 +269,6 @@ class sauron_runner():
             f_norm = self.fit_args_dict['f_norm'][s]
             f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
 
-        f_norm = None
         z_centers = np.array(z_centers)
         f_norms = np.array(f_norms)
         # This needs to be done survey by survey because f_norm is per survey
@@ -334,7 +332,7 @@ class sauron_runner():
         f_norms = np.atleast_1d(f_norms)
         f_norms = f_norms[:, np.newaxis]  # for broadcasting
 
-        # I am not confident this
+        # I am not confident this is correct. Check later.
 
         Ei_draws = np.sum(N_gen * eff_ij * f_norms * fJ_draws, axis=0)
         Ei_err = np.std(Ei_draws, axis=1)
@@ -390,7 +388,6 @@ class sauron_runner():
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
         else:
             print("SKIPPING CC CONTAMINATION STEP. USING DATA_IA AS DATA_ALL.")
-            IA_frac = np.ones(len(z_bins)-1)
             datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
@@ -476,8 +473,6 @@ class sauron_runner():
             cov = np.array([[a, c], [c, b]])
             sigma_1 = chi2_scipy.ppf([0.68], 2)
             sigma_2 = chi2_scipy.ppf([0.95], 2)
-            mean = [df["delta_beta"].values[0], df["delta_alpha"].values[0]]
-            rv = multivariate_normal(mean, cov)
             norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
 
             sigma_1_exp = np.exp((-1/2) * sigma_1)
@@ -487,20 +482,15 @@ class sauron_runner():
             y = np.linspace(0.7, 1.3, 50)
             x = np.linspace(-0.3, 0.3, 50)
             x, y = np.meshgrid(x, y)
-            pos = np.dstack((x, y))
-            CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors = "C" + str(i+1))
+            CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors="C" + str(i+1))
             # label the contours by survey
             fmt = {}
             strs = [f'1 sigma {survey}', f'2 sigma {survey}']
             for l, s in zip(CS.levels, strs):
                 fmt[l] = s
-
-            # pick a random colormap
-            m = plt.cm.get_cmap('viridis')
-            m = m.reversed()
-
             ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
             ax2.legend()
+
         fig.savefig("summary_plot.png")
 
     def calculate_covariance(self, PROB_THRESH=0.13):
@@ -538,11 +528,11 @@ class sauron_runner():
         self.fit_args_dict['f_norm'][survey] = f_norm
         print(f"Calculated f_norm to be {f_norm}")
 
-    def add_results(self, survey, index):
+    def add_results(self, survey, index=None):
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # This needs to be updated for more parameters later
         if n_datasets > 1:
-            survey_name = survey + f"_dataset_{index+1}"
+            survey_name = survey + f"_dataset_{index}"
         else:
             survey_name = survey
 
