@@ -28,7 +28,7 @@ def test_regression_specz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath}")
+    os.system(f"python {sauron_path} {config_path} -o {outpath} --no-sys_cov")
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regnopz_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -44,7 +44,7 @@ def test_regression_pz_5datasets():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath}")
+    os.system(f"python {sauron_path} {config_path} -o {outpath} --no-sys_cov")
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -60,7 +60,7 @@ def test_perfect_recovery():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_sim.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath} --cheat_cc")
+    os.system(f"python {sauron_path} {config_path} -o {outpath} --cheat_cc --no-sys_cov")
     results = pd.read_csv(outpath)
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -76,7 +76,7 @@ def test_perfect_recovery_pz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
-    print(os.system(f"python {sauron_path} {config_path} --cheat_cc -o {outpath}"))
+    print(os.system(f"python {sauron_path} {config_path} --cheat_cc -o {outpath} --no-sys_cov"))
     results = pd.read_csv(outpath)
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -173,7 +173,7 @@ def test_regression_pz_5datasets_covariance():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath} -c")  # Added -c flag here
+    os.system(f"python {sauron_path} {config_path} -o {outpath}")
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -194,7 +194,7 @@ def test_coverage_no_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov']  # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -239,7 +239,7 @@ def test_coverage_with_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '-c']  # Added -c flag here
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]  # Added -c flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(

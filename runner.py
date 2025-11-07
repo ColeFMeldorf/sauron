@@ -218,6 +218,8 @@ class sauron_runner():
     def get_counts(self, survey):
         z_bins = self.fit_args_dict['z_bins'][survey]
         self.fit_args_dict['N_gen'][survey] = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
+        self.results[survey] = []
+        self.final_counts[survey] = {}
 
     def calculate_transfer_matrix(self, survey):
         dump = self.datasets[f"{survey}_DUMP_IA"]
@@ -337,6 +339,16 @@ class sauron_runner():
         Ei_draws = np.sum(N_gen * eff_ij * f_norms * fJ_draws, axis=0)
         Ei_err = np.std(Ei_draws, axis=1)
 
+        self.final_counts[survey]["predicted_counts"] = Ei
+        self.final_counts[survey]["observed_counts"] = n_data
+        self.final_counts[survey]["predicted_counts_err"] = Ei_err
+        self.n_data = n_data
+
+        self.final_counts[survey]["result"] = result
+        self.final_counts[survey]["covariance"] = cov_x
+        self.final_counts[survey]["chi"] = np.sum(infodict['fvec'])
+        # Should there not be an index here?
+
         return result, np.sum(infodict['fvec']), Ei, cov_x, Ei_err
 
     def save_results(self):
@@ -382,6 +394,7 @@ class sauron_runner():
             datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
+        self.fit_args_dict["n_data"][survey] = n_data
         return n_data
 
     def generate_chi2_map(self, survey):
@@ -492,7 +505,9 @@ class sauron_runner():
 
     def calculate_covariance(self, PROB_THRESH=0.13):
         for survey in self.surveys:
-            if self.args.covariance:
+            do_sys_cov = getattr(self.args, "sys_cov", None)
+            do_sys_cov = False if do_sys_cov is None else do_sys_cov
+            if do_sys_cov:
                 cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
@@ -510,3 +525,38 @@ class sauron_runner():
                 cov_sys = None
             self.fit_args_dict['cov_sys'][survey] = cov_sys
 
+    def calculate_f_norm(self, survey, index):
+        z_bins = self.fit_args_dict['z_bins'][survey]
+        if self.fit_args_dict["cc_are_sep"][survey]:
+            f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
+                    np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+
+        else:
+            f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
+                np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
+
+        self.fit_args_dict['f_norm'][survey] = f_norm
+        print(f"Calculated f_norm to be {f_norm}")
+
+    def add_results(self, survey, index):
+        n_datasets = self.fit_args_dict["n_datasets"][survey]
+        # This needs to be updated for more parameters later
+        if n_datasets > 1:
+            survey_name = survey + f"_dataset_{index+1}"
+        else:
+            survey_name = survey
+
+        result = self.final_counts[survey]["result"]
+        cov = self.final_counts[survey]["covariance"]
+        chi = self.final_counts[survey]["chi"]
+        z_bins = self.fit_args_dict['z_bins'][survey]
+
+        self.results[survey].append(pd.DataFrame({
+            "delta_alpha": result[0],
+            "delta_beta": result[1],
+            "reduced_chi_squared": chi/(len(z_bins)-2),
+            "alpha_error": np.sqrt(cov[0, 0]),
+            "beta_error": np.sqrt(cov[1, 1]),
+            "cov_alpha_beta": cov[0, 1],
+            "survey": survey_name
+            }, index=np.array([0])))
