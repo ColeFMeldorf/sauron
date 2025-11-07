@@ -89,7 +89,6 @@ def test_calc_cov_term():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
     datasets, surveys = runner.unpack_dataframes()
     survey = "DES"
     runner.z_bins = np.arange(0, 1.4, 0.1)
@@ -110,8 +109,7 @@ def test_calc_effij():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
-    datasets, surveys = runner.unpack_dataframes()
+    runner.unpack_dataframes()
     survey = "DES"
     # eff_ij = runner.calculate_transfer_matrix(survey, sim_z_col="SIM_ZCMB")
     # # Check that it is purely diagonal for this test case
@@ -132,13 +130,11 @@ def test_calc_effij():
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
     args.config = config_path
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
-    datasets, surveys = runner.unpack_dataframes()
+    runner.unpack_dataframes()
     survey = "DES"
     eff_ij = runner.calculate_transfer_matrix(survey)
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
-
 
 
 def test_chi():
@@ -147,7 +143,6 @@ def test_chi():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
     datasets, surveys = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
     survey = "DES"
