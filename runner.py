@@ -509,7 +509,7 @@ class sauron_runner():
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
                                                                  1, survey, self.datasets,
                                                                  self.fit_args_dict["z_bins"][survey], False)
-                # Hard coding index to one neeeds to change. I don't think this fcn should need index at all. TODO
+                # Hard coding index to one needs to change. TODO: Refactor to avoid hardcoded index value (currently set to 1). This function should not need index at all.
                 cov_sys = cov_thresh + cov_rate_norm
             else:
                 cov_sys = None

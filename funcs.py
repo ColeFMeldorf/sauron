@@ -58,15 +58,16 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
         sim_CC_df_no_cut = datasets[f"{survey}_SIM_CC"].df
         sim_CC_df = sim_CC_df_no_cut[datasets[f"{survey}_SIM_CC"].prob_scone() > PROB_THRESH]
         types = sim_CC_df_no_cut.TYPE.unique()
-        assert(rescale_vals.shape[0] == len(types)), "I got the wrong number"
-        " of rescale values compared to contamination types" \
+        assert (rescale_vals.shape[0] == len(types)), (
+            f"I got the wrong number of rescale values compared to contamination types "
             f"({rescale_vals.shape[0]} vs {len(types)})"
+        )
 
 
         N_CC_sim = np.zeros((len(z_bins)-1, len(types)))
         sim_CC = np.zeros((len(z_bins)-1, len(types)))
 
-        for i,t in enumerate(types):
+        for i, t in enumerate(types):
             rescale_factor = rescale_vals[i]
             raw_counts = binstat(sim_CC_df[sim_CC_df.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
                                  sim_CC_df[sim_CC_df.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
@@ -80,7 +81,7 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
             raw_counts = raw_counts * rescale_factor
             N_CC_sim[:,i] = raw_counts
 
-        sim_CC = np.sum(sim_CC, axis = 1)
+        sim_CC = np.sum(sim_CC, axis=1)
 
 
         IA_frac = np.nan_to_num(sim_IA / (sim_IA + sim_CC))
