@@ -38,7 +38,8 @@ class sauron_runner():
 
 
     def parse_global_fit_options(self):
-        files_input = yaml.safe_load(open(self.args.config, 'r'))
+        with open(self.args.config, 'r') as f:
+            files_input = yaml.safe_load(f)
         fit_options = files_input.get("FIT_OPTIONS", {})
         if fit_options.get("RATE_FUNCTION") == "power_law":
             self.rate_function = power_law
@@ -519,7 +520,7 @@ class sauron_runner():
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
                                                                  1, survey, self.datasets,
                                                                  self.fit_args_dict["z_bins"][survey], False)
-                # Hard coding index to one neeeds to change. I don't think this fcn should need index at all. TODO
+                # Hard coding index to one needs to change. TODO: Refactor to avoid hardcoded index value (currently set to 1). This function should not need index at all.
                 cov_sys = cov_thresh + cov_rate_norm
             else:
                 cov_sys = None
