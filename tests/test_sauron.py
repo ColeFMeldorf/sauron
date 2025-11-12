@@ -303,8 +303,8 @@ def test_coverage_with_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    logging.info("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
     logging.info("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
+    logging.info("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.05)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.05)  # Note the stricter
