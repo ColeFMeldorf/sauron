@@ -1,6 +1,7 @@
 # Standard Library
 import pandas as pd
 from scipy.stats import binned_statistic as binstat
+import logging
 
 # Astronomy
 from astropy.cosmology import LambdaCDM
@@ -14,7 +15,7 @@ class SN_dataset():
         self.sntype = sntype
         self._true_z_col = true_z_col
         if self.sntype not in ["IA", "CC", "all"]:
-            print(f"unrecognized type: {self.sntype}")
+            logging.warning(f"unrecognized type: {self.sntype}")
 
         if zcol is not None:
             possible_z_cols = [zcol]
@@ -32,7 +33,7 @@ class SN_dataset():
                     raise ValueError(f"Multiple valid zcols found in {data_name}. I found: {self.z_col} and {i}")
         if self.z_col is None:
             for c in self.df.columns:
-                print("Available column:", c)
+                logging.debug(f"Available column: {c}")
             if z_col_specified:
                 raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
             else:
@@ -50,7 +51,6 @@ class SN_dataset():
             raise ValueError(f"Multiple Valid scone columns found in {data_name}! Which do I use? I found: {scone_col}")
         else:
             self.scone_col = scone_col[0]
-            print(f"Using scone col {scone_col}")
 
     @property
     def true_z_col(self):

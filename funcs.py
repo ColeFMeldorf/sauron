@@ -3,6 +3,7 @@
 # Standard Library
 
 import numpy as np
+import logging
 from scipy.stats import binned_statistic as binstat
 
 
@@ -28,7 +29,7 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # Calculate covariance matrix term for a given systematic function and its parameters
     # sys_func should be a function that takes sys_params and returns expected counts
     # args are additional arguments needed for sys_func.
-    print("Calculating Covariance Matrix Term...")
+    logging.info("Calculating Covariance Matrix Term...")
     expected_counts = []
     for i, param in enumerate(sys_params):
         expected_counts.append(sys_func(param, *args))
@@ -99,7 +100,6 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
 
         CC_frac = (1 - IA_frac) * S
         IA_frac = np.nan_to_num(1 - CC_frac)
-        print("Calculated a Ia frac of:", IA_frac)
 
         n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
 
