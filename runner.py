@@ -60,7 +60,7 @@ class sauron_runner():
 
     def parse_survey_fit_options(self, args_dict, survey):
         self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
-        logging.debug(("Setting CC_ARE_SEPARATE for", survey, "to", args_dict.get("CC_ARE_SEPARATE", None)))
+        logging.debug(f"Setting CC_ARE_SEPARATE for {survey} to {args_dict.get('CC_ARE_SEPARATE', None)}")
         self.fit_args_dict["z_bins"][survey] = np.arange(0, 1.4, 0.1)
         self.z_bins = "YOU SHOULD NOT BE SEEING THIS"
         if "Z_BINS" in args_dict:
