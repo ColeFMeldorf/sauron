@@ -9,7 +9,6 @@ import pathlib
 from types import SimpleNamespace
 import subprocess
 from scipy.stats import chi2 as scipy_chi2
-import subprocess
 
 
 import numpy as np
