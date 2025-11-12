@@ -7,6 +7,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import leastsq
 from scipy.sparse import block_diag
+from scipy import stats
 
 
 # Astronomy
@@ -504,7 +505,7 @@ class sauron_runner():
                 rescale_vals = []
                 # Perhaps make a preset grid of these values to make it deterministic?
 
-                import scipy.stats as stats
+
                 xx = np.linspace(0.01, 0.99, 10)
                 X = stats.norm(loc=1, scale=0.2)
                 vals = X.ppf(xx)
