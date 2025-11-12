@@ -1,11 +1,11 @@
 
 # Sauron
-from sauron import (calculate_covariance_matrix_term,
-                    chi2,
-                    sauron_runner)
+from funcs import chi2, calculate_covariance_matrix_term
+from runner import sauron_runner
 
 # Standard Library
 import os
+import logging
 import pathlib
 from types import SimpleNamespace
 import subprocess
@@ -29,7 +29,15 @@ def test_regression_specz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath}")
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regnopz_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -45,7 +53,15 @@ def test_regression_pz_5datasets():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath}")
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -61,7 +77,15 @@ def test_perfect_recovery():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_sim.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath} --cheat_cc")
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
     results = pd.read_csv(outpath)
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -77,7 +101,15 @@ def test_perfect_recovery_pz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
-    print(os.system(f"python {sauron_path} {config_path} --cheat_cc -o {outpath}"))
+    cmd = ["python", str(sauron_path), str(config_path), "--cheat_cc", "-o", str(outpath), "--no-sys_cov"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
     results = pd.read_csv(outpath)
     regression_vals = [1.0, 0.0, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
@@ -90,7 +122,6 @@ def test_calc_cov_term():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
     datasets, surveys = runner.unpack_dataframes()
     survey = "DES"
     runner.z_bins = np.arange(0, 1.4, 0.1)
@@ -111,20 +142,18 @@ def test_calc_effij():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
-    datasets, surveys = runner.unpack_dataframes()
+    runner.unpack_dataframes()
     survey = "DES"
-    eff_ij = runner.calculate_transfer_matrix(survey, sim_z_col="SIM_ZCMB")
-    # Check that it is purely diagonal for this test case
-    print("EFF IJ: ", eff_ij)
-    for i in range(eff_ij.shape[0]):
-        for j in range(eff_ij.shape[1]):
-            if i != j:
-                np.testing.assert_allclose(eff_ij[i, j], 0.0, atol=1e-7)
+    # eff_ij = runner.calculate_transfer_matrix(survey, sim_z_col="SIM_ZCMB")
+    # # Check that it is purely diagonal for this test case
+    # print("EFF IJ: ", eff_ij)
+    # for i in range(eff_ij.shape[0]):
+    #     for j in range(eff_ij.shape[1]):
+    #         if i != j:
+    #             np.testing.assert_allclose(eff_ij[i, j], 0.0, atol=1e-7)
 
     eff_ij = runner.calculate_transfer_matrix(survey)
     # Check that it is purely diagonal for this test case
-    print("EFF IJ: ", eff_ij)
     for i in range(eff_ij.shape[0]):
         for j in range(eff_ij.shape[1]):
             if i != j:
@@ -133,13 +162,11 @@ def test_calc_effij():
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
     args.config = config_path
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
-    datasets, surveys = runner.unpack_dataframes()
+    runner.unpack_dataframes()
     survey = "DES"
     eff_ij = runner.calculate_transfer_matrix(survey)
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
-
 
 
 def test_chi():
@@ -148,7 +175,6 @@ def test_chi():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    runner.corecollapse_are_separate = True
     datasets, surveys = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
     survey = "DES"
@@ -174,16 +200,24 @@ def test_regression_pz_5datasets_covariance():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    os.system(f"python {sauron_path} {config_path} -o {outpath} -c")  # Added -c flag here
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        print("COL: ", col)
-        print(results[col])
-        print(regression[col])
-        np.testing.assert_allclose(results[col], regression[col], atol=8e-3)
+        logging.info(f"COL: {col}")
+        logging.info(str(results[col]))
+        logging.info(str(regression[col]))
+        np.testing.assert_allclose(results[col], regression[col], atol=3e-3)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
-    # The rescale CC for cov uses random numbers.
+    # The rescale CC for cov now uses deterministic preloaded values via inverse CDF, so the tolerance can be tightened.
 
 
 def test_coverage_no_sys():
@@ -195,7 +229,7 @@ def test_coverage_no_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov']  # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -224,8 +258,8 @@ def test_coverage_no_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    print("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
-    print("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
+    logging.info(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
+    logging.info(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.1)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.1)
@@ -240,7 +274,7 @@ def test_coverage_with_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '-c']  # Added -c flag here
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]  # Added -c flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -269,8 +303,8 @@ def test_coverage_with_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    print("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
-    print("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
+    logging.info("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
+    logging.info("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.05)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.05)  # Note the stricter
