@@ -4,8 +4,17 @@
 # Standard Library
 import argparse
 
+import logging
+
 # Sauron modules
 from runner import sauron_runner
+
+# Configure the basic logging setup
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 
 def main():
@@ -28,13 +37,13 @@ def main():
     runner.calculate_covariance(PROB_THRESH=PROB_THRESH)
 
     for survey in surveys:
-        print(f"Processing survey: {survey} ========================")
+        logging.info(f"Processing survey: {survey} ========================")
         runner.get_counts(survey)
         runner.calculate_transfer_matrix(survey)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]
         for i in range(n_datasets):
-            print(f"Working on survey {survey}, dataset {i+1} -------------------")
+            logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
             runner.calculate_CC_contamination(PROB_THRESH, index, survey)
             runner.calculate_f_norm(survey, index)

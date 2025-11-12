@@ -5,6 +5,7 @@ from runner import sauron_runner
 
 # Standard Library
 import os
+import logging
 import pathlib
 from types import SimpleNamespace
 import subprocess
@@ -29,7 +30,7 @@ def test_regression_specz():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -53,7 +54,7 @@ def test_regression_pz_5datasets():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -77,7 +78,7 @@ def test_perfect_recovery():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_sim.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -101,7 +102,7 @@ def test_perfect_recovery_pz():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
     cmd = ["python", str(sauron_path), str(config_path), "--cheat_cc", "-o", str(outpath), "--no-sys_cov"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -153,7 +154,6 @@ def test_calc_effij():
 
     eff_ij = runner.calculate_transfer_matrix(survey)
     # Check that it is purely diagonal for this test case
-    print("EFF IJ: ", eff_ij)
     for i in range(eff_ij.shape[0]):
         for j in range(eff_ij.shape[1]):
             if i != j:
@@ -201,7 +201,7 @@ def test_regression_pz_5datasets_covariance():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -212,9 +212,9 @@ def test_regression_pz_5datasets_covariance():
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        print("COL: ", col)
-        print(results[col])
-        print(regression[col])
+        logging.info("COL: ", col)
+        logging.info(results[col])
+        logging.info(regression[col])
         np.testing.assert_allclose(results[col], regression[col], atol=3e-3)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
     # The rescale CC for cov now uses deterministic preloaded values via inverse CDF, so the tolerance can be tightened.
@@ -230,7 +230,7 @@ def test_coverage_no_sys():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov']  # Added --no-sys_cov flag here
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -258,8 +258,8 @@ def test_coverage_no_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    print("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
-    print("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
+    logging.info("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
+    logging.info("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.1)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.1)
@@ -275,7 +275,7 @@ def test_coverage_with_sys():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]  # Added -c flag here
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -303,8 +303,8 @@ def test_coverage_with_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    print("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
-    print("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
+    logging.info("Below 2 sigma:", np.size(sub_two_sigma[0])/np.size(product_2))
+    logging.info("Below 1 sigma:", np.size(sub_one_sigma[0])/np.size(product_2))
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.05)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.05)  # Note the stricter
