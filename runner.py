@@ -76,7 +76,7 @@ class sauron_runner():
 
         else:
             logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
-        logging.debug(("Z BINS", self.fit_args_dict["z_bins"][survey]))
+        logging.debug(f"Z BINS {self.fit_args_dict['z_bins'][survey]}")
         self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] + self.fit_args_dict["z_bins"][survey][:-1]) / 2
 
     def unpack_dataframes(self):
