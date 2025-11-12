@@ -422,7 +422,7 @@ class sauron_runner():
         return chi2_map
 
     def summary_plot(self):
-        logging.info("Results:", self.results)
+        logging.info(f"Results: {self.results}")
         surveys = self.results.keys()
         logging.info("Generating summary plots for surveys:", list(surveys))
         num_plots = len(surveys) + 1
