@@ -217,7 +217,7 @@ def test_regression_pz_5datasets_covariance():
         print(regression[col])
         np.testing.assert_allclose(results[col], regression[col], atol=3e-3)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
-    # The rescale CC for cov uses random numbers.
+    # The rescale CC for cov now uses deterministic preloaded values via inverse CDF, so the tolerance can be tightened.
 
 
 def test_coverage_no_sys():

@@ -502,8 +502,8 @@ class sauron_runner():
                 cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
-                rescale_vals = []
-                # Perhaps make a preset grid of these values to make it deterministic?
+
+
 
 
                 xx = np.linspace(0.01, 0.99, 10)
@@ -515,8 +515,7 @@ class sauron_runner():
                 grid2 = grid[2].flatten()
                 rescale_vals = np.array([grid0, grid1, grid2]).T
 
-                # for i in range(100):
-                #     rescale_vals.append(np.random.normal(1, 0.2, size=3))
+
                 cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
                                                                  1, survey, self.datasets,
