@@ -503,8 +503,19 @@ class sauron_runner():
 
                 rescale_vals = []
                 # Perhaps make a preset grid of these values to make it deterministic?
-                for i in range(100):
-                    rescale_vals.append(np.random.normal(1, 0.2, size=3))
+
+                import scipy.stats as stats
+                xx = np.linspace(0.01, 0.99, 10)
+                X = stats.norm(loc=1, scale=0.2)
+                vals = X.ppf(xx)
+                grid = np.meshgrid(vals, vals, vals, indexing='ij')
+                grid0 = grid[0].flatten()
+                grid1 = grid[1].flatten()
+                grid2 = grid[2].flatten()
+                rescale_vals = np.array([grid0, grid1, grid2]).T
+
+                # for i in range(100):
+                #     rescale_vals.append(np.random.normal(1, 0.2, size=3))
                 cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
                                                                  1, survey, self.datasets,
