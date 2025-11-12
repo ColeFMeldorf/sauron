@@ -7,6 +7,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from scipy.optimize import leastsq
 from scipy.sparse import block_diag
+from scipy import stats
 
 
 # Astronomy
@@ -501,10 +502,20 @@ class sauron_runner():
                 cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
-                rescale_vals = []
-                # Perhaps make a preset grid of these values to make it deterministic?
-                for i in range(100):
-                    rescale_vals.append(np.random.normal(1, 0.2, size=3))
+
+
+
+
+                xx = np.linspace(0.01, 0.99, 10)
+                X = stats.norm(loc=1, scale=0.2)
+                vals = X.ppf(xx)
+                grid = np.meshgrid(vals, vals, vals, indexing='ij')
+                grid0 = grid[0].flatten()
+                grid1 = grid[1].flatten()
+                grid2 = grid[2].flatten()
+                rescale_vals = np.array([grid0, grid1, grid2]).T
+
+
                 cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
                                                                  1, survey, self.datasets,
