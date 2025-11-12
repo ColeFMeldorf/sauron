@@ -382,7 +382,7 @@ class sauron_runner():
 
             CC_frac = (1 - IA_frac) * S
             IA_frac = np.nan_to_num(1 - CC_frac)
-            #logging.debug(f"Calculated a Ia frac of: {IA_frac}")
+            logging.debug(f"Calculated a Ia frac of: {IA_frac}")
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
         else:
             logging.warning("SKIPPING CC CONTAMINATION STEP. USING DATA_IA AS DATA_ALL.")
