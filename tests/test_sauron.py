@@ -212,7 +212,7 @@ def test_regression_pz_5datasets_covariance():
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        logging.info("COL: ", col)
+        logging.info(f"COL: {col}")
         logging.info(results[col])
         logging.info(regression[col])
         np.testing.assert_allclose(results[col], regression[col], atol=3e-3)
