@@ -213,8 +213,8 @@ def test_regression_pz_5datasets_covariance():
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
         logging.info(f"COL: {col}")
-        logging.info(results[col])
-        logging.info(regression[col])
+        logging.info(str(results[col]))
+        logging.info(str(regression[col]))
         np.testing.assert_allclose(results[col], regression[col], atol=3e-3)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
     # The rescale CC for cov now uses deterministic preloaded values via inverse CDF, so the tolerance can be tightened.
