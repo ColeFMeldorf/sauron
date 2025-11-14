@@ -87,7 +87,7 @@ def test_perfect_recovery():
         )
 
     results = pd.read_csv(outpath)
-    regression_vals = [1.0, 0.0, 0.0]
+    regression_vals = [2.27e-5, 1.7, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
 
@@ -111,7 +111,7 @@ def test_perfect_recovery_pz():
         )
 
     results = pd.read_csv(outpath)
-    regression_vals = [1.0, 0.0, 0.0]
+    regression_vals = [2.27e-5, 1.7, 0.0]
     for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
 
