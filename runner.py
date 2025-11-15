@@ -71,9 +71,10 @@ class sauron_runner():
             logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess {self.x0}.")
 
     def parse_survey_fit_options(self, args_dict, survey):
+        logging.debug(f"options {args_dict} for survey {survey}")
         self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
         logging.debug(f"Setting CC_ARE_SEPARATE for {survey} to {args_dict.get('CC_ARE_SEPARATE', None)}")
-        self.fit_args_dict["z_bins"][survey] = np.arange(0.1, 0.3, 0.1)
+        self.fit_args_dict["z_bins"][survey] = np.arange(0.0, 1.4, 0.1)
         if "Z_BINS" in args_dict:
             if isinstance(args_dict["Z_BINS"], list):
                 self.fit_args_dict["z_bins"][survey] = np.array(args_dict["Z_BINS"])
@@ -268,12 +269,9 @@ class sauron_runner():
         #num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
                                    #bins=[z_bins, z_bins])
         import scipy
-        z_bins_padded = np.concatenate(([-1], z_bins, [100]))
         num = scipy.stats.binned_statistic_2d(simulated_events[true_z_col], simulated_events[sim_z_col],
-                                              None, statistic='count', bins=[z_bins_padded, z_bins_padded])[0]
+                                              None, statistic='count', bins=[z_bins, z_bins])[0]
 
-        logging.debug("num:")
-        logging.debug(num)
 
         if np.any(dump_counts == 0):
             logging.warning("Some redshift bins have zero simulated events! This may cause issues.")
@@ -351,26 +349,26 @@ class sauron_runner():
                                             rate_params=self.fit_args_dict["rate_params"][survey])
 
 
-        solid_angle = 0.0082 * u.sr  # DES area in steradians
-        time = [56535, 58178]
+        # solid_angle = 0.0082 * u.sr  # DES area in steradians
+        # time = [56535, 58178]
 
 
-        null_counts2 = calculate_null_counts(z_bins_list, z_centers, N_gen, cosmo=cosmo, time=time, solid_angle=solid_angle)
-        null_counts2 *= 50
-        logging.debug(f"f_norms: {self.fit_args_dict['f_norm'][s]}")
-        logging.debug(f"Null Counts (Method 2): {null_counts2}")
-        logging.debug(f"Difference between methods: {null_counts - null_counts2}")
-        logging.debug(f"Ratio between methods: {null_counts / null_counts2}")
-        self.x0 = (2.27e-5, 1.7)  # Hardcoded true rate from SIM, temporary XXX
-        self.x0 = (1,0)
+        # null_counts2 = calculate_null_counts(z_bins_list, z_centers, N_gen, cosmo=cosmo, time=time, solid_angle=solid_angle)
+        # null_counts2 *= 50
+        # logging.debug(f"f_norms: {self.fit_args_dict['f_norm'][s]}")
+        # logging.debug(f"Null Counts (Method 2): {null_counts2}")
+        # logging.debug(f"Difference between methods: {null_counts - null_counts2}")
+        # logging.debug(f"Ratio between methods: {null_counts / null_counts2}")
+        # self.x0 = (2.27e-5, 1.7)  # Hardcoded true rate from SIM, temporary XXX
+        # self.x0 = (1,0)
 
-        logging.debug("n_data:")
-        logging.debug(n_data)
+        # logging.debug("n_data:")
+        # logging.debug(n_data)
 
-        logging.debug("N_gen * eff_ij:")
-        logging.debug(np.sum(N_gen * eff_ij, axis = 0))
+        # logging.debug("N_gen * eff_ij:")
+        # logging.debug(np.sum(N_gen * eff_ij, axis = 0))
 
-        result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(N_gen, f_norms, z_centers, eff_ij,
+        result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
                                           n_data, self.rate_function, cov_sys),
                                           full_output=True)[:3]
         logging.debug(f"Least Squares Result: {result}")
@@ -385,7 +383,7 @@ class sauron_runner():
 
         logging.debug(f"Predicted Counts Ei: {Ei}")
         fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
-        x0_counts = np.sum(N_gen * eff_ij * f_norms * fJ_0, axis=0)
+        x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
         logging.debug(f"Counts with x0: {x0_counts}")
 
         # Estimate errors on Ei
