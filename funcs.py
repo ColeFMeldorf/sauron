@@ -5,6 +5,8 @@
 import numpy as np
 import logging
 from scipy.stats import binned_statistic as binstat
+from astropy.cosmology import LambdaCDM
+from astropy import units as u
 
 
 def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
@@ -118,3 +120,100 @@ def turnover_power_law(z, x):
                   alpha1 * (1 + z)**beta1,
                   alpha2 * (1 + z)**beta2)
     return fJ
+
+
+def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None, rate_params=None,
+                          time=None, solid_angle=None, cosmo=None):
+    """Calculate the number of expected counts for 1 SN / Mpc^3 / yr over the survey volume and time."""
+
+    #z_centers = 0.5 * (z_bins[1:] + z_bins[:-1])
+
+    # Method 1, stupid method, divide N_gen by true rate.
+    if all(v is not None for v in [N_gen, true_rate_function, rate_params]):
+        fJ = true_rate_function(z_centers, rate_params)
+        total_counts = N_gen / fJ
+        return total_counts
+
+    # Method 2, harder but more robust method, actually calculate directly from survey parameters.
+    logging.info("Calculating null counts via direct integration...")
+    logging.info(f"Using time: {time}, solid angle: {solid_angle}")
+    logging.info(f"N_gen: {N_gen}")
+    if all(v is not None for v in [time, solid_angle]):
+        total_counts = []
+        for i in range(len(z_centers)):
+            z_min = z_bins[i]
+            z_max = z_bins[i+1]
+            count_sum = SNcount_model(z_min, z_max, RATEPAR={}, genz_wgt=lambda z, par: 1,
+                                      HzFUN_INFO=None, SOLID_ANGLE=solid_angle, GENRANGE_PEAKMJD=time, cosmo=cosmo)
+            total_counts.append(count_sum.value)
+
+    return np.array(total_counts)
+
+
+
+def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRANGE_PEAKMJD, cosmo):
+    """
+    Python translation of the C function SNcount_model.
+    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT) based on the provided C code and documentation,
+    which was then modified by Cole, because Cole has not used C since middle school.
+     However, testing it against the SNANA it seems to give consistent results
+    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA. Since those are slightly stochastic, this is 
+    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue when we want to measure rates to
+    that precision. But for now, this should be sufficient for testing and development purposes.
+
+    Computes the expected number of SNe between redshifts zMIN and zMAX.
+
+    Parameters
+    ----------
+    zMIN, zMAX : float
+        Redshift integration bounds.
+
+    RATEPAR : object or dict
+        Parameters needed by genz_wgt(z, RATEPAR).
+
+    dVdz : callable
+        Function dVdz(z, HzFUN_INFO) returning comoving volume element per unit redshift.
+
+    genz_wgt : callable
+        Function genz_wgt(z, RATEPAR) giving rate * reweighting factor.
+
+    SOLID_ANGLE : float
+        Survey solid angle (same as INPUTS.SOLID_ANGLE in C).
+
+    GENRANGE_PEAKMJD : array-like of length 2
+        [MJD_min, MJD_max] — time window.
+
+    Returns
+    -------
+    float
+        Expected number of supernovae.
+    """
+
+    # number of integration bins
+    NBZ = int((zMAX - zMIN) * 1000.0)
+    if NBZ < 10:
+        NBZ = 10
+
+    dz = (zMAX - zMIN) / NBZ
+    SNsum = 0.0
+
+    # Integration loop (midpoint rule)
+    for iz in range(1, NBZ + 1):
+        ztmp = zMIN + dz * (iz - 0.5)
+
+        dVdz = cosmo.differential_comoving_volume(ztmp).to(u.Mpc**3 / u.sr).value
+
+        vtmp = dVdz
+        rtmp = genz_wgt(ztmp, RATEPAR)
+
+        tmp = rtmp * vtmp / (1.0 + ztmp)
+        SNsum += tmp
+
+    # Solid angle and time window
+    dOmega = SOLID_ANGLE
+    delMJD = GENRANGE_PEAKMJD[1] - GENRANGE_PEAKMJD[0]
+    Tyear = delMJD / 365.0
+
+    SNsum *= (dOmega * Tyear * dz)
+
+    return SNsum
