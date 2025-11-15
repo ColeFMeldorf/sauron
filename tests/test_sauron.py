@@ -44,8 +44,7 @@ def test_regression_specz():
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regnopz_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
-    for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        logger.info(f"COL: {col}")
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
 
 
@@ -96,7 +95,7 @@ def test_perfect_recovery():
 
     results = pd.read_csv(outpath)
     regression_vals = [2.27e-5, 1.7, 0.0]
-    for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
 
 
@@ -120,7 +119,7 @@ def test_perfect_recovery_pz():
 
     results = pd.read_csv(outpath)
     regression_vals = [2.27e-5, 1.7, 0.0]
-    for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
 
 
@@ -215,10 +214,7 @@ def test_regression_pz_5datasets_covariance():
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-3 level.
-    for i, col in enumerate(["delta_alpha", "delta_beta", "reduced_chi_squared"]):
-        logger.info(f"COL: {col}")
-        logger.info(str(results[col]))
-        logger.info(str(regression[col]))
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], atol=3e-4)
     # The tolerance here is much looser because the inclusion of systematics makes the results more stochastic.
     # The rescale CC for cov now uses deterministic preloaded values via inverse CDF, so the tolerance can be tightened.
@@ -233,7 +229,8 @@ def test_coverage_no_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov']  # Added --no-sys_cov flag here
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov']
+    # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -252,8 +249,8 @@ def test_coverage_no_sys():
 
     mean_cov = np.array([[a, c], [c, b]])
 
-    all_alpha = df["delta_alpha"] - 2.27e-5
-    all_beta = df["delta_beta"] - 1.7
+    all_alpha = df["alpha"] - 2.27e-5
+    all_beta = df["beta"] - 1.7
     inv_cov = np.linalg.inv(mean_cov)
     all_pos = np.vstack([all_alpha, all_beta])
     product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
@@ -262,16 +259,9 @@ def test_coverage_no_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    from matplotlib import pyplot as plt
-    plt.hist(product_2, bins=30)
-    plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
-    plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
-    plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_hist.png")
-
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
-    print(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
-    print(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
+
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.1)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.1)
 
@@ -304,8 +294,8 @@ def test_coverage_with_sys():
 
     mean_cov = np.array([[a, c], [c, b]])
 
-    all_alpha = df["delta_alpha"] - 2.27e-5
-    all_beta = df["delta_beta"] - 1.7
+    all_alpha = df["alpha"] - 2.27e-5
+    all_beta = df["beta"] - 1.7
     inv_cov = np.linalg.inv(mean_cov)
     all_pos = np.vstack([all_alpha, all_beta])
     product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
@@ -316,8 +306,6 @@ def test_coverage_with_sys():
 
     logger.info(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.info(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
-    print(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
-    print(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.05)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.05)  # Note the stricter

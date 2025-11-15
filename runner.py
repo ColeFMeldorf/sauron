@@ -14,7 +14,6 @@ from scipy import stats
 # Astronomy
 from astropy.cosmology import LambdaCDM
 from astropy.io import fits
-from astropy import units as u
 
 # Sauron modules
 from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_matrix_term, rescale_CC_for_cov,
@@ -22,20 +21,21 @@ from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_mat
 from SN_dataset import SN_dataset
 
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
+# Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
+# This change was made to match SNANA. If you require the previous values for consistency, revert to Om0=0.3, Ode0=0.7.
 
-global func_name_dictionary
 func_name_dictionary = {
     "power_law": power_law,
     "turnover_power_law": turnover_power_law,
     "dual_power_law": turnover_power_law
 }
 
-global default_x0_dictionary
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7),
     "turnover_power_law": (1, 0, 1, -2),
     "dual_power_law": (1, 0, 1, -2)
 }
+
 
 class sauron_runner():
     def __init__(self, args):
@@ -261,17 +261,8 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
         dump_counts = dump.z_counts(z_bins)
 
-        logging.debug("Pre calculation sim counts:")
-        from scipy.stats import binned_statistic as binstat
-        logging.debug(f"sim counts: {binstat(simulated_events[sim_z_col], simulated_events[sim_z_col],
-                                          statistic='count', bins=z_bins)[0]}")
-
-        #num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
-                                   #bins=[z_bins, z_bins])
-        import scipy
-        num = scipy.stats.binned_statistic_2d(simulated_events[true_z_col], simulated_events[sim_z_col],
-                                              None, statistic='count', bins=[z_bins, z_bins])[0]
-
+        num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
+                                   bins=[z_bins, z_bins])
 
         if np.any(dump_counts == 0):
             logging.warning("Some redshift bins have zero simulated events! This may cause issues.")
@@ -280,8 +271,6 @@ class sauron_runner():
             unique_bad_bins = np.sort(np.unique(np.concatenate((bad_bins, upper_bad_bins))))
             logging.warning("Specifically, these are the bin edges of the zero count bins:", z_bins[unique_bad_bins])
 
-        logging.debug(f"Dump counts: {dump_counts}")
-        logging.debug(f"Simulated counts: {np.sum(num, axis=0)}")
         eff_ij = num/dump_counts
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
@@ -337,9 +326,7 @@ class sauron_runner():
             self.fit_args_dict['z_centers'][survey] = z_centers
         # The above are only really needed for debugging.
 
-        logging.warning("DIVIDING NGEN BY TRUE RATE")
         logging.warning("This doesn't work for multiple surveys yet!")
-        #null_counts = N_gen / 2.27e-5 * (1 + z_centers)**1.7  # Hardcoded true rate from SIM, temporary XXX
 
         true_rate_function = func_name_dictionary.get(self.fit_args_dict["simulated_rate_function"][survey])
         logging.debug(f"Using true rate function: {true_rate_function}")
@@ -347,26 +334,6 @@ class sauron_runner():
         null_counts = calculate_null_counts(z_bins_list, z_centers, N_gen, cosmo=cosmo,
                                             true_rate_function=true_rate_function,
                                             rate_params=self.fit_args_dict["rate_params"][survey])
-
-
-        # solid_angle = 0.0082 * u.sr  # DES area in steradians
-        # time = [56535, 58178]
-
-
-        # null_counts2 = calculate_null_counts(z_bins_list, z_centers, N_gen, cosmo=cosmo, time=time, solid_angle=solid_angle)
-        # null_counts2 *= 50
-        # logging.debug(f"f_norms: {self.fit_args_dict['f_norm'][s]}")
-        # logging.debug(f"Null Counts (Method 2): {null_counts2}")
-        # logging.debug(f"Difference between methods: {null_counts - null_counts2}")
-        # logging.debug(f"Ratio between methods: {null_counts / null_counts2}")
-        # self.x0 = (2.27e-5, 1.7)  # Hardcoded true rate from SIM, temporary XXX
-        # self.x0 = (1,0)
-
-        # logging.debug("n_data:")
-        # logging.debug(n_data)
-
-        # logging.debug("N_gen * eff_ij:")
-        # logging.debug(np.sum(N_gen * eff_ij, axis = 0))
 
         result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
                                           n_data, self.rate_function, cov_sys),
@@ -451,11 +418,8 @@ class sauron_runner():
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
         else:
             logging.warning("SKIPPING CC CONTAMINATION STEP. USING DATA_IA AS DATA_ALL.")
-            logging.debug("IA counts before adjustment:")
-            logging.debug(datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins))
             datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
-            logging.debug(f"Using n_data: {n_data}")
 
         self.fit_args_dict["n_data"][survey] = n_data
         return n_data
@@ -609,8 +573,8 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
 
         self.results[survey].append(pd.DataFrame({
-            "delta_alpha": result[0],
-            "delta_beta": result[1],
+            "alpha": result[0],
+            "beta": result[1],
             "reduced_chi_squared": chi/(len(z_bins)-2),
             "alpha_error": np.sqrt(cov[0, 0]),
             "beta_error": np.sqrt(cov[1, 1]),
