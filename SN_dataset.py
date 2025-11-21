@@ -51,6 +51,7 @@ class SN_dataset():
             raise ValueError(f"Multiple Valid scone columns found in {data_name}! Which do I use? I found: {scone_col}")
         else:
             self.scone_col = scone_col[0]
+        logging.debug("Determined scone col: " + str(self.scone_col) + f" for dataset {data_name}")
 
     @property
     def true_z_col(self):
@@ -81,7 +82,7 @@ class SN_dataset():
 
     def prob_scone(self):
         if self.scone_col is None:
-            raise ValueError("No valid prob_scone column!")
+            raise ValueError(f"No valid prob_scone column!")
         return self.df[self.scone_col]
 
     def combine_with(self, dataset, newtype, data_name=None):
