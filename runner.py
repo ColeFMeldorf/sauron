@@ -202,6 +202,7 @@ class sauron_runner():
                 logging.warning("CC_ARE_SEPARATE not specified in config file for "f"{survey}. Defaulting to True.")
             # Combine IA and CC files if they are separate
             if self.fit_args_dict["cc_are_sep"][survey]:
+
                 if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
                     logging.info("Combining IA and CC files..")
                     datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
@@ -216,7 +217,6 @@ class sauron_runner():
                         logging.info("Skipping combining IA and CC files because --cheat_cc was set.")
                     elif datasets.get(f"{survey}_DUMP_CC") is None:
                         logging.warning(f"Couldn't find {survey}_DUMP_CC to combine with IA file.")
-
 
             # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
             else:
@@ -243,7 +243,6 @@ class sauron_runner():
                 sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
                 sim_cc_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim) == False]
 
-
                 datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
                                                            data_name=survey+"_DUMP_IA")
                 datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
@@ -252,17 +251,19 @@ class sauron_runner():
                                                            data_name=survey+"_SIM_IA", true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
                 datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
                                                            data_name=survey+"_SIM_CC", true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-
-                for i in range(n_datasets):
-                    data_df = datasets[f"{survey}_DATA_ALL_"+str(i+1)].df
-                    data_ia_df = data_df[data_df[dump_sn_col].isin(ia_vals)]
-                    data_cc_df = data_df[data_df[dump_sn_col].isin(ia_vals) == False]
-                    datasets[f"{survey}_DATA_IA_"+str(i+1)] = SN_dataset(data_ia_df, "IA",
-                                                                         zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
-                                                                         data_name=survey+f"_DATA_IA_{i+1}")
-                    datasets[f"{survey}_DATA_CC_"+str(i+1)] = SN_dataset(data_cc_df, "CC",
-                                                                         zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
-                                                                         data_name=survey+f"_DATA_CC_{i+1}")
+                if self.args.cheat_cc or self.args.debug:
+                    logging.info("Skipping splitting DATA files into IA and CC because --cheat_cc was set.")
+                    for i in range(n_datasets):
+                        data_df = datasets[f"{survey}_DATA_ALL_"+str(i+1)].df
+                        logging.info(f"Splitting based on column: "f"{dump_sn_col} with IA vals: {ia_vals}")
+                        data_ia_df = data_df[data_df[dump_sn_col].isin(ia_vals)]
+                        data_cc_df = data_df[data_df[dump_sn_col].isin(ia_vals) == False]
+                        datasets[f"{survey}_DATA_IA_"+str(i+1)] = SN_dataset(data_ia_df, "IA",
+                                                                            zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
+                                                                            data_name=survey+f"_DATA_IA_{i+1}")
+                        datasets[f"{survey}_DATA_CC_"+str(i+1)] = SN_dataset(data_cc_df, "CC",
+                                                                            zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
+                                                                            data_name=survey+f"_DATA_CC_{i+1}")
 
         self.datasets = datasets
         self.surveys = surveys
@@ -422,7 +423,7 @@ class sauron_runner():
         logging.info(f"Saving to {output_path}")
         output_df.to_csv(output_path, index=False)
 
-    def calculate_CC_contamination(self, PROB_THRESH, index, survey):
+    def calculate_CC_contamination(self, PROB_THRESH, index, survey, debug=True):
         datasets = self.datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
@@ -434,6 +435,26 @@ class sauron_runner():
             n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             R = n_data / N_data
 
+            #if debug:
+            logging.debug(f"Calculated IA_frac: {IA_frac}")
+            true_Ia_frac = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins) / datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+            logging.debug(f"True IA frac from DATA: {true_Ia_frac}")
+            xx = (z_bins[:-1] + z_bins[1:]) / 2
+            plt.plot(xx, datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins), label = "True Ia counts from DATA")
+            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins), label = "True ALL counts from DATA")
+            plt.title("DATA IA and DATA ALL counts for debugging CC contamination")
+            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH), label = "Estimated IA counts from prob thresh")
+            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.2), label = "Estimated IA counts from prob thresh 0.2")
+            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.5), label = "Estimated IA counts from prob thresh 0.5")
+            plt.ylabel("Counts")
+            plt.xlabel("Redshift")
+            plt.legend()
+
+            ds = datasets[f"{survey}_DATA_ALL_{index}"]
+
+            #plt.hist(ds.df[ds.scone_col], bins=20)
+            plt.savefig(f"cc_contamination_debug_{survey}_dataset{index}.png")
+
             N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
@@ -444,7 +465,6 @@ class sauron_runner():
 
             CC_frac = (1 - IA_frac) * S
             IA_frac = np.nan_to_num(1 - CC_frac)
-            logging.debug(f"Calculated a Ia frac of: {IA_frac}")
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
         else:
             if cheat:
