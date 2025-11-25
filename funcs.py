@@ -5,9 +5,9 @@
 import numpy as np
 import logging
 from scipy.stats import binned_statistic as binstat
-from astropy.cosmology import LambdaCDM
 from astropy import units as u
-
+from scipy.stats import chi2 as chi2_dist
+from scipy.special import erfinv
 
 def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
@@ -126,7 +126,6 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
                           time=None, solid_angle=None, cosmo=None):
     """Calculate the number of expected counts for 1 SN / Mpc^3 / yr over the survey volume and time."""
 
-    #z_centers = 0.5 * (z_bins[1:] + z_bins[:-1])
 
     # Method 1, stupid method, divide N_gen by true rate.
     if all(v is not None for v in [N_gen, true_rate_function, rate_params]):
@@ -217,3 +216,39 @@ def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRAN
     SNsum *= (dOmega * Tyear * dz)
 
     return SNsum
+
+def chi2_to_sigma(chi2_diff, dof):
+    """Convert chi2 difference to sigma level."""
+    # Get p-value from chi2 difference:
+    # That's 1 minus the integral of the chi2 distribution from 0 to chi2_diff
+    p_value = 1 - chi2_dist.cdf(chi2_diff, dof)
+
+    # Solve for x sigma in terms of p-value:
+    # 2 * p = 1 - erf(x / sqrt(2))
+    # erf(x / sqrt(2)) = 1 - 2 * p
+    # x / sqrt(2) = erfinv(1 - 2 * p)
+    # x = sqrt(2) * erfinv(1 - 2 * p)
+
+    sigma = np.sqrt(2) * erfinv(1 - 2 * p_value)
+    return sigma
+
+def cov_mat_to_sigma_map(cov_mat, mean):
+    """From the covariance matrix, determine how many sigma each element is from the mean."""
+    sigma_1 = scipy_chi2.ppf([0.68], 2)
+    sigma_2 = scipy_chi2.ppf([0.95], 2)
+
+    a = np.mean(df["alpha_error"]**2)
+    b = np.mean(df["beta_error"]**2)
+    c = np.mean(df["cov_alpha_beta"])
+
+    cov_mat = np.array([[a, c], [c, b]])
+
+    all_alpha = df["alpha"] - 2.27e-5
+    all_beta = df["beta"] - 1.7
+    inv_cov = np.linalg.inv(mean_cov)
+    all_pos = np.vstack([all_alpha, all_beta])
+    product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
+    product_2 = np.einsum("il,il->l", all_pos, product_1)
+
+    sub_one_sigma = np.where(product_2 < sigma_1)
+    sub_two_sigma = np.where(product_2 < sigma_2)
