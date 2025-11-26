@@ -193,9 +193,11 @@ class sauron_runner():
                         datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
                     datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
                         datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
-                    for i in range(n_datasets):
-                        datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
-                            datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
+                    # Data files may be combined even if sim and dump are not
+                    if datasets.get(f"{survey}_DATA_CC_1") is not None:
+                        for i in range(n_datasets):
+                            datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
+                                datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
                 else:
                     if self.args.cheat_cc:
                         logging.info("Skipping combining IA and CC files because --cheat_cc was set.")

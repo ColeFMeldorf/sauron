@@ -80,6 +80,8 @@ class SN_dataset():
         return mu_res
 
     def prob_scone(self):
+        for c in self.df.columns:
+            print(c)
         if self.scone_col is None:
             raise ValueError("No valid prob_scone column!")
         return self.df[self.scone_col]
