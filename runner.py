@@ -423,7 +423,7 @@ class sauron_runner():
         logging.info(f"Saving to {output_path}")
         output_df.to_csv(output_path, index=False)
 
-    def calculate_CC_contamination(self, PROB_THRESH, index, survey, debug=True):
+    def calculate_CC_contamination(self, PROB_THRESH, index, survey, debug=False):
         datasets = self.datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
@@ -435,25 +435,25 @@ class sauron_runner():
             n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             R = n_data / N_data
 
-            #if debug:
-            logging.debug(f"Calculated IA_frac: {IA_frac}")
-            true_Ia_frac = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins) / datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
-            logging.debug(f"True IA frac from DATA: {true_Ia_frac}")
-            xx = (z_bins[:-1] + z_bins[1:]) / 2
-            plt.plot(xx, datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins), label = "True Ia counts from DATA")
-            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins), label = "True ALL counts from DATA")
-            plt.title("DATA IA and DATA ALL counts for debugging CC contamination")
-            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH), label = "Estimated IA counts from prob thresh")
-            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.2), label = "Estimated IA counts from prob thresh 0.2")
-            plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.5), label = "Estimated IA counts from prob thresh 0.5")
-            plt.ylabel("Counts")
-            plt.xlabel("Redshift")
-            plt.legend()
+            if debug:
+                logging.debug(f"Calculated IA_frac: {IA_frac}")
+                true_Ia_frac = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins) / datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+                logging.debug(f"True IA frac from DATA: {true_Ia_frac}")
+                xx = (z_bins[:-1] + z_bins[1:]) / 2
+                plt.plot(xx, datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins), label = "True Ia counts from DATA")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins), label = "True ALL counts from DATA")
+                plt.title("DATA IA and DATA ALL counts for debugging CC contamination")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH), label = "Estimated IA counts from prob thresh")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.2), label = "Estimated IA counts from prob thresh 0.2")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.5), label = "Estimated IA counts from prob thresh 0.5")
+                plt.ylabel("Counts")
+                plt.xlabel("Redshift")
+                plt.legend()
 
-            ds = datasets[f"{survey}_DATA_ALL_{index}"]
+                ds = datasets[f"{survey}_DATA_ALL_{index}"]
 
-            #plt.hist(ds.df[ds.scone_col], bins=20)
-            plt.savefig(f"cc_contamination_debug_{survey}_dataset{index}.png")
+                #plt.hist(ds.df[ds.scone_col], bins=20)
+                plt.savefig(f"cc_contamination_debug_{survey}_dataset{index}.png")
 
             N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
             n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
@@ -479,10 +479,9 @@ class sauron_runner():
         self.fit_args_dict["n_data"][survey] = n_data
         return n_data
 
-    def generate_chi2_map(self, survey):
+    def generate_chi2_map(self, survey, n_samples = 100):
 
         # This only for now works with the power law fit function
-        n_samples = 100
         fit_args_dict = self.fit_args_dict
         chi2_map = np.empty((n_samples, n_samples))
         logging.info(f"Generating chi2 map for survey: {survey}")
@@ -510,8 +509,6 @@ class sauron_runner():
             for j, b in enumerate(np.linspace(1.4, 2, n_samples)):
 
                 values = (a, b)
-
-
 
                 chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                                     z_centers,
@@ -551,9 +548,10 @@ class sauron_runner():
             logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
 
             from funcs import chi2_to_sigma
-            sigma_map = chi2_to_sigma(normalized_map, dof=len(z_centers) - 2)
-            sigma_map = np.clip(sigma_map, 0, 5)
-            logging.debug(f"sigma map for {survey}:\n{sigma_map}")
+            #sigma_map = chi2_to_sigma(normalized_map, dof=len(z_centers) - 2)
+            #sigma_map = np.clip(sigma_map, 0, 5)
+            #logging.debug(f"sigma map for {survey}:\n{sigma_map}")
+
 
             # plt.subplot(1, len(surveys), i + 1)
             ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain")
