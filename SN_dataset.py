@@ -51,7 +51,7 @@ class SN_dataset():
             raise ValueError(f"Multiple Valid scone columns found in {data_name}! Which do I use? I found: {scone_col}")
         else:
             self.scone_col = scone_col[0]
-        logging.debug("Determined scone col: " + str(self.scone_col) + f" for dataset {data_name}")
+        # logging.debug("Determined scone col: " + str(self.scone_col) + f" for dataset {data_name}")
 
     @property
     def true_z_col(self):
@@ -81,8 +81,6 @@ class SN_dataset():
         return mu_res
 
     def prob_scone(self):
-        for c in self.df.columns:
-            print(c)
         if self.scone_col is None:
             raise ValueError(f"No valid prob_scone column!")
         return self.df[self.scone_col]

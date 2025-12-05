@@ -33,6 +33,7 @@ def main():
     runner.parse_global_fit_options()
 
     datasets, surveys = runner.unpack_dataframes()
+
     # Covariance calculations, if requested
     PROB_THRESH = 0.13
     runner.calculate_covariance(PROB_THRESH=PROB_THRESH)

@@ -102,7 +102,7 @@ class sauron_runner():
         if simulated_rate_func is not None:
             self.fit_args_dict["simulated_rate_function"][survey] = simulated_rate_func
             self.fit_args_dict["simulated_rate_function"]["combined"] = simulated_rate_func
-            logging.warning(f"Setting simulated rate function for combined to {simulated_rate_func}")
+            #logging.warning(f"Setting simulated rate function for combined to {simulated_rate_func}")
             logging.warning(f"This can't always be the case if fitting multiple surveys with different rate functions!")
         else:
             raise ValueError(f"RATE_FUNC must be specified in FIT_OPTIONS for {survey}.")
@@ -112,8 +112,8 @@ class sauron_runner():
             simulated_rate_params = [float(i) for i in simulated_rate_params.split(",")]
             self.fit_args_dict["rate_params"][survey] = simulated_rate_params
             self.fit_args_dict["rate_params"]["combined"] = simulated_rate_params
-            logging.warning(f"Setting simulated rate params for combined to {simulated_rate_params}")
-            logging.warning(f"This can't always be the case if fitting multiple surveys with different rate functions!")
+            #logging.warning(f"Setting simulated rate params for combined to {simulated_rate_params}")
+            #logging.warning(f"This can't always be the case if fitting multiple surveys with different rate functions!")
 
         else:
             raise ValueError(f"RATE_PARAMS must be specified in FIT_OPTIONS for {survey}.")
@@ -127,6 +127,7 @@ class sauron_runner():
         # Unpack dataframes into SN_dataset objects
         for survey in surveys:
             survey_dict = files_input[survey]
+            logging.debug(f"survey_dict keys: {list(survey_dict.keys())}")
             fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
             logging.debug(f"Survey fit options: {fit_args_dict}")
             self.parse_survey_fit_options(fit_args_dict, survey)
@@ -135,7 +136,7 @@ class sauron_runner():
                 if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
                     continue  # Skip non-data files
 
-                logging.info(f"Loading {file} for {survey}...")
+                # logging.info(f"Loading {file} for {survey}...")
                 sntype = "IA" if "IA" in file else "CC"
 
                 if isinstance(survey_dict[file], dict):
@@ -157,6 +158,7 @@ class sauron_runner():
 
                 if "DATA" in file:
                     for i, path in enumerate(paths):
+                        logging.debug(f"Loading data file: {path}")
                         if ".FITS" in path:
                             dataframe = fits.open(path)[1].data
                             dataframe = pd.DataFrame(np.array(dataframe))
@@ -164,6 +166,8 @@ class sauron_runner():
                             dataframe = pd.read_csv(path, comment="#")
                         else:
                             dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
+                        logging.debug(f"Dataframe size for {survey}_{file}_{i+1}: {np.shape(dataframe)}")
+
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(dataframe,
                                                                             sntype, data_name=survey+"_"+file,
                                                                             zcol=zcol)
@@ -195,7 +199,7 @@ class sauron_runner():
                         elif len(cols_in_df) == 1:
                             datasets[survey+"_"+file].true_z_col = cols_in_df[0]
                             logging.info(f"Auto-setting true z col for {survey}_{file} to {cols_in_df[0]}")
-                    logging.info(f"Setting true z col for {survey}_{file} to {survey_dict[file].get("TRUEZCOL", None)}")
+                    #logging.info(f"Setting true z col for {survey}_{file} to {survey_dict[file].get("TRUEZCOL", None)}")
 
             if self.fit_args_dict["cc_are_sep"].get(survey) is None:
                 self.fit_args_dict["cc_are_sep"][survey] = True
@@ -204,12 +208,13 @@ class sauron_runner():
             if self.fit_args_dict["cc_are_sep"][survey]:
 
                 if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
-                    logging.info("Combining IA and CC files..")
+                    logging.info("Combining IA and CC dump and sim files..")
                     datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
                         datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
                     datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
                         datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
                     # Data files may be combined even if sim and dump are not
+                    logging.debug(f"current datasets: {list(datasets.keys())}")
                     if datasets.get(f"{survey}_DATA_CC_1") is not None:
                         for i in range(n_datasets):
                             datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
@@ -256,6 +261,7 @@ class sauron_runner():
                 if self.args.cheat_cc or self.args.debug:
                     logging.info("Skipping splitting DATA files into IA and CC because --cheat_cc was set.")
                     for i in range(n_datasets):
+
                         data_df = datasets[f"{survey}_DATA_ALL_"+str(i+1)].df
                         logging.info(f"Splitting based on column: "f"{dump_sn_col} with IA vals: {ia_vals}")
                         data_ia_df = data_df[data_df[dump_sn_col].isin(ia_vals)]
@@ -266,6 +272,10 @@ class sauron_runner():
                         datasets[f"{survey}_DATA_CC_"+str(i+1)] = SN_dataset(data_cc_df, "CC",
                                                                             zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
                                                                             data_name=survey+f"_DATA_CC_{i+1}")
+
+            for i in range(self.fit_args_dict["n_datasets"][survey]):
+                logging.debug(f"Counts in data all {i+1}: {datasets[f"{survey}_DATA_ALL_{i+1}"].z_counts(self.fit_args_dict['z_bins'][survey])}")
+                logging.debug(f"Sum counts {np.sum(datasets[f"{survey}_DATA_ALL_{i+1}"].z_counts(self.fit_args_dict['z_bins'][survey]))}")
 
         self.datasets = datasets
         self.surveys = surveys
@@ -338,14 +348,6 @@ class sauron_runner():
                 cov_sys_list[i] = np.zeros_like(eff_ij_list[i])
         cov_sys = block_diag(cov_sys_list).toarray()
 
-        logging.debug("Shapes:")
-        logging.debug(f"z_centers: {z_centers.shape}")
-        logging.debug(f"f_norm: {f_norms.shape}")
-        logging.debug(f"n_data: {n_data.shape}")
-        logging.debug(f"N_gen: {N_gen.shape}")
-        logging.debug(f"eff_ij: {eff_ij.shape}")
-        logging.debug(f"cov_sys: {cov_sys.shape}")
-
         survey = survey[0] if len(survey) == 1 else "combined"
         # Note this only allows for individual surveys or all, no subsets. Fix this later.
         if survey == "combined":
@@ -367,6 +369,8 @@ class sauron_runner():
                                             true_rate_function=true_rate_function,
                                             rate_params=self.fit_args_dict["rate_params"][survey])
         self.fit_args_dict['null_counts'][survey] = null_counts
+
+        logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
         result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
                                           n_data, self.rate_function, cov_sys),
@@ -433,10 +437,16 @@ class sauron_runner():
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
                        datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+
+
             N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
             n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+            #logging.warning("SWITCHED TO USING SIMULATIONS FOR R CALCULATION IN CC CONTAMINATION.")
+            #N_data = np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
+            #n_data = np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             R = n_data / N_data
-
+            #logging.debug(f"Calculated R: {R}")
             if debug:
                 logging.debug(f"Calculated IA_frac: {IA_frac}")
                 true_Ia_frac = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins) / datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
@@ -467,7 +477,17 @@ class sauron_runner():
 
             CC_frac = (1 - IA_frac) * S
             IA_frac = np.nan_to_num(1 - CC_frac)
-            n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
+            #
+            n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)  * IA_frac
+            logging.debug(f"Calculated n_data after CC contamination: {n_data}")
+            plt.title("DATA ALL counts after CC contamination")
+            plt.xlabel("Redshift")
+            plt.ylabel("Counts")
+            xx = (z_bins[:-1] + z_bins[1:]) / 2
+            plt.plot(xx, n_data, label="DATA ALL counts after CC contamination")
+            plt.legend()
+            plt.savefig(f"cc_contamination_after_{survey}_dataset{index}.png")
+            # logging.warning(f"Calculated IA fraction after CC contamination: {IA_frac}")
         else:
             if cheat:
                 logging.warning("SKIPPING CC CONTAMINATION STEP. USING DATA_IA AS DATA_ALL.")
@@ -507,8 +527,8 @@ class sauron_runner():
         logging.debug(f"chi2 at (2.27e-5, 1.7): {np.sum(chi2_result**2)}")
 
 
-        for i, a in enumerate(np.linspace(2.0e-5, 2.6e-5, n_samples)):
-            for j, b in enumerate(np.linspace(1.4, 2, n_samples)):
+        for i, a in enumerate(np.linspace(1.5e-5, 2.5e-5, n_samples)):
+            for j, b in enumerate(np.linspace(1.4, 2.4, n_samples)):
 
                 values = (a, b)
 
@@ -556,10 +576,18 @@ class sauron_runner():
 
 
             # plt.subplot(1, len(surveys), i + 1)
-            ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain")
-            plt.colorbar(ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain"))
-            ax2.axhline(2.27e-5, color='black', linestyle='--')
-            ax2.axvline(1.7, color='black', linestyle='--')
+            ax2.imshow(np.log10(normalized_map), extent=[1.4, 2.4, 1.5e-5, 2.5e-5], origin='lower', aspect='auto', cmap="terrain")
+            plt.colorbar(ax2.imshow(np.log10(normalized_map), extent=[1.4, 2.4, 1.5e-5, 2.5e-5], origin='lower', aspect='auto', cmap="terrain"))
+
+
+
+            #ax2.axhline(2.27e-5, color='black', linestyle='--')
+            ax2.errorbar( 1.61, 1.88e-5, xerr = 0.3, yerr=0.3*1e-5, fmt='o', color='red', label='Lasker Thesis, Error Approx')
+            ax2.errorbar( 1.7, 2.27e-5, xerr = 0.21, yerr=0.19 *1e-5, fmt='o', color='blue', label='Fromhaier')
+            ax2.set_xlabel("Beta")
+            ax2.set_ylabel("Alpha")
+            ax2.legend()
+            #ax2.axvline(1.7, color='black', linestyle='--')
             # from scipy.stats import multivariate_normal
             # from scipy.stats import chi2 as chi2_scipy
 
@@ -631,15 +659,20 @@ class sauron_runner():
 
     def calculate_f_norm(self, survey, index):
         z_bins = self.fit_args_dict['z_bins'][survey]
-        if self.fit_args_dict["cc_are_sep"][survey]:
+        if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None:
             logging.debug("Using Ia only for f_norm calculation.")
             f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
 
         else:
-            logging.debug("Using all SNe for f_norm calculation.")
-            f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
-                np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
+            logging.debug("Couldn't find DATA_IA dataset for f_norm calculation so I am using inferred Ia counts.")
+            num_Ia = self.fit_args_dict["n_data"][survey]
+            f_norm = np.sum(num_Ia) / \
+                    np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+
+            # logging.debug("Using all SNe for f_norm calculation.")
+            # f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
+            #     np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
 
         self.fit_args_dict['f_norm'][survey] = f_norm
         logging.debug(f"Calculated f_norm to be {f_norm}")
