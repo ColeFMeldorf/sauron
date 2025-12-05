@@ -3,7 +3,6 @@
 
 # Standard Library
 import argparse
-
 import logging
 
 # Sauron modules
