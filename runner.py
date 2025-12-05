@@ -261,7 +261,7 @@ class sauron_runner():
         return datasets, surveys
 
     def get_counts(self, survey):
-        """Get counts of generated  and intitialize bins for a given survey.
+        """Get counts of generated and initialize bins for a given survey.
         Inputs
         ------
         survey : str
@@ -273,7 +273,7 @@ class sauron_runner():
         self.final_counts[survey] = {}
 
     def calculate_transfer_matrix(self, survey):
-        """Calculate the transfer matrix, epislon_ij, for a given survey.
+        """Calculate the transfer matrix, epsilon_ij, for a given survey.
         Inputs
         ------
         survey : str
@@ -431,8 +431,8 @@ class sauron_runner():
     def calculate_CC_contamination(self, PROB_THRESH, index, survey):
         """Calculate CC contamination for a given survey and dataset index.
         
-        Parameters
-        ----------
+        Inputs
+        ------
         PROB_THRESH : float
            Probability threshold for classification, this should be the probability the SN is believed to be IA.
         index : int
