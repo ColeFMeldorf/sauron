@@ -9,9 +9,12 @@ from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 
+
 def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
     fJ = rate_function(zJ, x)
+    fJ[0] = 0  # Ensure first bin is zero to avoid infinities
+    fJ[-1] = 0  # Ensure last bin is zero to avoid infinities
     Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
     var_Ei = np.abs(Ei)
     var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
@@ -24,7 +27,8 @@ def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     resid_matrix = np.outer(n_data - Ei, n_data - Ei)
     chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
-    return chi_squared
+
+    return chi_squared[1:-1] # Exclude first and last bins (infinite bins)
 
 
 def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
