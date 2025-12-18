@@ -599,140 +599,28 @@ class sauron_runner():
                 chi2_map[i][j] = np.sum(chi2_result**2)
         return chi2_map
 
-    # def summary_plot(self):
-    #     """ Generate a plot of the results, including predicted vs observed counts and chi2 contours."""
-    #     logging.info(f"Results: {self.results}")
-    #     surveys = self.results.keys()
-    #     num_plots = len(surveys) + 1
-    #     sides = int(np.ceil(num_plots/2))
-    #     fig, ax = plt.subplots(2, sides, figsize=(12, 6))
-    #     ax = ax.flatten()
-    #     surveys = list(surveys)
-    #     surveys.remove("combined")
-    #     for i, survey in enumerate(surveys):
-    #         s = survey
-    #         if survey != "combined":
-    #             ax1 = ax[0]
-    #             z_centers = np.array(self.fit_args_dict['z_centers'][survey])
-
-    #             ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
-    #                          yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-    #                          label=f" {survey} Sauron Prediction ")
-    #             ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
-    #                          yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
-    #                          fmt='o', label=f" {survey} Data")
-    #             ax1.legend()
-    #             ax1.set_xlabel("Redshift")
-    #             ax1.set_ylabel("Counts")
-    #             ax1.set_yscale("log")
-
-    #         ax2 = ax[i+1]
-    #         chi2_map = self.generate_chi2_map(s)
-    #         normalized_map = chi2_map - np.min(chi2_map)
-    #         logging.debug(f"chi2_map for {survey}:\n{normalized_map}")
-    #         logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
-
-    #         from funcs import chi2_to_sigma
-    #         #sigma_map = chi2_to_sigma(normalized_map, dof=len(z_centers) - 2)
-    #         #sigma_map = np.clip(sigma_map, 0, 5)
-    #         #logging.debug(f"sigma map for {survey}:\n{sigma_map}")
-
-
-    #         plt.subplot(1, len(surveys), i + 1)
-    #         plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
-    #         ax2.axvline(0, color='black', linestyle='--')
-    #         ax2.axhline(1, color='black', linestyle='--')
-    #         from scipy.stats import chi2 as chi2_scipy
-
-    #         if isinstance(self.results[s], list):
-    #             df = self.results[s][0]
-    #         else:
-    #             df = self.results[s]
-
-    #         a = np.mean(df["alpha_error"]**2)
-    #         b = np.mean(df["beta_error"]**2)
-    #         c = np.mean(df["cov_alpha_beta"])
-    #         cov = np.array([[a, c], [c, b]])
-    #         sigma_1 = chi2_scipy.ppf([0.68], 2)
-    #         sigma_2 = chi2_scipy.ppf([0.95], 2)
-    #         norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
-
-    #         sigma_1_exp = np.exp((-1/2) * sigma_1)
-    #         sigma_1_exp = sigma_1_exp[0] / norm
-    #         sigma_2_exp = np.exp((-1/2) * sigma_2)
-    #         sigma_2_exp = sigma_2_exp[0] / norm
-    #         y = np.linspace(0.7, 1.3, 50)
-    #         x = np.linspace(-0.3, 0.3, 50)
-    #         x, y = np.meshgrid(x, y)
-    #         CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors="C" + str(i+1))
-    #         # label the contours by survey
-    #         fmt = {}
-    #         strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-    #         for k, label_str in zip(CS.levels, strs):
-    #             fmt[k] = label_str
-    #         ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
-    #         ax2.legend()
-    #         #ax2.axvline(1.7, color='black', linestyle='--')
-    #         # from scipy.stats import multivariate_normal
-    #         # from scipy.stats import chi2 as chi2_scipy
-
-    #         # if isinstance(self.results[s], list):
-    #         #     df = self.results[s][0]
-    #         # else:
-    #         #     df = self.results[s]
-
-
-    #         # a = np.mean(df["alpha_error"]**2)
-    #         # b = np.mean(df["beta_error"]**2)
-    #         # c = np.mean(df["cov_alpha_beta"])
-    #         # cov = np.array([[a, c], [c, b]])
-    #         # logging.debug(f"Covariance matrix for {survey}:\n{cov}")
-    #         # sigma_1 = chi2_scipy.ppf([0.68], 2)
-    #         # sigma_2 = chi2_scipy.ppf([0.95], 2)
-    #         # norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
-    #         # logging.debug(f"Determinant of covariance matrix for {survey}: {np.linalg.det(cov)}")
-
-    #         # sigma_1_exp = np.exp((-1/2) * sigma_1)
-    #         # sigma_1_exp = sigma_1_exp[0] / norm
-    #         # sigma_2_exp = np.exp((-1/2) * sigma_2)
-    #         # sigma_2_exp = sigma_2_exp[0] / norm
-
-    #         # x = np.linspace(2.0e-5, 2.6e-5, 100)
-    #         # y = np.linspace(1.4, 2, 100)
-    #         # x, y = np.meshgrid(x, y)
-    #         # #[sigma_2_exp, sigma_1_exp]
-    #         # logging.debug(f"Sigma levels: {[sigma_2_exp, sigma_1_exp]}")
-
-    #         # CS = ax2.contour(x, y, normalized_map, levels=10, colors="k")
-    #         # fmt = {}
-    #         # strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-    #         # for l, s in zip(CS.levels, strs):
-    #         #     fmt[l] = s
-    #         # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
-    #         # ax2.set_title(f"Chi2 Map for {survey}")
-    #         # ax2.legend()
-
-    #     fig.savefig("summary_plot.png")
-
     def summary_plot(self):
         """ Generate a plot of the results, including predicted vs observed counts and chi2 contours."""
         logging.info(f"Results: {self.results}")
         surveys = self.results.keys()
-        logging.info("Generating summary plots for surveys:", list(surveys))
         num_plots = len(surveys) + 1
         sides = int(np.ceil(num_plots/2))
         fig, ax = plt.subplots(2, sides, figsize=(12, 6))
         ax = ax.flatten()
+        surveys = list(surveys)
+        surveys.remove("combined")
         for i, survey in enumerate(surveys):
-            logging.info(f"Generating summary plot for {survey}")
             s = survey
             if survey != "combined":
                 ax1 = ax[0]
                 z_centers = np.array(self.fit_args_dict['z_centers'][survey])
 
-                ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"], yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                            label=f" {survey} Sauron Prediction ")
-                ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"], yerr=np.sqrt(self.final_counts[survey]["observed_counts"]), fmt='o', label=f" {survey} Data")
+                ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
+                             yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
+                             label=f" {survey} Sauron Prediction ")
+                ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
+                             yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
+                             fmt='o', label=f" {survey} Data")
                 ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
@@ -740,19 +628,26 @@ class sauron_runner():
 
             ax2 = ax[i+1]
             chi2_map = self.generate_chi2_map(s)
-            normalized_map = chi2_map - np.min(chi2_map) + 0.0001
-            # plt.subplot(1, len(surveys), i + 1)
-            # plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
+            normalized_map = chi2_map - np.min(chi2_map)
+            logging.debug(f"chi2_map for {survey}:\n{normalized_map}")
+            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
+
+            from funcs import chi2_to_sigma
+            #sigma_map = chi2_to_sigma(normalized_map, dof=len(z_centers) - 2)
+            #sigma_map = np.clip(sigma_map, 0, 5)
+            #logging.debug(f"sigma map for {survey}:\n{sigma_map}")
+
+
+            plt.subplot(1, len(surveys), i + 1)
+            plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
             ax2.axvline(0, color='black', linestyle='--')
             ax2.axhline(1, color='black', linestyle='--')
-            from scipy.stats import multivariate_normal
             from scipy.stats import chi2 as chi2_scipy
 
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
                 df = self.results[s]
-
 
             a = np.mean(df["alpha_error"]**2)
             b = np.mean(df["beta_error"]**2)
@@ -773,13 +668,51 @@ class sauron_runner():
             # label the contours by survey
             fmt = {}
             strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            for l, s in zip(CS.levels, strs):
-                fmt[l] = s
+            for k, label_str in zip(CS.levels, strs):
+                fmt[k] = label_str
             ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
             ax2.legend()
+            #ax2.axvline(1.7, color='black', linestyle='--')
+            # from scipy.stats import multivariate_normal
+            # from scipy.stats import chi2 as chi2_scipy
+
+            # if isinstance(self.results[s], list):
+            #     df = self.results[s][0]
+            # else:
+            #     df = self.results[s]
+
+
+            # a = np.mean(df["alpha_error"]**2)
+            # b = np.mean(df["beta_error"]**2)
+            # c = np.mean(df["cov_alpha_beta"])
+            # cov = np.array([[a, c], [c, b]])
+            # logging.debug(f"Covariance matrix for {survey}:\n{cov}")
+            # sigma_1 = chi2_scipy.ppf([0.68], 2)
+            # sigma_2 = chi2_scipy.ppf([0.95], 2)
+            # norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
+            # logging.debug(f"Determinant of covariance matrix for {survey}: {np.linalg.det(cov)}")
+
+            # sigma_1_exp = np.exp((-1/2) * sigma_1)
+            # sigma_1_exp = sigma_1_exp[0] / norm
+            # sigma_2_exp = np.exp((-1/2) * sigma_2)
+            # sigma_2_exp = sigma_2_exp[0] / norm
+
+            # x = np.linspace(2.0e-5, 2.6e-5, 100)
+            # y = np.linspace(1.4, 2, 100)
+            # x, y = np.meshgrid(x, y)
+            # #[sigma_2_exp, sigma_1_exp]
+            # logging.debug(f"Sigma levels: {[sigma_2_exp, sigma_1_exp]}")
+
+            # CS = ax2.contour(x, y, normalized_map, levels=10, colors="k")
+            # fmt = {}
+            # strs = [f'1 sigma {survey}', f'2 sigma {survey}']
+            # for l, s in zip(CS.levels, strs):
+            #     fmt[l] = s
+            # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
+            # ax2.set_title(f"Chi2 Map for {survey}")
+            # ax2.legend()
 
         fig.savefig("summary_plot.png")
-
 
     def calculate_covariance(self, PROB_THRESH=0.13):
         """Calculate systematic covariance matrix for each survey.
