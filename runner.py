@@ -82,7 +82,6 @@ class sauron_runner():
 
         survey : str
             Name of the survey.
-        
         """
         logging.debug(f"options {args_dict} for survey {survey}")
         self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
@@ -94,7 +93,7 @@ class sauron_runner():
             elif isinstance(args_dict["Z_BINS"], int):
                 if "MIN_Z" not in args_dict or "MAX_Z" not in args_dict:
                     logging.warning("When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
-                          " Defaulting to MIN_Z=0 and MAX_Z=1.4")
+                                    " Defaulting to MIN_Z=0 and MAX_Z=1.4")
                 min_z = args_dict.get("MIN_Z", 0)
                 max_z = args_dict.get("MAX_Z", 1.4)
                 self.fit_args_dict["z_bins"][survey] = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
@@ -102,7 +101,8 @@ class sauron_runner():
         else:
             logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
         logging.debug(f"Z BINS {self.fit_args_dict['z_bins'][survey]}")
-        self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] + self.fit_args_dict["z_bins"][survey][:-1]) / 2
+        self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] +
+                                                   self.fit_args_dict["z_bins"][survey][:-1]) / 2
 
         simulated_rate_func = args_dict.get("RATE_FUNC", None)
         if simulated_rate_func is not None:
@@ -118,7 +118,7 @@ class sauron_runner():
             raise ValueError(f"RATE_PARAMS must be specified in FIT_OPTIONS for {survey}.")
 
     def unpack_dataframes(self):
-        """Load dataframes pointed to in the config file into SN_dataset objects. This includes DUMP, SIM, 
+        """Load dataframes pointed to in the config file into SN_dataset objects. This includes DUMP, SIM,
         and DATA files, splitting and combining them based on IA vs CC as necessary.
         TODO: Turn this into smaller functions for readability.
         """
@@ -135,7 +135,6 @@ class sauron_runner():
             logging.debug(f"Survey fit options: {fit_args_dict}")
             self.parse_survey_fit_options(fit_args_dict, survey)
             for i, file in enumerate(list(survey_dict.keys())):
-
                 if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
                     continue  # Skip non-data files
 
@@ -220,7 +219,6 @@ class sauron_runner():
                     elif datasets.get(f"{survey}_DUMP_CC") is None:
                         logging.warning(f"Couldn't find {survey}_DUMP_CC to combine with IA file.")
 
-
             # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
             else:
                 logging.info("Splitting DUMP and SIM files into IA and CC...")
@@ -242,18 +240,20 @@ class sauron_runner():
                                    "separate DUMP and SIM into IA and CC.")
 
                 dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
-                dump_cc_df = dump_df[dump_df[dump_sn_col].isin(ia_vals) == False]
+                dump_cc_df = dump_df[~dump_df[dump_sn_col].isin(ia_vals)]
                 sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
-                sim_cc_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim) == False]
+                sim_cc_df = sim_df[~sim_df[sim_sn_col].isin(ia_vals_sim)]
 
                 datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
                                                            data_name=survey+"_DUMP_IA")
                 datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
                                                            data_name=survey+"_DUMP_CC")
                 datasets[f"{survey}_SIM_IA"] = SN_dataset(sim_ia_df, "IA", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                                                           data_name=survey+"_SIM_IA", true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                                                          data_name=survey+"_SIM_IA",
+                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
                 datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                                                           data_name=survey+"_SIM_CC", true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                                                          data_name=survey+"_SIM_CC",
+                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
 
         self.datasets = datasets
         self.surveys = surveys
@@ -430,7 +430,7 @@ class sauron_runner():
 
     def calculate_CC_contamination(self, PROB_THRESH, index, survey):
         """Calculate CC contamination for a given survey and dataset index.
-        
+
         Inputs
         ------
         PROB_THRESH : float
@@ -472,7 +472,7 @@ class sauron_runner():
         return n_data
 
     def generate_chi2_map(self, survey):
-        """Generate an array of chi2 values over a grid of alpha and beta values for a given survey. 
+        """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
         ------
@@ -522,9 +522,12 @@ class sauron_runner():
                 ax1 = ax[0]
                 z_centers = np.array(self.fit_args_dict['z_centers'][survey])
 
-                ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"], yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                            label=f" {survey} Sauron Prediction ")
-                ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"], yerr=np.sqrt(self.final_counts[survey]["observed_counts"]), fmt='o', label=f" {survey} Data")
+                ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
+                             yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
+                             label=f" {survey} Sauron Prediction ")
+                ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
+                             yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
+                             fmt='o', label=f" {survey} Data")
                 ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
@@ -537,14 +540,12 @@ class sauron_runner():
             # plt.imshow(normalized_map, extent=(-0.1, 0.1, 0.9, 1.1), origin='lower', aspect='auto', cmap="jet")
             ax2.axvline(0, color='black', linestyle='--')
             ax2.axhline(1, color='black', linestyle='--')
-            from scipy.stats import multivariate_normal
             from scipy.stats import chi2 as chi2_scipy
 
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
                 df = self.results[s]
-
 
             a = np.mean(df["alpha_error"]**2)
             b = np.mean(df["beta_error"]**2)
@@ -565,8 +566,8 @@ class sauron_runner():
             # label the contours by survey
             fmt = {}
             strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            for l, s in zip(CS.levels, strs):
-                fmt[l] = s
+            for k, label_str in zip(CS.levels, strs):
+                fmt[k] = label_str
             ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
             ax2.legend()
 
@@ -577,7 +578,7 @@ class sauron_runner():
         Inputs
         ------
         PROB_THRESH : float
-            Probability threshold for classification, this should be the probability the SN is believed to be IA. 
+            Probability threshold for classification, this should be the probability the SN is believed to be IA.
             This is used for varying the prob thresh in the covariance calculation.
         """
         for survey in self.surveys:
@@ -600,7 +601,8 @@ class sauron_runner():
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
                                                                  1, survey, self.datasets,
                                                                  self.fit_args_dict["z_bins"][survey], False)
-                # Hard coding index to one needs to change. TODO: Refactor to avoid hardcoded index value (currently set to 1). This function should not need index at all.
+                # Hard coding index to one needs to change. TODO: Refactor to avoid hardcoded index value
+                #  (currently set to 1). This function should not need index at all.
                 cov_sys = cov_thresh + cov_rate_norm
             else:
                 cov_sys = None

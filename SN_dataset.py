@@ -37,10 +37,11 @@ class SN_dataset():
                 logging.debug(f"Available column: {c}")
             if z_col_specified:
                 raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
+
             else:
 
                 raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!"
-                                 f" I checked: {possible_z_cols}")
+                                 f" I checked: {possible_z_cols}.")
 
         scone_col = []
         for c in self.df.columns:
@@ -68,7 +69,7 @@ class SN_dataset():
         self._true_z_col = value
 
     def z_counts(self, z_bins, prob_thresh=None):
-        """Calculate the counts of supernovae in redshift bins, optionally applying a classifier 
+        """Calculate the counts of supernovae in redshift bins, optionally applying a classifier
         probability threshold.
         Inputs
         ------
