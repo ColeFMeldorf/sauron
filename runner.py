@@ -466,7 +466,7 @@ class sauron_runner():
         logging.info(f"Saving to {output_path}")
         output_df.to_csv(output_path, index=False)
 
-    def calculate_CC_contamination(self, PROB_THRESH, index, survey):
+    def calculate_CC_contamination(self, PROB_THRESH, index, survey, debug=False):
         """Calculate CC contamination for a given survey and dataset index.
 
         Inputs
