@@ -585,12 +585,12 @@ class sauron_runner():
                            fit_args_dict['cov_sys'][survey])
         logging.debug(f"chi2 at (2.27e-5, 1.7): {np.sum(chi2_result**2)}")
 
-        for i, a in enumerate(np.linspace(1.5e-5, 2.5e-5, n_samples)):
-            for j, b in enumerate(np.linspace(1.4, 2.4, n_samples)):
+        for i, a in enumerate(np.linspace(2.0e-5, 2.6e-5, n_samples)):
+            for j, b in enumerate(np.linspace(1.4, 2.0, n_samples)):
 
                 values = (a, b)
 
-                chi2_result = chi2(values, fit_args_dict['N_gen'][survey], fit_args_dict['f_norm'][survey],
+                chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                                    z_centers,
                                    fit_args_dict['eff_ij'][survey],
                                    fit_args_dict['n_data'][survey],
@@ -638,39 +638,42 @@ class sauron_runner():
             #logging.debug(f"sigma map for {survey}:\n{sigma_map}")
 
 
-            plt.subplot(1, len(surveys), i + 1)
-            plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
-            ax2.axvline(0, color='black', linestyle='--')
-            ax2.axhline(1, color='black', linestyle='--')
-            from scipy.stats import chi2 as chi2_scipy
+            #plt.subplot(1, len(surveys), i + 1)
+            #plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
+            ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain")
+            plt.colorbar(ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain"))
+            ax2.axhline(2.27e-5, color='black', linestyle='--')
+            ax2.axvline(1.7, color='black', linestyle='--')
+            #ax2.axvline(0, color='black', linestyle='--')
+            # from scipy.stats import chi2 as chi2_scipy
 
-            if isinstance(self.results[s], list):
-                df = self.results[s][0]
-            else:
-                df = self.results[s]
+            # if isinstance(self.results[s], list):
+            #     df = self.results[s][0]
+            # else:
+            #     df = self.results[s]
 
-            a = np.mean(df["alpha_error"]**2)
-            b = np.mean(df["beta_error"]**2)
-            c = np.mean(df["cov_alpha_beta"])
-            cov = np.array([[a, c], [c, b]])
-            sigma_1 = chi2_scipy.ppf([0.68], 2)
-            sigma_2 = chi2_scipy.ppf([0.95], 2)
-            norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
+            # a = np.mean(df["alpha_error"]**2)
+            # b = np.mean(df["beta_error"]**2)
+            # c = np.mean(df["cov_alpha_beta"])
+            # cov = np.array([[a, c], [c, b]])
+            # sigma_1 = chi2_scipy.ppf([0.68], 2)
+            # sigma_2 = chi2_scipy.ppf([0.95], 2)
+            # norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
 
-            sigma_1_exp = np.exp((-1/2) * sigma_1)
-            sigma_1_exp = sigma_1_exp[0] / norm
-            sigma_2_exp = np.exp((-1/2) * sigma_2)
-            sigma_2_exp = sigma_2_exp[0] / norm
-            y = np.linspace(0.7, 1.3, 50)
-            x = np.linspace(-0.3, 0.3, 50)
-            x, y = np.meshgrid(x, y)
-            CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors="C" + str(i+1))
-            # label the contours by survey
-            fmt = {}
-            strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            for k, label_str in zip(CS.levels, strs):
-                fmt[k] = label_str
-            ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
+            # sigma_1_exp = np.exp((-1/2) * sigma_1)
+            # sigma_1_exp = sigma_1_exp[0] / norm
+            # sigma_2_exp = np.exp((-1/2) * sigma_2)
+            # sigma_2_exp = sigma_2_exp[0] / norm
+            # y = np.linspace(0.7, 1.3, 50)
+            # x = np.linspace(-0.3, 0.3, 50)
+            # x, y = np.meshgrid(x, y)
+            # CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors="C" + str(i+1))
+            # # label the contours by survey
+            # fmt = {}
+            # strs = [f'1 sigma {survey}', f'2 sigma {survey}']
+            # for k, label_str in zip(CS.levels, strs):
+            #     fmt[k] = label_str
+            # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
             ax2.legend()
             #ax2.axvline(1.7, color='black', linestyle='--')
             # from scipy.stats import multivariate_normal
