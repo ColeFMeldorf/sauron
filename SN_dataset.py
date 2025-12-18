@@ -10,6 +10,7 @@ cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
 class SN_dataset():
+    """A class to hold a dataset of supernovae for one survey and type."""
     def __init__(self, dataframe, sntype, zcol=None, data_name=None, true_z_col=None):
         self.df = dataframe
         self.sntype = sntype
@@ -36,10 +37,11 @@ class SN_dataset():
                 logging.debug(f"Available column: {c}")
             if z_col_specified:
                 raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
+
             else:
 
                 raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!"
-                                 f" I checked: {possible_z_cols}")
+                                 f" I checked: {possible_z_cols}.")
 
         scone_col = []
         for c in self.df.columns:
@@ -55,6 +57,7 @@ class SN_dataset():
 
     @property
     def true_z_col(self):
+        """ If applicable, the column name for the true simulated redshift of the SNe in this dataset."""
         return self._true_z_col
 
     @true_z_col.setter
@@ -67,6 +70,19 @@ class SN_dataset():
         self._true_z_col = value
 
     def z_counts(self, z_bins, prob_thresh=None):
+        """Calculate the counts of supernovae in redshift bins, optionally applying a classifier
+        probability threshold.
+        Inputs
+        ------
+        z_bins : array-like
+            The edges of the redshift bins.
+        prob_thresh : float, optional
+            If provided, only include supernovae with classification probability above this threshold.
+        Returns
+        -------
+        counts : array
+            The counts of supernovae in each redshift bin.
+        """
         if prob_thresh is not None:
             return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
@@ -74,6 +90,8 @@ class SN_dataset():
         return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
 
     def mu_res(self):
+        """Calculate the Hubble residuals for the supernovae in this dataset. Currently not used."""
+        # TODO: Revisit these alpha and beta parameters
         alpha = 0.146
         beta = 3.03
         mu = 19.416 + self.df.mB + alpha * self.df.x1 - beta * self.df.c
@@ -81,11 +99,22 @@ class SN_dataset():
         return mu_res
 
     def prob_scone(self):
+        """Return the classification probabilities from the SCONE classifier."""
         if self.scone_col is None:
             raise ValueError(f"No valid prob_scone column!")
         return self.df[self.scone_col]
 
     def combine_with(self, dataset, newtype, data_name=None):
+        """Combine this dataset with another SN_dataset, returning a new SN_dataset.
+        Inputs
+        ------
+        dataset : SN_dataset
+            The other dataset to combine with.
+        newtype : str
+            The type of the new combined dataset. Should be one of "IA", "CC", or "all".
+        data_name : str, optional
+            Name of the new combined dataset.
+        """
         new_df = pd.concat([self.df, dataset.df], join="inner")
         if self.scone_col is not None and dataset.scone_col is not None:
             scone_prob_col = pd.concat([self.prob_scone(), dataset.prob_scone()])
