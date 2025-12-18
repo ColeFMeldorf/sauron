@@ -273,9 +273,10 @@ class sauron_runner():
                                                                             zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
                                                                             data_name=survey+f"_DATA_CC_{i+1}")
 
-            for i in range(self.fit_args_dict["n_datasets"][survey]):
-                logging.debug(f"Counts in data all {i+1}: {datasets[f"{survey}_DATA_ALL_{i+1}"].z_counts(self.fit_args_dict['z_bins'][survey])}")
-                logging.debug(f"Sum counts {np.sum(datasets[f"{survey}_DATA_ALL_{i+1}"].z_counts(self.fit_args_dict['z_bins'][survey]))}")
+            if not self.args.cheat_cc:
+                for i in range(self.fit_args_dict["n_datasets"][survey]):
+                    logging.debug(f"Counts in data all {i+1}: {datasets[f"{survey}_DATA_ALL_{i+1}"].z_counts(self.fit_args_dict['z_bins'][survey])}")
+                    logging.debug(f"Sum counts {np.sum(datasets[f"{survey}_DATA_ALL_{i+1}"].z_counts(self.fit_args_dict['z_bins'][survey]))}")
 
         self.datasets = datasets
         self.surveys = surveys
