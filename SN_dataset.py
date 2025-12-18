@@ -36,8 +36,6 @@ class SN_dataset():
             for c in self.df.columns:
                 logging.debug(f"Available column: {c}")
             if z_col_specified:
-                for c in self.df.columns:
-                    logging.debug(f"Available column: {c}")
                 raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
 
             else:

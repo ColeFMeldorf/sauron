@@ -240,9 +240,9 @@ class sauron_runner():
                                    "separate DUMP and SIM into IA and CC.")
 
                 dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
-                dump_cc_df = dump_df[dump_df[dump_sn_col].isin(ia_vals) is False]
+                dump_cc_df = dump_df[~dump_df[dump_sn_col].isin(ia_vals)]
                 sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
-                sim_cc_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim) is False]
+                sim_cc_df = sim_df[~sim_df[sim_sn_col].isin(ia_vals_sim)]
 
                 datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
                                                            data_name=survey+"_DUMP_IA")
@@ -566,8 +566,8 @@ class sauron_runner():
             # label the contours by survey
             fmt = {}
             strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            for k, s in zip(CS.levels, strs):
-                fmt[k] = s
+            for k, label_str in zip(CS.levels, strs):
+                fmt[k] = label_str
             ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
             ax2.legend()
 
