@@ -34,7 +34,7 @@ def main():
     datasets, surveys = runner.unpack_dataframes()
 
     # Covariance calculations, if requested
-    PROB_THRESH = 0.13
+    PROB_THRESH = 0.3
     runner.calculate_covariance(PROB_THRESH=PROB_THRESH)
 
     for survey in surveys:

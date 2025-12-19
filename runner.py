@@ -414,6 +414,7 @@ class sauron_runner():
 
         fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
+        logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
@@ -495,6 +496,7 @@ class sauron_runner():
 
 
             N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+            logging.debug(f"Total N_data before CC contamination: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)}")
             n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             #logging.warning("SWITCHED TO USING SIMULATIONS FOR R CALCULATION IN CC CONTAMINATION.")
             #N_data = np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
@@ -502,11 +504,13 @@ class sauron_runner():
             R = n_data / N_data
             #logging.debug(f"Calculated R: {R}")
             if debug:
+                logging.debug(f"True Ia counts from DATA: {datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)}")
+                logging.debug(f"Estimated Ia counts from prob thresh: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)}")
                 logging.debug(f"Calculated IA_frac: {IA_frac}")
                 true_Ia_frac = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins) / datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
                 logging.debug(f"True IA frac from DATA: {true_Ia_frac}")
                 xx = (z_bins[:-1] + z_bins[1:]) / 2
-                plt.plot(xx, datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins), label = "True Ia counts from DATA")
+                plt.plot(xx, datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins), color = "k", lw = 3, label = "True Ia counts from DATA")
                 plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins), label = "True ALL counts from DATA")
                 plt.title("DATA IA and DATA ALL counts for debugging CC contamination")
                 plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH), label = "Estimated IA counts from prob thresh")
@@ -533,14 +537,23 @@ class sauron_runner():
             IA_frac = np.nan_to_num(1 - CC_frac)
             #
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)  * IA_frac
+
+
+            logging.debug("OVERRIDING TO DO JUST A SCONE CUT FOR CC CONTAMINATION TESTING.")
+            n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
             logging.debug(f"Calculated n_data after CC contamination: {n_data}")
-            plt.title("DATA ALL counts after CC contamination")
-            plt.xlabel("Redshift")
-            plt.ylabel("Counts")
-            xx = (z_bins[:-1] + z_bins[1:]) / 2
-            plt.plot(xx, n_data, label="DATA ALL counts after CC contamination")
-            plt.legend()
-            plt.savefig(f"cc_contamination_after_{survey}_dataset{index}.png")
+
+            if debug:
+                true_counts = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
+                plt.title("DATA ALL counts after CC contamination")
+                plt.xlabel("Redshift")
+                plt.ylabel("Counts")
+                xx = (z_bins[:-1] + z_bins[1:]) / 2
+                plt.plot(xx, n_data, label="DATA ALL counts after CC contamination")
+                #plt.plot(xx, true_counts, label="True DATA IA counts")
+                plt.legend()
+                logging.debug(f"saving diagnostic plot to cc_contamination_after_{survey}_dataset{index}.png")
+                plt.savefig(f"cc_contamination_after_{survey}_dataset{index}.png")
             # logging.warning(f"Calculated IA fraction after CC contamination: {IA_frac}")
         else:
             if cheat:
