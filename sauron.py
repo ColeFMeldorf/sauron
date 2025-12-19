@@ -34,7 +34,8 @@ def main():
     datasets, surveys = runner.unpack_dataframes()
 
     # Covariance calculations, if requested
-    PROB_THRESH = 0.3
+    PROB_THRESH = 0.13
+    # This needs to be updated
     runner.calculate_covariance(PROB_THRESH=PROB_THRESH)
 
     for survey in surveys:
@@ -48,7 +49,6 @@ def main():
             index = i + 1
             runner.calculate_f_norm(survey, index)
             runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
-            #runner.calculate_f_norm(survey, index)
             runner.fit_rate(survey) # Should this have index?
             runner.add_results(survey, index)
 

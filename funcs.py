@@ -11,6 +11,8 @@ from scipy.special import erfinv
 
 
 def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+
+    logging.debug("Calculating chi2 for parameters: " + str(x))
     zJ = z_centers
     fJ = rate_function(zJ, x)
     fJ[0] = 0  # Ensure first bin is zero to avoid infinities
@@ -19,14 +21,25 @@ def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     var_Ei = np.abs(Ei)
     var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
 
+    logging.debug("Expected counts Ei: " + str(Ei))
+    logging.debug("Variance in Ei: " + str(var_Ei))
+    logging.debug("Variance in Si: " + str(var_Si))
+
     cov_stat = np.diag(var_Ei + var_Si)
     if cov_sys is None:
         cov_sys = 0
     cov = cov_stat + cov_sys
+
+    cov = np.nan_to_num(cov, nan=1e10)
+    logging.debug("Covariance matrix: " + str(cov))
     inv_cov = np.linalg.pinv(cov)
+    logging.debug("Inverse covariance matrix: " + str(inv_cov))
     resid_matrix = np.outer(n_data - Ei, n_data - Ei)
+    resid_matrix = np.nan_to_num(resid_matrix, nan=0)
+    logging.debug("Residual matrix: " + str(resid_matrix))
     chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
+    logging.debug("X2: " + str(chi_squared))
 
     return chi_squared[1:-1] # Exclude first and last bins (infinite bins)
 

@@ -155,6 +155,7 @@ def test_calc_effij():
     #             np.testing.assert_allclose(eff_ij[i, j], 0.0, atol=1e-7)
 
     eff_ij = runner.calculate_transfer_matrix(survey)
+    eff_ij = eff_ij[1:-1, 1:-1]  # Remove first and last rows/cols corresponding to over/underflow bins
     # Check that it is purely diagonal for this test case
     for i in range(eff_ij.shape[0]):
         for j in range(eff_ij.shape[1]):
@@ -166,7 +167,7 @@ def test_calc_effij():
     runner = sauron_runner(args)
     runner.unpack_dataframes()
     survey = "DES"
-    eff_ij = runner.calculate_transfer_matrix(survey)
+    eff_ij = runner.calculate_transfer_matrix(survey)[1:-1, 1:-1] # Remove first and last rows/cols corresponding to over/underflow bins
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
 
@@ -178,7 +179,8 @@ def test_chi():
     args.cheat_cc = False
     runner = sauron_runner(args)
     datasets, surveys = runner.unpack_dataframes()
-    runner.z_bins = np.arange(0, 1.4, 0.1)
+    runner.z_bins = np.concatenate(([-np.inf], np.arange(0, 1.4, 0.1), [np.inf]))
+
     survey = "DES"
     index = 1
     N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(runner.z_bins)
