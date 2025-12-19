@@ -1,6 +1,6 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law
+from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts
 from runner import sauron_runner
 
 # Standard Library
@@ -170,7 +170,6 @@ def test_calc_effij():
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
 
-from funcs import calculate_null_counts
 
 def test_chi():
     args = SimpleNamespace()
