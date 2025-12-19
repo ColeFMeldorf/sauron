@@ -170,6 +170,7 @@ def test_calc_effij():
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
 
+from funcs import calculate_null_counts
 
 def test_chi():
     args = SimpleNamespace()
@@ -179,6 +180,7 @@ def test_chi():
     runner = sauron_runner(args)
     datasets, surveys = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
+
     survey = "DES"
     index = 1
     N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(runner.z_bins)
@@ -186,10 +188,14 @@ def test_chi():
     f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
         np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
     n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
-    x = np.array([1.0, 0.0])
+    x = np.array([2.27e-5, 1.7])
     z_centers = 0.5 * (runner.z_bins[1:] + runner.z_bins[:-1])
+    null_counts = calculate_null_counts(N_gen=N_gen, true_rate_function=power_law, rate_params=x, z_bins=runner.z_bins,
+                                        z_centers=z_centers)
+
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-    np.testing.assert_allclose(chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, power_law),
+
+    np.testing.assert_allclose(chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
                                regression_chi, atol=1e-7)
 
 

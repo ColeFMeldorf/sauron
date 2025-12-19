@@ -9,12 +9,12 @@ from astropy.cosmology import LambdaCDM
 from astropy import units as u
 
 
-def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
     fJ = rate_function(zJ, x)
-    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
+    Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
     var_Ei = np.abs(Ei)
-    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
+    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
 
     cov_stat = np.diag(var_Ei + var_Si)
     if cov_sys is None:
