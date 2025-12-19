@@ -483,7 +483,7 @@ class sauron_runner():
             Name of the survey.
         """
         datasets = self.datasets
-        z_bins = self.fit_args_dict['z_bins'][survey]
+        z_bins = self.fit_args_dict['z_bins'][survey] # [1:-1]  # Remove -inf and inf edges
         cheat = self.args.cheat_cc
 
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
@@ -493,11 +493,7 @@ class sauron_runner():
             N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
             logging.debug(f"Total N_data before CC contamination: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)}")
             n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-            #logging.warning("SWITCHED TO USING SIMULATIONS FOR R CALCULATION IN CC CONTAMINATION.")
-            #N_data = np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
-            #n_data = np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
             R = n_data / N_data
-            #logging.debug(f"Calculated R: {R}")
             if debug:
                 logging.debug(f"True Ia counts from DATA: {datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)}")
                 logging.debug(f"Estimated Ia counts from prob thresh: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)}")
@@ -534,17 +530,14 @@ class sauron_runner():
             logging.debug(f"Calculated n_data after CC contamination: {n_data}")
 
             if debug:
-                true_counts = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
                 plt.title("DATA ALL counts after CC contamination")
                 plt.xlabel("Redshift")
                 plt.ylabel("Counts")
                 xx = (z_bins[:-1] + z_bins[1:]) / 2
                 plt.plot(xx, n_data, label="DATA ALL counts after CC contamination")
-                #plt.plot(xx, true_counts, label="True DATA IA counts")
                 plt.legend()
                 logging.debug(f"saving diagnostic plot to cc_contamination_after_{survey}_dataset{index}.png")
                 plt.savefig(f"cc_contamination_after_{survey}_dataset{index}.png")
-            # logging.warning(f"Calculated IA fraction after CC contamination: {IA_frac}")
         else:
             if cheat:
                 logging.warning("SKIPPING CC CONTAMINATION STEP. USING DATA_IA AS DATA_ALL.")

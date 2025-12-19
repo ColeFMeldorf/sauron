@@ -133,8 +133,9 @@ def test_calc_cov_term():
     survey = "DES"
     runner.z_bins = np.concatenate(([-np.inf], np.arange(0, 1.4, 0.1), [np.inf]))
     cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
-                                               survey)
-    cov_mat = cov_mat[1:-1, 1:-1]  # Exclude first and last bins (infinite bins)
+                                               survey)[1:-1, 1:-1]  # Remove first and last bins (infinite bins)
+
+    np.save(pathlib.Path(__file__).parent / "test_cov_term_plot.npy", cov_mat)
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
