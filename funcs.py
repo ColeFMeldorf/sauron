@@ -10,16 +10,14 @@ from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 
 
-def chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
-
-    logging.debug("Calculating chi2 for parameters: " + str(x))
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     fJ[0] = 0  # Ensure first bin is zero to avoid infinities
     fJ[-1] = 0  # Ensure last bin is zero to avoid infinities
-    Ei = np.sum(N_gen * eff_ij * f_norm * fJ, axis=0)
+    Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
     var_Ei = np.abs(Ei)
-    var_Si = np.sum(N_gen * eff_ij * f_norm**2 * fJ**2, axis=0)
+    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
 
     logging.debug("Expected counts Ei: " + str(Ei))
     logging.debug("Variance in Ei: " + str(var_Ei))

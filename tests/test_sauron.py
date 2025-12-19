@@ -1,6 +1,6 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law
+from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts
 from runner import sauron_runner
 
 # Standard Library
@@ -188,10 +188,14 @@ def test_chi():
     f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
         np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
     n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
-    x = np.array([1.0, 0.0])
+    x = np.array([2.27e-5, 1.7])
     z_centers = 0.5 * (runner.z_bins[1:] + runner.z_bins[:-1])
+    null_counts = calculate_null_counts(N_gen=N_gen, true_rate_function=power_law, rate_params=x, z_bins=runner.z_bins,
+                                        z_centers=z_centers)
+
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-    np.testing.assert_allclose(chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, power_law),
+
+    np.testing.assert_allclose(chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
                                regression_chi, atol=1e-7)
 
 
