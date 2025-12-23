@@ -303,14 +303,8 @@ class sauron_runner():
             logging.warning("Specifically, these are the bin edges of the zero count bins:", z_bins[unique_bad_bins])
 
         eff_ij = num/dump_counts
-        logging.debug(f"effij: {eff_ij}")
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
-
-        logging.debug(f"sum of eff_ij along axis 0: {np.sum(eff_ij, axis=0)}")
-        logging.debug(f"sum of eff_ij along axis 1: {np.sum(eff_ij, axis=1)}")
-
-        logging.debug(f"eff * dump counts: {np.sum(eff_ij * dump_counts, axis=0)}")
 
         return eff_ij
 
