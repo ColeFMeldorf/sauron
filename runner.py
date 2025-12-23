@@ -290,8 +290,10 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
         dump_counts = dump.z_counts(z_bins)
 
+        z_bins_expanded = np.concatenate(([-np.inf], z_bins, [np.inf]))
+
         num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
-                                   bins=[z_bins, z_bins])
+                                   bins=[z_bins_expanded, z_bins])
 
         if np.any(dump_counts == 0):
             logging.warning("Some redshift bins have zero simulated events! This may cause issues.")
@@ -303,6 +305,7 @@ class sauron_runner():
         eff_ij = num/dump_counts
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
+
         return eff_ij
 
     def fit_rate(self, survey):
@@ -338,7 +341,7 @@ class sauron_runner():
         cov_sys_list = [self.fit_args_dict['cov_sys'][s] for s in survey]
         for i, c in enumerate(cov_sys_list):
             if c is None:
-                cov_sys_list[i] = np.zeros_like(eff_ij_list[i])
+                cov_sys_list[i] = np.zeros((len(z_centers), len(z_centers)))
         cov_sys = block_diag(cov_sys_list).toarray()
 
         logging.debug("Shapes:")

@@ -156,6 +156,7 @@ def test_calc_effij():
 
     eff_ij = runner.calculate_transfer_matrix(survey)
     # Check that it is purely diagonal for this test case
+    eff_ij = eff_ij[1:-1,:]  # cutting off over and underflow bins in the true simulated redshift binning
     for i in range(eff_ij.shape[0]):
         for j in range(eff_ij.shape[1]):
             if i != j:
@@ -167,6 +168,7 @@ def test_calc_effij():
     runner.unpack_dataframes()
     survey = "DES"
     eff_ij = runner.calculate_transfer_matrix(survey)
+    eff_ij = eff_ij[1:-1,:]
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
 
