@@ -290,8 +290,24 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
         dump_counts = dump.z_counts(z_bins)
 
+        logging.debug(f"Dump counts: {dump_counts}")
+
+        hist_true = np.histogram(simulated_events[true_z_col], bins=z_bins)
+        hist_sim = np.histogram(simulated_events[sim_z_col], bins=z_bins)
+
+        logging.debug(f"true z col bins: {hist_true}")
+        logging.debug(f"sim z col bins: {hist_sim}")
+        logging.debug(f"total unbinned simulated events: {len(simulated_events)}")
+        logging.debug(f"Total in truez {hist_true[0].sum()}")
+        logging.debug(f"Total in simz {hist_sim[0].sum()}")
+
+        z_bins_expanded = np.concatenate(([-np.inf], z_bins, [np.inf]))
+
         num, _, _ = np.histogram2d(simulated_events[true_z_col], simulated_events[sim_z_col],
-                                   bins=[z_bins, z_bins])
+                                   bins=[z_bins_expanded, z_bins])
+
+        logging.debug(np.sum(num))
+        logging.debug(num)
 
         if np.any(dump_counts == 0):
             logging.warning("Some redshift bins have zero simulated events! This may cause issues.")
@@ -301,8 +317,15 @@ class sauron_runner():
             logging.warning("Specifically, these are the bin edges of the zero count bins:", z_bins[unique_bad_bins])
 
         eff_ij = num/dump_counts
+        logging.debug(f"effij: {eff_ij}")
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
+
+        logging.debug(f"sum of eff_ij along axis 0: {np.sum(eff_ij, axis=0)}")
+        logging.debug(f"sum of eff_ij along axis 1: {np.sum(eff_ij, axis=1)}")
+
+        logging.debug(f"eff * dump counts: {np.sum(eff_ij * dump_counts, axis=0)}")
+
         return eff_ij
 
     def fit_rate(self, survey):
@@ -338,7 +361,7 @@ class sauron_runner():
         cov_sys_list = [self.fit_args_dict['cov_sys'][s] for s in survey]
         for i, c in enumerate(cov_sys_list):
             if c is None:
-                cov_sys_list[i] = np.zeros_like(eff_ij_list[i])
+                cov_sys_list[i] = np.zeros((len(z_centers), len(z_centers)))
         cov_sys = block_diag(cov_sys_list).toarray()
 
         logging.debug("Shapes:")
@@ -604,6 +627,7 @@ class sauron_runner():
                 # Hard coding index to one needs to change. TODO: Refactor to avoid hardcoded index value
                 #  (currently set to 1). This function should not need index at all.
                 cov_sys = cov_thresh + cov_rate_norm
+                logging.debug(f"Cov sys shape in calc cov: {cov_sys.shape}")
             else:
                 cov_sys = None
             self.fit_args_dict['cov_sys'][survey] = cov_sys
