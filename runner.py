@@ -500,11 +500,12 @@ class sauron_runner():
             if datasets.get(f"{survey}_DATA_IA_{index}") is not None:
                 datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
             else:
+                raise notImplementedError("DATA_IA file not found, and cheat_cc is set. Cannot proceed.")
                 # If no DATA_IA file exists, filter DATA_ALL for IA SNe only
-                data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
-                ia_vals_data = survey_dict["DATA_ALL"]["IA_VALS"]
-                datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_ALL"][np.where(
-                    datasets[f"{survey}_DATA_ALL"].df[data_sn_col].isin(ia_vals_data))]
+                # data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
+                # ia_vals_data = survey_dict["DATA_ALL"]["IA_VALS"]
+                # datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_ALL"][np.where(
+                #     datasets[f"{survey}_DATA_ALL"].df[data_sn_col].isin(ia_vals_data))]
 
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
