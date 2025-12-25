@@ -1,6 +1,6 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law
+from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts
 from runner import sauron_runner
 
 # Standard Library
@@ -32,7 +32,7 @@ def test_regression_specz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.13"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -57,7 +57,7 @@ def test_regression_pz_5datasets():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.13"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -84,7 +84,8 @@ def test_perfect_recovery():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_sim.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov",
+           "--prob_thresh", "0.13"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -108,7 +109,8 @@ def test_perfect_recovery_pz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "--cheat_cc", "-o", str(outpath), "--no-sys_cov"]
+    cmd = ["python", str(sauron_path), str(config_path), "--cheat_cc", "-o", str(outpath), "--no-sys_cov",
+           "--prob_thresh", "0.13"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -156,6 +158,7 @@ def test_calc_effij():
 
     eff_ij = runner.calculate_transfer_matrix(survey)
     # Check that it is purely diagonal for this test case
+    eff_ij = eff_ij[1:-1,:]  # cutting off over and underflow bins in the true simulated redshift binning
     for i in range(eff_ij.shape[0]):
         for j in range(eff_ij.shape[1]):
             if i != j:
@@ -167,6 +170,7 @@ def test_calc_effij():
     runner.unpack_dataframes()
     survey = "DES"
     eff_ij = runner.calculate_transfer_matrix(survey)
+    eff_ij = eff_ij[1:-1,:]
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
 
@@ -179,6 +183,7 @@ def test_chi():
     runner = sauron_runner(args)
     datasets, surveys = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
+
     survey = "DES"
     index = 1
     N_gen = datasets[f"{survey}_DUMP_IA"].z_counts(runner.z_bins)
@@ -186,10 +191,14 @@ def test_chi():
     f_norm = np.sum(datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)) / \
         np.sum(datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins))
     n_data = datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
-    x = np.array([1.0, 0.0])
+    x = np.array([2.27e-5, 1.7])
     z_centers = 0.5 * (runner.z_bins[1:] + runner.z_bins[:-1])
+    null_counts = calculate_null_counts(N_gen=N_gen, true_rate_function=power_law, rate_params=x, z_bins=runner.z_bins,
+                                        z_centers=z_centers)
+
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-    np.testing.assert_allclose(chi2(x, N_gen, f_norm, z_centers, eff_ij, n_data, power_law),
+
+    np.testing.assert_allclose(chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
                                regression_chi, atol=1e-7)
 
 
@@ -202,7 +211,7 @@ def test_regression_pz_5datasets_covariance():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.13"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -229,7 +238,7 @@ def test_coverage_no_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov']
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov', "--prob_thresh", "0.13"]
     # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -275,7 +284,7 @@ def test_coverage_with_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]  # Added -c flag here
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.13"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -336,26 +345,27 @@ def test_perfect_recovery_multisurvey():
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
 
-# def test_regression_multisurvey():
-#     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
-#     This time, we do DES, LOWZ and ROMAN together.
-#     """
-#     outpath = pathlib.Path(__file__).parent / "test_regmultisurvey_output.csv"
-#     if os.path.exists(outpath):
-#         os.remove(outpath)
-#     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-#     config_path = pathlib.Path(__file__).parent / "test_config_multisurvey.yml"
-#     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
-#     result = subprocess.run(cmd, capture_output=False, text=True)
-#     if result.returncode != 0:
-#         raise RuntimeError(
-#             f"Command failed with exit code {result.returncode}\n"
-#             f"stdout:\n{result.stdout}\n"
-#             f"stderr:\n{result.stderr}"
-#         )
 
-#     results = pd.read_csv(outpath)
-#     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_perfect_output_multisurvey.csv")
-#     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
-#     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-#         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+def test_regression_multisurvey():
+    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
+    This time, we do DES, LOWZ and ROMAN together.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_regmultisurvey_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_multisurvey.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    results = pd.read_csv(outpath)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regmultisurvey_regression.csv")
+    # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
+        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
