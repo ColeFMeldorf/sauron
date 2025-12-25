@@ -25,14 +25,18 @@ def main():
     parser.add_argument("--sys_cov", "--systematic_covariance", action=argparse.BooleanOptionalAction,
                        help="Calculate systematic covariance matrix terms.", default=True)
     parser.add_argument("-p", "--plot", action="store_true", help="Generate diagnostic plots.", default=False)
+    parser.add_argument("--prob_thresh", type=float, default=0.5,
+                        help="Probability threshold for classifying SNe as Type IA.")
     args = parser.parse_args()
 
     runner = sauron_runner(args)
     runner.parse_global_fit_options()
 
+    PROB_THRESH = args.prob_thresh
+
     datasets, surveys = runner.unpack_dataframes()
     # Covariance calculations, if requested
-    PROB_THRESH = 0.5
+
     runner.calculate_covariance(PROB_THRESH=PROB_THRESH)
 
     for survey in surveys:
