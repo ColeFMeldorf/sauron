@@ -631,7 +631,8 @@ class sauron_runner():
         fig, ax = plt.subplots(2, sides, figsize=(12, 6))
         ax = ax.flatten()
         surveys = list(surveys)
-        surveys.remove("combined")
+        if "combined" in surveys:
+            surveys.remove("combined")
         for i, survey in enumerate(surveys):
             s = survey
             if survey != "combined":
