@@ -52,7 +52,7 @@ def main():
             index = i + 1
             runner.calculate_f_norm(survey, index)
             runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
-            #runner.calculate_f_norm(survey, index)
+
             runner.fit_rate(survey) # Should this have index?
             runner.add_results(survey, index)
 

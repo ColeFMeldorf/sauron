@@ -150,7 +150,7 @@ class sauron_runner():
                 if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
                     continue  # Skip non-data files
 
-                # logging.info(f"Loading {file} for {survey}...")
+
                 sntype = "IA" if "IA" in file else "CC"
 
                 if isinstance(survey_dict[file], dict):
@@ -213,7 +213,7 @@ class sauron_runner():
                         elif len(cols_in_df) == 1:
                             datasets[survey+"_"+file].true_z_col = cols_in_df[0]
                             logging.info(f"Auto-setting true z col for {survey}_{file} to {cols_in_df[0]}")
-                    #logging.info(f"Setting true z col for {survey}_{file} to {survey_dict[file].get("TRUEZCOL", None)}")
+
 
             if self.fit_args_dict["cc_are_sep"].get(survey) is None:
                 self.fit_args_dict["cc_are_sep"][survey] = True
@@ -302,7 +302,7 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
         self.fit_args_dict['N_gen'][survey] = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
         self.results[survey] = []
-        #self.results["combined"] = []
+
         self.final_counts[survey] = {}
         self.final_counts["combined"] = {}
 
@@ -413,7 +413,7 @@ class sauron_runner():
                                             rate_params=self.fit_args_dict["rate_params"][survey])
         self.fit_args_dict['null_counts'][survey] = null_counts
 
-        dump_counts = self.fit_args_dict['N_gen'][survey]
+
         logging.debug(f"data counts: {n_data}")
 
         fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
@@ -502,11 +502,10 @@ class sauron_runner():
             N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
             logging.debug(f"Total N_data before CC contamination: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)}")
             n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-            #logging.warning("SWITCHED TO USING SIMULATIONS FOR R CALCULATION IN CC CONTAMINATION.")
-            #N_data = np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
-            #n_data = np.sum(datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+
+
+
             R = n_data / N_data
-            #logging.debug(f"Calculated R: {R}")
             if debug:
                 logging.debug(f"True Ia counts from DATA: {datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)}")
                 logging.debug(f"Estimated Ia counts from prob thresh: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)}")
@@ -524,7 +523,6 @@ class sauron_runner():
                 plt.xlabel("Redshift")
                 plt.legend()
 
-                ds = datasets[f"{survey}_DATA_ALL_{index}"]
 
                 #plt.hist(ds.df[ds.scone_col], bins=20)
                 plt.savefig(f"cc_contamination_debug_{survey}_dataset{index}.png")
