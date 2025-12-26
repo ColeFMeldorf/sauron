@@ -417,6 +417,11 @@ class sauron_runner():
         logging.debug(f"data counts: {n_data}")
 
         fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
+        logging.debug(f"z_centers: {z_centers}")
+        logging.debug(f"null counts: {null_counts}")
+        logging.debug(f"eff_ij: {eff_ij}")
+        logging.debug(f"f_norms: {f_norms}")
+        logging.debug(f"fJ_0: {fJ_0}")
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
         logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
@@ -541,7 +546,6 @@ class sauron_runner():
             IA_frac = np.nan_to_num(1 - CC_frac)
             #
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)  * IA_frac
-
 
             logging.debug("OVERRIDING TO DO JUST A SCONE CUT FOR CC CONTAMINATION TESTING.")
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
@@ -789,7 +793,8 @@ class sauron_runner():
             Dataset index.
         """
         z_bins = self.fit_args_dict['z_bins'][survey]
-        if self.fit_args_dict["cc_are_sep"][survey] or self.args.cheat_cc:
+        if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None or self.args.cheat_cc:
+            logging.debug("Calculating f_norm using DATA_IA dataset.")
             f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
 
