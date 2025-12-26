@@ -788,8 +788,7 @@ class sauron_runner():
             Dataset index.
         """
         z_bins = self.fit_args_dict['z_bins'][survey]
-        #if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None or self.args.cheat_cc:
-        if self.fit_args_dict["cc_are_sep"][survey] or self.args.cheat_cc:
+        if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None or self.args.cheat_cc:
             logging.debug("Calculating f_norm using DATA_IA dataset.")
             f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
