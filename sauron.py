@@ -11,7 +11,7 @@ from runner import sauron_runner
 # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s',
+    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
     datefmt='%H:%M:%S'
 )
 
@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--sys_cov", "--systematic_covariance", action=argparse.BooleanOptionalAction,
                        help="Calculate systematic covariance matrix terms.", default=True)
     parser.add_argument("-p", "--plot", action="store_true", help="Generate diagnostic plots.", default=False)
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.", default=False)
     parser.add_argument("--prob_thresh", type=float, default=0.5,
                         help="Probability threshold for classifying SNe as Type IA.")
     args = parser.parse_args()
@@ -35,6 +36,7 @@ def main():
     PROB_THRESH = args.prob_thresh
 
     datasets, surveys = runner.unpack_dataframes()
+
     # Covariance calculations, if requested
 
     runner.calculate_covariance(PROB_THRESH=PROB_THRESH)
@@ -48,8 +50,9 @@ def main():
         for i in range(n_datasets):
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
-            runner.calculate_CC_contamination(PROB_THRESH, index, survey)
             runner.calculate_f_norm(survey, index)
+            runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
+
             runner.fit_rate(survey) # Should this have index?
             runner.add_results(survey, index)
 
@@ -59,6 +62,7 @@ def main():
         runner.fit_rate(surveys)
         runner.add_results("combined")
         surveys.extend(["combined"])
+
 
     if args.plot:
         runner.summary_plot()

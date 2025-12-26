@@ -54,6 +54,7 @@ class SN_dataset():
         else:
             self.scone_col = scone_col[0]
 
+
     @property
     def true_z_col(self):
         """ If applicable, the column name for the true simulated redshift of the SNe in this dataset."""
@@ -100,7 +101,7 @@ class SN_dataset():
     def prob_scone(self):
         """Return the classification probabilities from the SCONE classifier."""
         if self.scone_col is None:
-            raise ValueError("No valid prob_scone column!")
+            raise ValueError(f"No valid prob_scone column!")
         return self.df[self.scone_col]
 
     def combine_with(self, dataset, newtype, data_name=None):
