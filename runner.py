@@ -108,8 +108,6 @@ class sauron_runner():
         else:
             logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
 
-        self.fit_args_dict["z_bins"][survey] = np.concatenate(([-np.inf], self.fit_args_dict["z_bins"][survey], [np.inf]))
-        logging.debug(f"Z BINS {self.fit_args_dict['z_bins'][survey]}")
         self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] +
                                                    self.fit_args_dict["z_bins"][survey][:-1]) / 2
 
@@ -367,8 +365,10 @@ class sauron_runner():
         f_norms = []
         for s in survey:
             z_bins = self.fit_args_dict['z_bins'][s]
+            logging.debug(f"z_bins for survey {s}: {z_bins}")
             z_bins_list.extend(z_bins)
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
+            logging.debug("z_centers so far: " + str(z_centers))
             f_norm = self.fit_args_dict['f_norm'][s]
             f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
 
@@ -417,11 +417,6 @@ class sauron_runner():
         logging.debug(f"data counts: {n_data}")
 
         fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
-        logging.debug(f"z_centers: {z_centers}")
-        logging.debug(f"null counts: {null_counts}")
-        logging.debug(f"eff_ij: {eff_ij}")
-        logging.debug(f"f_norms: {f_norms}")
-        logging.debug(f"fJ_0: {fJ_0}")
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
         logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
