@@ -50,9 +50,10 @@ def main():
         for i in range(n_datasets):
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
-            runner.calculate_f_norm(survey, index)
-            runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
 
+            runner.fit_args_dict["n_data"][survey] = \
+                runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
+            runner.calculate_f_norm(survey, index)
             runner.fit_rate(survey) # Should this have index?
             runner.add_results(survey, index)
 
@@ -62,7 +63,6 @@ def main():
         runner.fit_rate(surveys)
         runner.add_results("combined")
         surveys.extend(["combined"])
-
 
     if args.plot:
         runner.summary_plot()
