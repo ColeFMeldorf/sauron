@@ -850,7 +850,8 @@ class sauron_runner():
             Name of the survey.
         """
         datasets = self.datasets
-        files_input = yaml.safe_load(open(self.args.config, 'r'))[survey]
+        with open(self.args.config, 'r') as config_file:
+            files_input = yaml.safe_load(config_file)[survey]
         n_datasets = self.fit_args_dict["n_datasets"][survey]
 
         # Something to think about: Should cuts be applied to ALL datasets, CC datasets and IA datasets,
@@ -858,8 +859,27 @@ class sauron_runner():
         cuts = files_input.get("CUTS", None)
         if cuts is not None:
             for col in list(cuts.keys()):
-                min_val = float(cuts[col].split(",")[0])
-                max_val = float(cuts[col].split(",")[1])
+                raw_spec = cuts[col]
+                try:
+                    parts = [p.strip() for p in str(raw_spec).split(",")]
+                    if len(parts) != 2:
+                        raise ValueError(
+                            f"Expected two comma-separated values for cut, got {len(parts)} part(s)"
+                        )
+                    min_val = float(parts[0])
+                    max_val = float(parts[1])
+                except (ValueError, IndexError, TypeError) as exc:
+                    logging.error(
+                        "Invalid cut specification for survey %s, column %s: %r. "
+                        "Expected format 'min,max' with numeric values.",
+                        survey,
+                        col,
+                        raw_spec,
+                    )
+                    raise ValueError(
+                        f"Invalid cut specification for survey '{survey}', column '{col}': "
+                        f"{raw_spec!r}. Expected format 'min,max' with numeric values."
+                    ) from exc
 
                 logging.info(f"Applying cut on {col} for survey {survey}: min={min_val}, max={max_val}")
 

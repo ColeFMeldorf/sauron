@@ -378,7 +378,7 @@ def test_apply_cut():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    datasets, surveys = runner.unpack_dataframes()
+    runner.unpack_dataframes()
     survey = "DES"
     n_before = len(runner.datasets[f"{survey}_DATA_ALL_1"].df)
 

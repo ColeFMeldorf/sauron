@@ -123,19 +123,19 @@ class SN_dataset():
         # Note that this forces the two data sets to have the
         # same z_col. I can't think of a scenario where this would be a problem, but maybe it could be.
 
-    def apply_cut(self, col, min, max):
+    def apply_cut(self, col, min_val, max_val):
         """Apply a cut to the dataset on a specified column, updating the dataframe in place.
         Inputs
         ------
         col : str
             The column name to apply the cut on.
-        min : float
+        min_val : float
             The minimum value for the cut (inclusive).
-        max : float
+        max_val : float
             The maximum value for the cut (inclusive).
         """
         try:
-            self.df = self.df[(self.df[col] >= min) & (self.df[col] <= max)]
+            self.df = self.df[(self.df[col] >= min_val) & (self.df[col] <= max_val)]
         except KeyError:
             logging.warning("Available columns for applying cut:")
             for c in self.df.columns:
