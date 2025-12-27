@@ -115,7 +115,7 @@ class sauron_runner():
         if simulated_rate_func is not None:
             self.fit_args_dict["simulated_rate_function"][survey] = simulated_rate_func
             self.fit_args_dict["simulated_rate_function"]["combined"] = simulated_rate_func
-            logging.warning(f"Using specified RATE_FUNC for the surveys to define combined rate func. This needs to be fixed later.")
+            logging.warning("Using specified RATE_FUNC for the surveys to define combined rate func. This needs to be fixed later.")
         else:
             raise ValueError(f"RATE_FUNC must be specified in FIT_OPTIONS for {survey}.")
 
@@ -124,7 +124,8 @@ class sauron_runner():
             simulated_rate_params = [float(i) for i in simulated_rate_params.split(",")]
             self.fit_args_dict["rate_params"][survey] = simulated_rate_params
             self.fit_args_dict["rate_params"]["combined"] = simulated_rate_params
-            logging.warning(f"Using specified RATE_PARAMS for the surveys to define combined rate params. This needs to be fixed later.")
+            logging.warning("Using specified RATE_PARAMS for the surveys to define combined rate params."
+            " This needs to be fixed later.")
         else:
             raise ValueError(f"RATE_PARAMS must be specified in FIT_OPTIONS for {survey}.")
 
@@ -149,7 +150,6 @@ class sauron_runner():
             for i, file in enumerate(list(survey_dict.keys())):
                 if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
                     continue  # Skip non-data files
-
 
                 sntype = "IA" if "IA" in file else "CC"
 
@@ -213,7 +213,6 @@ class sauron_runner():
                         elif len(cols_in_df) == 1:
                             datasets[survey+"_"+file].true_z_col = cols_in_df[0]
                             logging.info(f"Auto-setting true z col for {survey}_{file} to {cols_in_df[0]}")
-
 
             if self.fit_args_dict["cc_are_sep"].get(survey) is None:
                 self.fit_args_dict["cc_are_sep"][survey] = True
@@ -285,7 +284,8 @@ class sauron_runner():
                     datasets[f"{survey}_DATA_IA_"+str(i+1)] = SN_dataset(data_ia_df, "IA",
                                                                          zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
                                                                          data_name=survey+f"_DATA_IA_{i+1}")
-                    logging.debug(f"z bin counts for {survey}_DATA_IA_{i+1}: {datasets[f'{survey}_DATA_IA_'+str(i+1)].z_counts(self.fit_args_dict['z_bins'][survey])}")
+                    logging.debug("z bin counts for {survey}_DATA_IA_{i+1}: "
+                                  f"{datasets[f'{survey}_DATA_IA_'+str(i+1)].z_counts(self.fit_args_dict['z_bins'][survey])}")
 
         self.datasets = datasets
         self.surveys = surveys
@@ -341,7 +341,6 @@ class sauron_runner():
             logging.warning("Specifically, these are the bin edges of the zero count bins:", z_bins[unique_bad_bins])
 
         eff_ij = num/dump_counts
-
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
 
@@ -412,7 +411,6 @@ class sauron_runner():
                                             true_rate_function=true_rate_function,
                                             rate_params=self.fit_args_dict["rate_params"][survey])
         self.fit_args_dict['null_counts'][survey] = null_counts
-
 
         logging.debug(f"data counts: {n_data}")
 
@@ -509,12 +507,12 @@ class sauron_runner():
                 true_Ia_frac = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins) / datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
                 logging.debug(f"True IA frac from DATA: {true_Ia_frac}")
                 xx = (z_bins[:-1] + z_bins[1:]) / 2
-                plt.plot(xx, datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins), color = "k", lw = 3, label = "True Ia counts from DATA")
-                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins), label = "True ALL counts from DATA")
+                plt.plot(xx, datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins), color="k", lw=3, label="True Ia counts from DATA")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins), label="True ALL counts from DATA")
                 plt.title("DATA IA and DATA ALL counts for debugging CC contamination")
-                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH), label = "Estimated IA counts from prob thresh")
-                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.2), label = "Estimated IA counts from prob thresh 0.2")
-                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.5), label = "Estimated IA counts from prob thresh 0.5")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH), label="Estimated IA counts from prob thresh")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.2), label="Estimated IA counts from prob thresh 0.2")
+                plt.plot(xx, datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=0.5), label="Estimated IA counts from prob thresh 0.5")
                 plt.ylabel("Counts")
                 plt.xlabel("Redshift")
                 plt.legend()
@@ -843,3 +841,81 @@ class sauron_runner():
             "cov_alpha_beta": cov[0, 1],
             "survey": survey_name
             }, index=np.array([0])))
+
+    def apply_cuts(self, survey):
+        """Apply any cuts specified in the config to the datasets for a given survey.
+        The cuts are determined by the CUTS field for each survey in the config file,
+        of the form:
+        CUTS:
+          parameter_name: min_value, max_value      
+        For example:
+        DES:
+          CUTS:
+            x1: -3, 3
+            c: -0.3, 0.3
+        The parameter names much match the column names in the dataset DataFrame exactly.
+
+        Inputs
+        ------
+        survey : str
+            Name of the survey.
+        """
+        datasets = self.datasets
+        with open(self.args.config, 'r') as config_file:
+            files_input = yaml.safe_load(config_file)[survey]
+        n_datasets = self.fit_args_dict["n_datasets"][survey]
+
+        # Something to think about: Should cuts be applied to ALL datasets, CC datasets and IA datasets,
+        # or just IA datasets? For now, I am applying to all datasets.
+        cuts = files_input.get("CUTS", None)
+        if cuts is not None:
+            for col in list(cuts.keys()):
+                raw_spec = cuts[col]
+                try:
+                    parts = [p.strip() for p in str(raw_spec).split(",")]
+                    if len(parts) != 2:
+                        raise ValueError(
+                            f"Expected two comma-separated values for cut, got {len(parts)} part(s)"
+                        )
+                    min_val = float(parts[0])
+                    max_val = float(parts[1])
+                except (ValueError, IndexError, TypeError) as exc:
+                    logging.error(
+                        "Invalid cut specification for survey %s, column %s: %r. "
+                        "Expected format 'min,max' with numeric values.",
+                        survey,
+                        col,
+                        raw_spec,
+                    )
+                    raise ValueError(
+                        f"Invalid cut specification for survey '{survey}', column '{col}': "
+                        f"{raw_spec!r}. Expected format 'min,max' with numeric values."
+                    ) from exc
+
+                logging.info(f"Applying cut on {col} for survey {survey}: min={min_val}, max={max_val}")
+
+                # Apply cuts to all datasets
+                if datasets.get(f"{survey}_SIM_ALL") is not None:
+                    logging.debug(f"Applying cuts to {survey}_SIM_ALL")
+                    datasets[f"{survey}_SIM_ALL"].apply_cut(col, min_val, max_val)
+
+                if datasets.get(f"{survey}_SIM_IA") is not None:
+                    logging.debug(f"Applying cuts to {survey}_SIM_IA")
+                    datasets[f"{survey}_SIM_IA"].apply_cut(col, min_val, max_val)
+
+                if datasets.get(f"{survey}_SIM_CC") is not None:
+                    logging.debug(f"Applying cuts to {survey}_SIM_CC")
+                    datasets[f"{survey}_SIM_CC"].apply_cut(col, min_val, max_val)
+
+                for i in range(n_datasets):
+                    if datasets.get(f"{survey}_DATA_ALL_{i+1}") is not None:
+                        logging.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}")
+                        datasets[f"{survey}_DATA_ALL_{i+1}"].apply_cut(col, min_val, max_val)
+                    if datasets.get(f"{survey}_DATA_IA_{i+1}") is not None:
+                        logging.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}")
+                        datasets[f"{survey}_DATA_IA_{i+1}"].apply_cut(col, min_val, max_val)
+                    if datasets.get(f"{survey}_DATA_CC_{i+1}") is not None:
+                        logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}")
+                        datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
+
+

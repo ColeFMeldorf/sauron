@@ -43,7 +43,8 @@ def main():
 
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
-        runner.get_counts(survey)
+        runner.get_counts(survey) # This only gets dump counts, which have no cuts applied
+        runner.apply_cuts(survey)
         runner.calculate_transfer_matrix(survey)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]
