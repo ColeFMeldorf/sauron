@@ -833,6 +833,17 @@ class sauron_runner():
 
     def apply_cuts(self, survey):
         """Apply any cuts specified in the config to the datasets for a given survey.
+        The cuts are determined by the CUTS field for each survey in the config file,
+        of the form:
+        CUTS:
+          parameter_name: min_value, max_value      
+        For example:
+        DES:
+          CUTS:
+            x1: -3, 3
+            c: -0.3, 0.3
+        The parameter names much match the column names in the dataset DataFrame exactly.
+
         Inputs
         ------
         survey : str
