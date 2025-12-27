@@ -158,7 +158,7 @@ def test_calc_effij():
 
     eff_ij = runner.calculate_transfer_matrix(survey)
     # Check that it is purely diagonal for this test case
-    eff_ij = eff_ij[1:-1,:]  # cutting off over and underflow bins in the true simulated redshift binning
+    eff_ij = eff_ij[1:-1, :]  # cutting off over and underflow bins in the true simulated redshift binning
     for i in range(eff_ij.shape[0]):
         for j in range(eff_ij.shape[1]):
             if i != j:
@@ -170,7 +170,7 @@ def test_calc_effij():
     runner.unpack_dataframes()
     survey = "DES"
     eff_ij = runner.calculate_transfer_matrix(survey)
-    eff_ij = eff_ij[1:-1,:]
+    eff_ij = eff_ij[1:-1, :]
     regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
 
@@ -369,3 +369,38 @@ def test_regression_multisurvey():
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+
+
+def test_apply_cut():
+    """Test that apply_cuts method in sauron.py works as expected."""
+    args = SimpleNamespace()
+    config_path = pathlib.Path(__file__).parent / "test_config_cuts.yml"
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+    n_before = len(runner.datasets[f"{survey}_DATA_ALL_1"].df)
+
+    max_x1 = np.max(runner.datasets[f"{survey}_DATA_ALL_1"].df["x1"])
+    assert max_x1 > 2, "Dataset is already within cut range pre cut."
+    min_x1 = np.min(runner.datasets[f"{survey}_DATA_ALL_1"].df["x1"])
+    assert min_x1 < -2, "Dataset is already within cut range pre cut."
+    max_c = np.max(runner.datasets[f"{survey}_DATA_ALL_1"].df["c"])
+    assert max_c >= 0.3, "Dataset is already within cut range pre cut."
+    min_c = np.min(runner.datasets[f"{survey}_DATA_ALL_1"].df["c"])
+    assert min_c <= -0.3, "Dataset is already within cut range pre cut."
+
+    runner.apply_cuts(survey)
+    n_after = len(runner.datasets[f"{survey}_DATA_ALL_1"].df)
+
+    assert n_after < n_before, "apply_cuts did not reduce the number of SNe as expected."
+
+    max_x1 = np.max(runner.datasets[f"{survey}_DATA_ALL_1"].df["x1"])
+    assert max_x1 <= 2, "apply_cuts did not apply the x1 cut correctly."
+    min_x1 = np.min(runner.datasets[f"{survey}_DATA_ALL_1"].df["x1"])
+    assert min_x1 >= -2, "apply_cuts did not apply the x1 cut correctly."
+    max_c = np.max(runner.datasets[f"{survey}_DATA_ALL_1"].df["c"])
+    assert max_c <= 0.3, "apply_cuts did not apply the cut correctly."
+    min_c = np.min(runner.datasets[f"{survey}_DATA_ALL_1"].df["c"])
+    assert min_c >= -0.3, "apply_cuts did not apply the cut correctly."

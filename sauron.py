@@ -44,6 +44,7 @@ def main():
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
         runner.get_counts(survey)
+        runner.apply_cuts(survey)
         runner.calculate_transfer_matrix(survey)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]
