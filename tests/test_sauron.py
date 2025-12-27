@@ -7,6 +7,7 @@ from runner import sauron_runner
 import os
 import logging
 import pathlib
+import pytest
 from types import SimpleNamespace
 import subprocess
 from scipy.stats import chi2 as scipy_chi2
@@ -404,3 +405,7 @@ def test_apply_cut():
     assert max_c <= 0.3, "apply_cuts did not apply the cut correctly."
     min_c = np.min(runner.datasets[f"{survey}_DATA_ALL_1"].df["c"])
     assert min_c >= -0.3, "apply_cuts did not apply the cut correctly."
+
+    survey = "DES_BAD_1"
+    with pytest.raises(ValueError, match="Invalid cut specification"):
+        runner.apply_cuts(survey)
