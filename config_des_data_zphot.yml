@@ -8,8 +8,8 @@ DES:
   FIT_OPTIONS:
     RATE_FUNC: power_law
     RATE_PARAMS: 2.27E-5, 1.7
-    Z_BINS: 9
-    MIN_Z: 0.2
+    Z_BINS: 10
+    MIN_Z: 0.1
     MAX_Z: 0.9
   CUTS:
     x1: -3, 3
