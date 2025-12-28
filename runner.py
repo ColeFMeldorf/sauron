@@ -450,6 +450,7 @@ class sauron_runner():
         Ei_err = np.std(Ei_draws, axis=1)
 
         self.final_counts[survey]["predicted_counts"] = Ei
+        self.final_counts[survey]["x0_counts"] = x0_counts
         self.final_counts[survey]["observed_counts"] = n_data
         self.final_counts[survey]["predicted_counts_err"] = Ei_err
         self.n_data = n_data
@@ -543,8 +544,8 @@ class sauron_runner():
             plt.subplot(1,2,2)
 
             plt.plot(n_data, label="DATA ALL counts after CC contamination")
-            logging.debug("OVERRIDING TO DO JUST A SCONE CUT FOR CC CONTAMINATION TESTING.")
-            n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+            #logging.debug("OVERRIDING TO DO JUST A SCONE CUT FOR CC CONTAMINATION TESTING.")
+            #n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
             plt.plot(n_data, label="DATA ALL counts using scone cut")
             plt.axhline(0, color='k', linestyle='--', lw=1)
             logging.debug(f"Calculated n_data after CC contamination: {n_data}")
@@ -651,6 +652,9 @@ class sauron_runner():
                 ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
                              fmt='o', label=f" {survey} Data")
+                ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
+                             yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
+                             fmt='o', label=f" {survey} Initial Prediction ")
                 ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
@@ -703,7 +707,7 @@ class sauron_runner():
             # for k, label_str in zip(CS.levels, strs):
             #     fmt[k] = label_str
             # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
-            ax2.legend()
+            #ax2.legend()
             #ax2.axvline(1.7, color='black', linestyle='--')
             # from scipy.stats import multivariate_normal
             # from scipy.stats import chi2 as chi2_scipy
@@ -909,13 +913,16 @@ class sauron_runner():
 
                 for i in range(n_datasets):
                     if datasets.get(f"{survey}_DATA_ALL_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}")
+                        logging.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}, from {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_ALL_{i+1}"].apply_cut(col, min_val, max_val)
+                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries remain")
                     if datasets.get(f"{survey}_DATA_IA_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}")
+                        logging.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}, from {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_IA_{i+1}"].apply_cut(col, min_val, max_val)
+                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries remain")
                     if datasets.get(f"{survey}_DATA_CC_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}")
+                        logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
+                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
 
 

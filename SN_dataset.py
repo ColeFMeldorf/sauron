@@ -54,6 +54,10 @@ class SN_dataset():
         else:
             self.scone_col = scone_col[0]
 
+    @property
+    def total_counts(self):
+        """Return the total number of supernovae in this dataset."""
+        return len(self.df)
 
     @property
     def true_z_col(self):

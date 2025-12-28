@@ -26,6 +26,7 @@ def main():
                        help="Calculate systematic covariance matrix terms.", default=True)
     parser.add_argument("-p", "--plot", action="store_true", help="Generate diagnostic plots.", default=False)
     parser.add_argument("--debug", action="store_true", help="Enable debug logging.", default=False)
+    parser.add_argument("--skip-cuts", action="store_true", help="Skip applying cuts to the data.", default=False)
     parser.add_argument("--prob_thresh", type=float, default=0.5,
                         help="Probability threshold for classifying SNe as Type IA.")
     args = parser.parse_args()
@@ -44,7 +45,8 @@ def main():
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
         runner.get_counts(survey) # This only gets dump counts, which have no cuts applied
-        runner.apply_cuts(survey)
+        if not args.skip_cuts:
+            runner.apply_cuts(survey)
         runner.calculate_transfer_matrix(survey)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]
