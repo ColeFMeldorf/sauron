@@ -425,7 +425,7 @@ class sauron_runner():
         logging.debug(f"Least Squares Result: {result}")
         N = len(n_data)
         n = len(result)
-        cov_x *= (infodict['fvec']).sum() / (N-n)
+        cov_x *= (infodict['fvec']**2).sum() / (N-n)
         # See scipy doc for leastsq for explanation of this covariance rescaling
         logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
 
