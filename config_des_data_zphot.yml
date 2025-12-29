@@ -3,6 +3,7 @@
 
 FIT_OPTIONS:
   RATE_FUNCTION: power_law
+  X0: 2.2E-5, 1.6
 
 DES:
   FIT_OPTIONS:
@@ -11,6 +12,7 @@ DES:
     Z_BINS: 10
     MIN_Z: 0.1
     MAX_Z: 0.9
+
   CUTS:
     x1: -3, 3
     c: -0.3, 0.3

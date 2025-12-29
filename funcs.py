@@ -10,6 +10,52 @@ from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 
 
+def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+    zJ = z_centers
+    fJ = rate_function(zJ, x)
+    Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+    var_Ei = np.abs(Ei)
+    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+
+    cov_stat = np.diag(var_Ei + var_Si)
+    if cov_sys is None:
+        cov_sys = 0
+    cov = cov_stat + cov_sys
+
+    # logging.debug("Trying Cholesky decomposition to check covariance matrix...")
+    # np.linalg.cholesky(cov)
+
+    # if np.any(cov_stat < 0):
+    #     raise ValueError("Non-positive values in statistical covariance matrix!")
+    # if np.any(cov_sys < 0):
+    #     raise ValueError("Non-positive values in systematic covariance matrix!")
+
+    # if np.any(cov < 0):
+    #     raise ValueError("Non-positive values in covariance matrix!")
+
+    inv_cov = np.linalg.pinv(cov)
+
+    # logging.debug("Trying Cholesky decomposition to check covariance matrix...")
+    # np.linalg.cholesky(inv_cov)
+
+    # if np.any(inv_cov < 0):
+    #     logging.debug(f"inv_cov matrix:\n{inv_cov}")
+    #     raise ValueError("Non-positive values in inverse covariance matrix!")
+
+    #resid_matrix = np.outer(n_data - Ei, n_data - Ei)
+    #chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
+
+    resid_vector = n_data - Ei
+
+    chi_squared = resid_vector.T * inv_cov @ resid_vector
+
+    # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
+    # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
+    # either way I believe.
+    # chi = np.sqrt(chi_squared)
+
+    return chi_squared
+
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
     fJ = rate_function(zJ, x)
@@ -42,11 +88,12 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
     #     logging.debug(f"inv_cov matrix:\n{inv_cov}")
     #     raise ValueError("Non-positive values in inverse covariance matrix!")
 
-    resid_matrix = np.outer(n_data - Ei, n_data - Ei)
-    chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
+    #resid_matrix = np.outer(n_data - Ei, n_data - Ei)
+    #chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
+    resid_vector = n_data - Ei
 
-    # chi_squared = resid_vector.T * inv_cov @ resid_vector
+    chi_squared = resid_vector.T @ inv_cov @ resid_vector
 
     # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
     # I believe the minimizer wants the unsquared version, but it is minimizing the same thing

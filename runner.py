@@ -16,7 +16,7 @@ from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
 # Sauron modules
-from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_matrix_term, rescale_CC_for_cov,
+from funcs import (power_law, turnover_power_law, chi2, chi2_unsummed, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts)
 from SN_dataset import SN_dataset
 
@@ -419,9 +419,25 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-                                          n_data, self.rate_function, cov_sys),
-                                          full_output=True)[:3]
+        result, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+                                         n_data, self.rate_function, cov_sys),
+                                         full_output=True)[:3]
+
+        from scipy.optimize import minimize
+
+        logging.debug(f"Least Squares Result: {result}")
+
+        result = minimize(
+                    chi2,
+                    x0=self.x0,
+                    args=(null_counts, f_norms, z_centers, eff_ij,
+                          n_data, self.rate_function, cov_sys),
+                    method='L-BFGS-B'
+                )
+
+
+
+
         logging.debug(f"Least Squares Result: {result}")
         N = len(n_data)
         n = len(result)
