@@ -37,7 +37,7 @@ func_name_dictionary = {
 }
 
 default_x0_dictionary = {
-    "power_law": (2.27e-5, 1.7),
+    "power_law": (2.3e-5, 1.8), # Change this back
     "turnover_power_law": (1, 0, 1, -2),
     "dual_power_law": (1, 0, 1, -2)
 }
@@ -419,40 +419,54 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        result, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-                                         n_data, self.rate_function, cov_sys),
-                                         full_output=True)[:3]
+        fit_method = "leastsq"
+        if fit_method == "leastsq":
 
-        from scipy.optimize import minimize
+            fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+                                                  n_data, self.rate_function, cov_sys),
+                                                  full_output=True)[:3]
+            logging.debug(f"Least Squares Result: {fit_params}")
+            N = len(n_data)
+            n = len(self.x0)
+            cov_x *= (infodict['fvec']**2).sum() / (N-n)
+            # See scipy doc for leastsq for explanation of this covariance rescaling
+            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+            chi_squared = np.sum(infodict['fvec'])
 
-        logging.debug(f"Least Squares Result: {result}")
+        elif fit_method == "minimize":
 
-        result = minimize(
-                    chi2,
-                    x0=self.x0,
-                    args=(null_counts, f_norms, z_centers, eff_ij,
-                          n_data, self.rate_function, cov_sys),
-                    method='L-BFGS-B'
-                )
+            from scipy.optimize import minimize
+            result = minimize(
+                        chi2,
+                        x0=self.x0,
+                        args=(null_counts, f_norms, z_centers, eff_ij,
+                              n_data, self.rate_function, cov_sys),
+                        method=None
+                    )
+            fit_params = result.x
 
+            logging.debug(f"Least Squares Result: {fit_params}")
 
+            N = len(z_centers)  # number of data points
+            n = len(self.x0)  # number of parameters
+            # This calculation of residual variance is only valid if minimizing sum of squares
 
+            def errFit(hess_inv, resVariance):
+                return np.sqrt( np.diag( hess_inv * resVariance))
+            residual_variance = result.fun / (N - n)
+            dFit = errFit( result.hess_inv,  result.fun/(N-n))
+            logging.debug(f"Standard errors Stack Overflow: {dFit}")
+            cov_x = result.hess_inv * residual_variance
+            chi_squared = result.fun
 
-        logging.debug(f"Least Squares Result: {result}")
-        N = len(n_data)
-        n = len(result)
-        cov_x *= (infodict['fvec']**2).sum() / (N-n)
-        # See scipy doc for leastsq for explanation of this covariance rescaling
-        logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-
-        fJ = result[0] * (1 + z_centers)**result[1]
+        fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
 
         logging.debug(f"Predicted Counts Ei: {Ei}")
 
         # Estimate errors on Ei
-        alpha_draws = np.random.normal(result[0], np.sqrt(cov_x[0, 0]), size=1000)
-        beta_draws = np.random.normal(result[1], np.sqrt(cov_x[1, 1]), size=1000)
+        alpha_draws = np.random.normal(fit_params[0], np.sqrt(cov_x[0, 0]), size=1000)
+        beta_draws = np.random.normal(fit_params[1], np.sqrt(cov_x[1, 1]), size=1000)
         fJ_draws = alpha_draws * (1 + z_centers)[:, np.newaxis]**beta_draws
         N_gen = N_gen[:, np.newaxis]  # for broadcasting
         eff_ij = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
@@ -470,12 +484,12 @@ class sauron_runner():
         self.final_counts[survey]["predicted_counts_err"] = Ei_err
         self.n_data = n_data
 
-        self.final_counts[survey]["result"] = result
+        self.final_counts[survey]["result"] = fit_params
         self.final_counts[survey]["covariance"] = cov_x
-        self.final_counts[survey]["chi"] = np.sum(infodict['fvec'])
+        self.final_counts[survey]["chi"] = chi_squared
         # Should there not be an index here?
 
-        return result, np.sum(infodict['fvec']), Ei, cov_x, Ei_err
+        return fit_params, chi_squared, Ei, cov_x, Ei_err
 
     def save_results(self):
         """Save results to output file specified in args."""
