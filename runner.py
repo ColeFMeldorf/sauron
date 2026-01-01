@@ -419,19 +419,50 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        fit_method = "leastsq"
+        fit_method = "minimize"
+        N = len(z_centers)  # number of data points
+        n = len(self.x0)  # number of parameters
+
+
+        #### doing an extra fit to compare ###
+        from scipy.optimize import minimize
+        result = minimize(
+                        chi2,
+                        x0=self.x0,
+                        args=(null_counts, f_norms, z_centers, eff_ij,
+                              n_data, self.rate_function, cov_sys),
+                        method=None
+                    )
+        residual_variance_minimize = result.fun / (N - n)
+        fit_params_minimize = result.x
+        cov_x_minimize = result.hess_inv * residual_variance_minimize
+        chi_squared_minimize = result.fun
+        logging.debug(f"Minimize Result: {fit_params_minimize}")
+        def errFit(hess_inv, resVariance):
+            return np.sqrt( np.diag( hess_inv * resVariance))
+        dFit = errFit( result.hess_inv,  residual_variance_minimize)
+        logging.debug(f"Standard errors Stack Overflow: {dFit}")
+        logging.debug(f"residual variance minimize: {residual_variance_minimize}")
+
         if fit_method == "leastsq":
 
             fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
                                                   n_data, self.rate_function, cov_sys),
                                                   full_output=True)[:3]
             logging.debug(f"Least Squares Result: {fit_params}")
-            N = len(n_data)
-            n = len(self.x0)
-            cov_x *= (infodict['fvec']**2).sum() / (N-n)
+            residual_variance = (infodict['fvec']**2).sum() / (N - n)
+            logging.debug(f"residual variance leastsq: {residual_variance}")
+            cov_x *= residual_variance * 0.5
             # See scipy doc for leastsq for explanation of this covariance rescaling
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-            chi_squared = np.sum(infodict['fvec'])
+            chi_squared = np.sum(infodict['fvec']**2)
+            logging.debug(f"chi_squared leastsq: {chi_squared}")
+            logging.debug(f"chi squared minimize: {chi_squared_minimize}")
+            #np.testing.assert_allclose(residual_variance, residual_variance_minimize, rtol = .05)
+            #np.testing.assert_allclose(fit_params, fit_params_minimize, rtol = .05)
+            #np.testing.assert_allclose(np.sqrt(np.diag(cov_x)), dFit, rtol = .1)
+            #np.testing.assert_allclose(cov_x, cov_x_minimize, rtol = .1)
+            #np.testing.assert_allclose(chi_squared, chi_squared_minimize, rtol = .05)
 
         elif fit_method == "minimize":
 
@@ -447,14 +478,12 @@ class sauron_runner():
 
             logging.debug(f"Least Squares Result: {fit_params}")
 
-            N = len(z_centers)  # number of data points
-            n = len(self.x0)  # number of parameters
             # This calculation of residual variance is only valid if minimizing sum of squares
 
             def errFit(hess_inv, resVariance):
                 return np.sqrt( np.diag( hess_inv * resVariance))
             residual_variance = result.fun / (N - n)
-            dFit = errFit( result.hess_inv,  result.fun/(N-n))
+            dFit = errFit( result.hess_inv,  residual_variance)
             logging.debug(f"Standard errors Stack Overflow: {dFit}")
             cov_x = result.hess_inv * residual_variance
             chi_squared = result.fun

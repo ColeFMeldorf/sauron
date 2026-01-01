@@ -54,7 +54,10 @@ def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_functi
     # either way I believe.
     # chi = np.sqrt(chi_squared)
 
-    return chi_squared
+    chi = np.sqrt(np.abs(chi_squared))
+
+    #return chi_squared
+    return chi
 
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
@@ -98,7 +101,7 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
     # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
     # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
     # either way I believe.
-    # chi = np.sqrt(chi_squared)
+    chi = np.sqrt(chi_squared)
 
     return chi_squared
 

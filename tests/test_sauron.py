@@ -284,7 +284,7 @@ def test_coverage_no_sys():
 
 def test_coverage_with_sys():
     """In this test we check the coverage properties of SAURON when there are no systematics.
-        We should recover the truth (1, 0) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
+        We should recover the truth (2.27e-5, 1.7) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
     """
     outpath = pathlib.Path(__file__).parent / "test_coverage_sys_output.csv"
     if os.path.exists(outpath):
