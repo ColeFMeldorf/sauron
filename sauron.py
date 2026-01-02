@@ -57,14 +57,14 @@ def main():
             runner.fit_args_dict["n_data"][survey] = \
                 runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
             runner.calculate_f_norm(survey, index)
-            runner.fit_rate(survey) # Should this have index?
+            runner.fit_rate(survey, index)
             runner.add_results(survey, index)
 
     # Fit all surveys together
 
     if len(surveys) > 1:
-        runner.fit_rate(surveys)
-        runner.add_results("combined")
+        runner.fit_rate(surveys, index=1) # Only one combined dataset
+        runner.add_results("combined", index=1)
         surveys.extend(["combined"])
 
     if args.plot:
