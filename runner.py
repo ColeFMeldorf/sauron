@@ -350,6 +350,18 @@ class sauron_runner():
         survey : str or list
             Name of the survey, or list of surveys to fit together.
         """
+
+         ### Catch indexing mistakes
+        fit_arg_dict_keys = list(self.fit_args_dict.keys())
+        for key in fit_arg_dict_keys:
+            if key not in ["z_bins", "z_centers", "n_datasets", "simulated_rate_function", "rate_params", "N_gen", "eff_ij", "null_counts"]:
+                logging.debug(f"Checking key {key} for indexing mistakes...")
+                sub_dict = self.fit_args_dict[key][survey]
+                logging.debug(f"sub dict{sub_dict}")
+                sub_dict_keys = list(sub_dict.keys())
+                for sub_key in sub_dict_keys:
+                    assert type(sub_key) == int, f"Dataset index {sub_key} in fit_args_dict['{key}']['{survey}'] is not an integer!"
+
         # How will this work when I am fitting a non-power law?
         # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         if not isinstance(survey, list):
@@ -359,6 +371,9 @@ class sauron_runner():
         z_centers = []
         z_bins_list = []
         f_norms = []
+
+
+
         for s in survey:
             z_bins = self.fit_args_dict['z_bins'][s]
             logging.debug(f"z_bins for survey {s}: {z_bins}")
@@ -370,7 +385,7 @@ class sauron_runner():
         z_centers = np.array(z_centers)
         f_norms = np.array(f_norms)
         # This needs to be done survey by survey because f_norm is per survey
-        n_data = np.concatenate([self.fit_args_dict['n_data'][s] for s in survey])
+        n_data = np.concatenate([self.fit_args_dict['n_data'][s][index] for s in survey])
         N_gen = np.concatenate([self.fit_args_dict['N_gen'][s] for s in survey])
         eff_ij_list = [self.fit_args_dict['eff_ij'][s] for s in survey]
         eff_ij = block_diag(eff_ij_list).toarray()
@@ -386,14 +401,12 @@ class sauron_runner():
         # Note this only allows for individual surveys or all, no subsets. Fix this later.
         if survey == "combined":
             self.fit_args_dict['f_norm'][survey] = {}
-            self.fit_args_dict['f_norm'][survey][1] = f_norms # For now, combined only ever has one dataset
+            self.fit_args_dict['f_norm'][survey][1] = f_norms  # For now, combined only ever has one dataset
             self.fit_args_dict['z_bins'][survey] = z_bins_list
             self.fit_args_dict['n_data'][survey] = {}
             self.fit_args_dict['n_data'][survey][1] = n_data
-            self.fit_args_dict['N_gen'][survey] = {}
-            self.fit_args_dict['N_gen'][survey][1] = N_gen
-            self.fit_args_dict['eff_ij'][survey] = {}
-            self.fit_args_dict['eff_ij'][survey][1] = eff_ij
+            self.fit_args_dict['N_gen'][survey] = N_gen  # No index, same for each dataset
+            self.fit_args_dict['eff_ij'][survey] = eff_ij  # No index, same for each dataset
             self.fit_args_dict['cov_sys'][survey] = {}
             self.fit_args_dict['cov_sys'][survey][1] = cov_sys
             self.fit_args_dict['z_centers'][survey] = z_centers
@@ -788,7 +801,7 @@ class sauron_runner():
         else:
 
             logging.debug("Couldn't find DATA_IA dataset for f_norm calculation so I am using inferred Ia counts.")
-            num_Ia = self.fit_args_dict["n_data"][survey]
+            num_Ia = self.fit_args_dict["n_data"][survey][index]
             f_norm = np.sum(num_Ia) / \
                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
 
