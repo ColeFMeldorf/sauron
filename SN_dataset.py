@@ -105,7 +105,7 @@ class SN_dataset():
     def prob_scone(self):
         """Return the classification probabilities from the SCONE classifier."""
         if self.scone_col is None:
-            raise ValueError(f"No valid prob_scone column!")
+            raise ValueError("No valid prob_scone column!")
         return self.df[self.scone_col]
 
     def combine_with(self, dataset, newtype, data_name=None):
