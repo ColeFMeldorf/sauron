@@ -16,8 +16,9 @@ from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
 # Sauron modules
-from funcs import (power_law, turnover_power_law, chi2, chi2_unsummed, calculate_covariance_matrix_term, rescale_CC_for_cov,
-                   calculate_null_counts)
+from funcs import (power_law, turnover_power_law, chi2, chi2_unsummed, calculate_covariance_matrix_term,
+                   rescale_CC_for_cov,
+                   calculate_null_counts, chi2_to_sigma)
 from SN_dataset import SN_dataset
 
 # Get the matplotlib logger
@@ -37,7 +38,7 @@ func_name_dictionary = {
 }
 
 default_x0_dictionary = {
-    "power_law": (2.27e-5, 1.7),  # Change this back
+    "power_law": (2.27e-5, 1.7),
     "turnover_power_law": (1, 0, 1, -2),
     "dual_power_law": (1, 0, 1, -2)
 }
@@ -696,19 +697,12 @@ class sauron_runner():
             normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
             logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
 
-            from funcs import chi2_to_sigma
             sigma_map = chi2_to_sigma(normalized_map, dof=len(z_centers) - 2)
-            #logging.debug(f"sigma map for {survey}:\n{sigma_map}")
-
-
-            #plt.subplot(1, len(surveys), i + 1)
-            #plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
-            #ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain")
-            #plt.colorbar(ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain"))
 
             ax2.imshow(sigma_map, extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="plasma")
             ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-            plt.colorbar(ax2.imshow(sigma_map, extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="plasma"), ax=ax2, label="Sigma Level")
+            plt.colorbar(ax2.imshow(sigma_map, extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto',
+                         cmap="plasma"), ax=ax2, label="Sigma Level")
             ax2.axhline(2.27e-5, color='black', linestyle='--')
             ax2.axvline(1.7, color='black', linestyle='--')
 
@@ -719,75 +713,6 @@ class sauron_runner():
 
             ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
                          color='white', ms=10, label=f"Fit results {survey}")
-
-
-            #ax2.axvline(0, color='black', linestyle='--')
-            # from scipy.stats import chi2 as chi2_scipy
-
-
-
-            # a = np.mean(df["alpha_error"]**2)
-            # b = np.mean(df["beta_error"]**2)
-            # c = np.mean(df["cov_alpha_beta"])
-            # cov = np.array([[a, c], [c, b]])
-            # sigma_1 = chi2_scipy.ppf([0.68], 2)
-            # sigma_2 = chi2_scipy.ppf([0.95], 2)
-            # norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
-
-            # sigma_1_exp = np.exp((-1/2) * sigma_1)
-            # sigma_1_exp = sigma_1_exp[0] / norm
-            # sigma_2_exp = np.exp((-1/2) * sigma_2)
-            # sigma_2_exp = sigma_2_exp[0] / norm
-            # y = np.linspace(0.7, 1.3, 50)
-            # x = np.linspace(-0.3, 0.3, 50)
-            # x, y = np.meshgrid(x, y)
-            # CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors="C" + str(i+1))
-            # # label the contours by survey
-            # fmt = {}
-            # strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            # for k, label_str in zip(CS.levels, strs):
-            #     fmt[k] = label_str
-            # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
-            #ax2.legend()
-            #ax2.axvline(1.7, color='black', linestyle='--')
-            # from scipy.stats import multivariate_normal
-            # from scipy.stats import chi2 as chi2_scipy
-
-            # if isinstance(self.results[s], list):
-            #     df = self.results[s][0]
-            # else:
-            #     df = self.results[s]
-
-
-            # a = np.mean(df["alpha_error"]**2)
-            # b = np.mean(df["beta_error"]**2)
-            # c = np.mean(df["cov_alpha_beta"])
-            # cov = np.array([[a, c], [c, b]])
-            # logging.debug(f"Covariance matrix for {survey}:\n{cov}")
-            # sigma_1 = chi2_scipy.ppf([0.68], 2)
-            # sigma_2 = chi2_scipy.ppf([0.95], 2)
-            # norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
-            # logging.debug(f"Determinant of covariance matrix for {survey}: {np.linalg.det(cov)}")
-
-            # sigma_1_exp = np.exp((-1/2) * sigma_1)
-            # sigma_1_exp = sigma_1_exp[0] / norm
-            # sigma_2_exp = np.exp((-1/2) * sigma_2)
-            # sigma_2_exp = sigma_2_exp[0] / norm
-
-            # x = np.linspace(2.0e-5, 2.6e-5, 100)
-            # y = np.linspace(1.4, 2, 100)
-            # x, y = np.meshgrid(x, y)
-            # #[sigma_2_exp, sigma_1_exp]
-            # logging.debug(f"Sigma levels: {[sigma_2_exp, sigma_1_exp]}")
-
-            # CS = ax2.contour(x, y, normalized_map, levels=10, colors="k")
-            # fmt = {}
-            # strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            # for l, s in zip(CS.levels, strs):
-            #     fmt[l] = s
-            # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
-            # ax2.set_title(f"Chi2 Map for {survey}")
-            # ax2.legend()
 
         fig.savefig("summary_plot.png")
 
@@ -965,5 +890,4 @@ class sauron_runner():
                         logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
                         logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
-
 
