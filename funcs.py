@@ -42,22 +42,23 @@ def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_functi
     #     logging.debug(f"inv_cov matrix:\n{inv_cov}")
     #     raise ValueError("Non-positive values in inverse covariance matrix!")
 
-    #resid_matrix = np.outer(n_data - Ei, n_data - Ei)
-    #chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
+    resid_matrix = np.outer(n_data - Ei, n_data - Ei)
+    chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
-    resid_vector = n_data - Ei
+    # The difference between the above and below actually matters even though I think it shouldn't.
 
-    chi_squared = resid_vector.T * inv_cov @ resid_vector
+    #resid_vector = n_data - Ei
+    #chi_squared = resid_vector.T * inv_cov @ resid_vector
 
     # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
     # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
     # either way I believe.
     # chi = np.sqrt(chi_squared)
 
-    chi = np.sqrt(np.abs(chi_squared))
+    #chi = np.sqrt(np.abs(chi_squared))
 
-    #return chi_squared
-    return chi
+    return chi_squared
+    #return chi
 
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers

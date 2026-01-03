@@ -1,6 +1,6 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts
+from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, chi2_unsummed
 from runner import sauron_runner
 
 # Standard Library
@@ -199,7 +199,7 @@ def test_chi():
 
     regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
 
-    np.testing.assert_allclose(chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
+    np.testing.assert_allclose(chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
                                regression_chi, atol=1e-7)
 
 

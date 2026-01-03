@@ -37,7 +37,7 @@ func_name_dictionary = {
 }
 
 default_x0_dictionary = {
-    "power_law": (2.3e-5, 1.8), # Change this back
+    "power_law": (2.27e-5, 1.7),  # Change this back
     "turnover_power_law": (1, 0, 1, -2),
     "dual_power_law": (1, 0, 1, -2)
 }
@@ -419,30 +419,30 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        fit_method = "minimize"
+        fit_method = "leastsq"
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
 
         #### doing an extra fit to compare ###
-        from scipy.optimize import minimize
-        result = minimize(
-                        chi2,
-                        x0=self.x0,
-                        args=(null_counts, f_norms, z_centers, eff_ij,
-                              n_data, self.rate_function, cov_sys),
-                        method=None
-                    )
-        residual_variance_minimize = result.fun / (N - n)
-        fit_params_minimize = result.x
-        cov_x_minimize = result.hess_inv * residual_variance_minimize
-        chi_squared_minimize = result.fun
-        logging.debug(f"Minimize Result: {fit_params_minimize}")
-        def errFit(hess_inv, resVariance):
-            return np.sqrt( np.diag( hess_inv * resVariance))
-        dFit = errFit( result.hess_inv,  residual_variance_minimize)
-        logging.debug(f"Standard errors Stack Overflow: {dFit}")
-        logging.debug(f"residual variance minimize: {residual_variance_minimize}")
+        # from scipy.optimize import minimize
+        # result = minimize(
+        #                 chi2,
+        #                 x0=self.x0,
+        #                 args=(null_counts, f_norms, z_centers, eff_ij,
+        #                       n_data, self.rate_function, cov_sys),
+        #                 method=None
+        #             )
+        # residual_variance_minimize = result.fun / (N - n)
+        # fit_params_minimize = result.x
+        # cov_x_minimize = result.hess_inv * residual_variance_minimize
+        # chi_squared_minimize = result.fun
+        # logging.debug(f"Minimize Result: {fit_params_minimize}")
+        # def errFit(hess_inv, resVariance):
+        #     return np.sqrt( np.diag( hess_inv * resVariance))
+        # dFit = errFit( result.hess_inv,  residual_variance_minimize)
+        # logging.debug(f"Standard errors Stack Overflow: {dFit}")
+        # logging.debug(f"residual variance minimize: {residual_variance_minimize}")
 
         if fit_method == "leastsq":
 
@@ -452,12 +452,15 @@ class sauron_runner():
             logging.debug(f"Least Squares Result: {fit_params}")
             residual_variance = (infodict['fvec']**2).sum() / (N - n)
             logging.debug(f"residual variance leastsq: {residual_variance}")
-            cov_x *= residual_variance * 0.5
+            cov_x *= residual_variance  # * 0.5
+            # The factor of 1/2 is needed to agree with minimize, unclear why.
+
             # See scipy doc for leastsq for explanation of this covariance rescaling
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-            chi_squared = np.sum(infodict['fvec']**2)
+            chi_squared = np.sum(infodict['fvec']) # If we take the square root in the chi func then
+            # I think this should be squared but I am changing back for regression
             logging.debug(f"chi_squared leastsq: {chi_squared}")
-            logging.debug(f"chi squared minimize: {chi_squared_minimize}")
+            #logging.debug(f"chi squared minimize: {chi_squared_minimize}")
             #np.testing.assert_allclose(residual_variance, residual_variance_minimize, rtol = .05)
             #np.testing.assert_allclose(fit_params, fit_params_minimize, rtol = .05)
             #np.testing.assert_allclose(np.sqrt(np.diag(cov_x)), dFit, rtol = .1)
