@@ -412,6 +412,7 @@ def test_apply_cut():
 
 
 def test_des_data_regression():
+    """Regression test on real DES data with photo-z to ensure Sauron output is unchanged."""
     outpath = pathlib.Path(__file__).parent / "test_desdatareg_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
