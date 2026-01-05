@@ -20,11 +20,17 @@ from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_mat
                    calculate_null_counts)
 from SN_dataset import SN_dataset
 
+
+
 # Get the matplotlib logger
 matplotlib_logger = logging.getLogger('matplotlib')
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
@@ -489,51 +495,58 @@ class sauron_runner():
         cheat = self.args.cheat_cc
 
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
+            method = "scone_cut"
             if method == "Lasker":
-                for i in [0.0, 0.13, 0.5]:
-                    PROB_THRESH = i
-                    IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
-                            datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+                #for i in [0.0, 0.13, 0.5]:
+                IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
+                           datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-                    N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
-                    logging.debug(f"Total N_data before CC contamination: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)}")
-                    n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+                N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+                logging.debug(f"Total N_data before CC contamination: {datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)}")
+                n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-                    R = n_data / N_data
+                R = n_data / N_data
 
-                    N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-                    n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+                N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+                n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-                    N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
-                    n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+                logger.debug(f"N_IA_sim: {N_IA_sim}, n_IA_sim: {n_IA_sim}")
 
-                    S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+                N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
+                n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+                logger.debug(f"N_CC_sim: {N_CC_sim}, n_CC_sim: {n_CC_sim}")
 
-                    CC_frac = (1 - IA_frac) * S
-                    IA_frac = np.nan_to_num(1 - CC_frac)
-                    n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)  * IA_frac
+                S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
+                logger.debug(f"numerator: {(R * N_IA_sim - n_IA_sim)}")
+                logger.debug(f"denominator: {(n_CC_sim - R * N_CC_sim)}")
+                logger.debug(f"R: {R}")
+                logger.debug(f"S: {S}")
+
+                CC_frac = (1 - IA_frac) * S
+                IA_frac = np.nan_to_num(1 - CC_frac)
+                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)  * IA_frac
 
 
-                    if debug:
+                if debug:
 
-                        plt.subplot(1,2,1)
-                        plt.plot(CC_frac, label="CC fraction vs z after contamination")
-                        plt.plot(IA_frac, label="IA fraction vs z after contamination")
-                        plt.axhline(0, color='k', linestyle='--', lw=1)
-                        plt.legend()
-                        plt.subplot(1,2,2)
-                        plt.plot(n_data, label="DATA ALL counts after CC contamination, PROB_THRESH="+str(PROB_THRESH))
-                        #n_data_scone_cut = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                        #plt.plot(n_data_scone_cut, label="DATA ALL counts using scone cut")
-                        plt.axhline(0, color='k', linestyle='--', lw=1)
-                        logging.debug(f"Calculated n_data after CC contamination: {n_data}")
-                        n_true = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
-                        n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
-                plt.plot(n_true, label="DATA IA true counts")
-                plt.plot(n_all, label="DATA ALL counts before CC contamination")
-                plt.legend()
-                plt.savefig(f"scone_decontamination_{survey}_dataset{index}.png")
-                plt.clf()
+                    plt.subplot(1,2,1)
+                    plt.plot(CC_frac, label="CC fraction vs z after contamination")
+                    plt.plot(IA_frac, label="IA fraction vs z after contamination")
+                    plt.axhline(0, color='k', linestyle='--', lw=1)
+                    plt.legend()
+                    plt.subplot(1,2,2)
+                    plt.plot(n_data, label="DATA ALL counts after CC contamination, PROB_THRESH="+str(PROB_THRESH))
+                    #n_data_scone_cut = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                    #plt.plot(n_data_scone_cut, label="DATA ALL counts using scone cut")
+                    plt.axhline(0, color='k', linestyle='--', lw=1)
+                    logging.debug(f"Calculated n_data after CC contamination: {n_data}")
+                    n_true = datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)
+                    n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+                    plt.plot(n_true, label="DATA IA true counts")
+                    plt.plot(n_all, label="DATA ALL counts before CC contamination")
+                    plt.legend()
+                    plt.savefig(f"scone_decontamination_{survey}_dataset{index}.png")
+                    plt.clf()
             elif method == "scone_cut":
                 logging.debug("Performing just a scone cut for decontamination.")
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)

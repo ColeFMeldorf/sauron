@@ -8,6 +8,9 @@ from astropy.cosmology import LambdaCDM
 
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 class SN_dataset():
     """A class to hold a dataset of supernovae for one survey and type."""

@@ -409,3 +409,44 @@ def test_apply_cut():
     survey = "DES_BAD_1"
     with pytest.raises(ValueError, match="Invalid cut specification"):
         runner.apply_cuts(survey)
+
+
+def test_cc_decontam():
+    config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
+    #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    args = SimpleNamespace()
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    runner.z_bins = np.arange(0.1, 1.0, 0.1)
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+
+    PROB_THRESH = 0.5
+    logger.debug("successfully reran")
+
+    pulls = []
+
+    pulls = np.empty((50,8))
+    for i in range(50):
+        index = i+1
+        runner.fit_args_dict['z_bins'][survey] = np.arange(0.1, 1.0, 0.1)
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
+
+        n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
+        residual = n_true - n_calc
+        pull = residual / np.sqrt(n_true)
+
+        pulls[i,:] = pull
+        #pulls.extend(list(pull))
+
+    pulls = np.array(pulls)
+
+    means = np.mean(pulls, axis=0)
+    stds = np.std(pulls, axis=0)
+
+    logger.debug(f"MEANS: {means}")
+    logger.debug(f"STDS: {stds}")
+
+
+    np.testing.assert_allclose(pulls, 0.0, atol=1)
