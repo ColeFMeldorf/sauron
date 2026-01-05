@@ -22,33 +22,15 @@ def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_functi
         cov_sys = 0
     cov = cov_stat + cov_sys
 
-    # logging.debug("Trying Cholesky decomposition to check covariance matrix...")
-    # np.linalg.cholesky(cov)
-
-    # if np.any(cov_stat < 0):
-    #     raise ValueError("Non-positive values in statistical covariance matrix!")
-    # if np.any(cov_sys < 0):
-    #     raise ValueError("Non-positive values in systematic covariance matrix!")
-
-    # if np.any(cov < 0):
-    #     raise ValueError("Non-positive values in covariance matrix!")
-
     inv_cov = np.linalg.pinv(cov)
 
-    # logging.debug("Trying Cholesky decomposition to check covariance matrix...")
-    # np.linalg.cholesky(inv_cov)
-
-    # if np.any(inv_cov < 0):
-    #     logging.debug(f"inv_cov matrix:\n{inv_cov}")
-    #     raise ValueError("Non-positive values in inverse covariance matrix!")
-
     resid_matrix = np.outer(n_data - Ei, n_data - Ei)
-    chi_squared_old = np.sum(inv_cov * resid_matrix, axis=0)
+    chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
     # The difference between the above and below actually matters even though I think it shouldn't.
 
-    resid_vector = n_data - Ei
-    chi_squared = resid_vector.T * inv_cov @ resid_vector
+    #resid_vector = n_data - Ei
+    #chi_squared = resid_vector.T * inv_cov @ resid_vector
 
     # np.testing.assert_allclose(chi_squared, chi_squared_old, rtol=1e-5,
     #                            err_msg="Chi squared calculations do not match!")
@@ -75,25 +57,7 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
         cov_sys = 0
     cov = cov_stat + cov_sys
 
-    # logging.debug("Trying Cholesky decomposition to check covariance matrix...")
-    # np.linalg.cholesky(cov)
-
-    # if np.any(cov_stat < 0):
-    #     raise ValueError("Non-positive values in statistical covariance matrix!")
-    # if np.any(cov_sys < 0):
-    #     raise ValueError("Non-positive values in systematic covariance matrix!")
-
-    # if np.any(cov < 0):
-    #     raise ValueError("Non-positive values in covariance matrix!")
-
     inv_cov = np.linalg.pinv(cov)
-
-    # logging.debug("Trying Cholesky decomposition to check covariance matrix...")
-    # np.linalg.cholesky(inv_cov)
-
-    # if np.any(inv_cov < 0):
-    #     logging.debug(f"inv_cov matrix:\n{inv_cov}")
-    #     raise ValueError("Non-positive values in inverse covariance matrix!")
 
     #resid_matrix = np.outer(n_data - Ei, n_data - Ei)
     #chi_squared = np.sum(inv_cov * resid_matrix, axis=0)

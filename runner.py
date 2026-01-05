@@ -345,6 +345,17 @@ class sauron_runner():
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
 
+        if self.args.debug:
+            plt.clf()
+            plt.imshow(eff_ij, origin='lower', aspect='auto',
+                       extent=[z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]],
+                       vmin=0, vmax=1)
+            plt.colorbar(label="Efficiency")
+            plt.title(f"Transfer Matrix for {survey}")
+            plt.xlabel("Reconstructed Redshift")
+            plt.ylabel("True Redshift")
+            plt.savefig(f"transfer_matrix_{survey}.png")
+
         return eff_ij
 
     def fit_rate(self, survey):
@@ -414,6 +425,8 @@ class sauron_runner():
 
         logging.debug(f"data counts: {n_data}")
 
+        logging.debug(f"x0: {self.x0}")
+
         fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
         logging.debug(f"Initial predicted counts (x0): {x0_counts}")
@@ -461,12 +474,6 @@ class sauron_runner():
             chi_squared = np.sum(infodict['fvec']) # If we take the square root in the chi func then
             # I think this should be squared but I am changing back for regression
             logging.debug(f"chi_squared leastsq: {chi_squared}")
-            #logging.debug(f"chi squared minimize: {chi_squared_minimize}")
-            #np.testing.assert_allclose(residual_variance, residual_variance_minimize, rtol = .05)
-            #np.testing.assert_allclose(fit_params, fit_params_minimize, rtol = .05)
-            #np.testing.assert_allclose(np.sqrt(np.diag(cov_x)), dFit, rtol = .1)
-            #np.testing.assert_allclose(cov_x, cov_x_minimize, rtol = .1)
-            #np.testing.assert_allclose(chi_squared, chi_squared_minimize, rtol = .05)
 
         elif fit_method == "minimize":
 
@@ -587,8 +594,10 @@ class sauron_runner():
                     plt.legend()
                     plt.subplot(1, 2, 2)
                     plt.plot(n_data, label="DATA ALL counts after CC contamination")
-                    n_data_scone_cut = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                    plt.plot(n_data_scone_cut, label="DATA ALL counts using scone cut")
+                    #n_data_scone_cut = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                    #plt.plot(n_data_scone_cut, label="DATA ALL counts using scone cut")
+                    n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+                    plt.plot(n_all, label="DATA counts before CC contamination")
                     plt.axhline(0, color='k', linestyle='--', lw=1)
                     logging.debug(f"Calculated n_data after CC contamination: {n_data}")
                     plt.legend()
@@ -728,7 +737,7 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.45, 0.5, 0.55],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
                 xx = np.linspace(0.01, 0.99, 10)
@@ -747,6 +756,45 @@ class sauron_runner():
                 # Hard coding index to one needs to change. TODO: Refactor to avoid hardcoded index value
                 #  (currently set to 1). This function should not need index at all.
                 cov_sys = cov_thresh + cov_rate_norm
+
+                reduced_cov = np.empty(cov_sys.shape)
+                for i in range(cov_sys.shape[0]):
+                    for j in range(cov_sys.shape[1]):
+                        reduced_cov[i, j] = cov_sys[i, j] / (cov_sys[i, i]**0.5 * cov_sys[j, j]**0.5)
+                reduced_cov_thresh = np.empty(cov_thresh.shape)
+                for i in range(cov_thresh.shape[0]):
+                    for j in range(cov_thresh.shape[1]):
+                        reduced_cov_thresh[i, j] = cov_thresh[i, j] / (cov_thresh[i, i]**0.5 * cov_thresh[j, j]**0.5)
+                reduced_cov_rate_norm = np.empty(cov_rate_norm.shape)
+                for i in range(cov_rate_norm.shape[0]):
+                    for j in range(cov_rate_norm.shape[1]):
+                        reduced_cov_rate_norm[i, j] = cov_rate_norm[i, j] / (cov_rate_norm[i, i]**0.5 *
+                                                                             cov_rate_norm[j, j]**0.5)
+
+
+                if self.args.debug:
+
+                    plt.clf()
+
+                    plt.subplot(1,3,1)
+                    plt.imshow(reduced_cov, origin='lower')
+                    plt.colorbar(label="Reduced Covariance")
+                    plt.title(f"Reduced Systematic Covariance Matrix for {survey}")
+                    plt.xlabel("Redshift Bin")
+                    plt.ylabel("Redshift Bin")
+                    plt.subplot(1,3,2)
+                    plt.imshow(reduced_cov_thresh, origin='lower')
+                    plt.colorbar(label="Reduced Covariance")
+                    plt.title(f"Reduced Threshold Covariance Matrix for {survey}")
+                    plt.xlabel("Redshift Bin")
+                    plt.ylabel("Redshift Bin")
+                    plt.subplot(1,3,3)
+                    plt.imshow(reduced_cov_rate_norm, origin='lower')
+                    plt.colorbar(label="Reduced Covariance")
+                    plt.title(f"Reduced Rate Norm Covariance Matrix for {survey}")
+                    plt.xlabel("Redshift Bin")
+                    plt.ylabel("Redshift Bin")
+                    plt.savefig(f"cov_sys_{survey}.png")
             else:
                 cov_sys = None
             self.fit_args_dict['cov_sys'][survey] = cov_sys
