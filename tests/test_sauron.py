@@ -409,3 +409,26 @@ def test_apply_cut():
     survey = "DES_BAD_1"
     with pytest.raises(ValueError, match="Invalid cut specification"):
         runner.apply_cuts(survey)
+
+
+def test_des_data_regression():
+    """Regression test on real DES data with photo-z to ensure Sauron output is unchanged."""
+    outpath = pathlib.Path(__file__).parent / "test_desdatareg_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "../config_des_data_zphot.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    results = pd.read_csv(outpath)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_desdatareg_regression.csv")
+    # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
+        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
