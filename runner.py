@@ -17,7 +17,7 @@ from astropy.io import fits
 
 # Sauron modules
 from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_matrix_term, rescale_CC_for_cov,
-                   calculate_null_counts)
+                   calculate_null_counts, AplusB_cosmicSFH)
 from SN_dataset import SN_dataset
 
 # Get the matplotlib logger
@@ -33,14 +33,18 @@ cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 func_name_dictionary = {
     "power_law": power_law,
     "turnover_power_law": turnover_power_law,
-    "dual_power_law": turnover_power_law
+    "dual_power_law": turnover_power_law,
+    "AplusB_cosmicSFH": AplusB_cosmicSFH
 }
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7),
     "turnover_power_law": (1, 0, 1, -2),
-    "dual_power_law": (1, 0, 1, -2)
+    "dual_power_law": (1, 0, 1, -2),
+    "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
+    #"AplusB_cosmicSFH": (1.2e-14, 8.1e-4)
 }
+
 
 
 class sauron_runner():
@@ -65,10 +69,16 @@ class sauron_runner():
 
     def parse_global_fit_options(self):
         """ Parse global fit options (I.e. those that apply to all surveys) from the config file."""
-        with open(self.args.config, 'r') as f:
-            files_input = yaml.safe_load(f)
+        # with open(self.args.config, 'r') as f:
+        #     logging.debug(f"Reading {f.name}")
+        #     files_input = yaml.safe_load(f)
+
+        files_input = yaml.safe_load(open(self.args.config, 'r'))
+        logging.debug(f"Full config file contents: {files_input}")
         fit_options = files_input.get("FIT_OPTIONS", {})
+        logging.debug(f"Global fit options: {fit_options}")
         self.rate_function = func_name_dictionary.get(fit_options.get("RATE_FUNCTION"), None)
+        logging.debug(f"Using rate function: {self.rate_function}")
         if self.rate_function is None:
             logging.warning("No valid RATE_FUNCTION specified in FIT_OPTIONS. Defaulting to power_law.")
             self.rate_function = power_law
@@ -410,25 +420,40 @@ class sauron_runner():
 
         logging.debug(f"data counts: {n_data}")
 
-        fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
+        fJ_0 = self.rate_function(z_centers, self.x0)
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
         logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-                                          n_data, self.rate_function, cov_sys),
-                                          full_output=True)[:3]
+        #result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+        #                                  n_data, self.rate_function, cov_sys),
+        #                                  full_output=True)[:3]
+
+        from scipy.optimize import least_squares
+        result = least_squares(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+                                          n_data, self.rate_function, cov_sys), bounds=((0, 0), (1e-12,np.inf)), x_scale = 'jac')
+
+        hess_inv = np.linalg.inv(np.dot(result.jac.T, result.jac))
+
         logging.debug(f"Least Squares Result: {result}")
+
         N = len(n_data)
-        n = len(result)
-        cov_x *= (infodict['fvec']**2).sum() / (N-n)
+        n = len(result.x)
+
+        #cov_x *= (infodict['fvec']**2).sum() / (N-n)
+        logging.debug(f"Variance residuals {(result.fun**2).sum() / (N - n)}")
+        cov_x = hess_inv * (result.fun**2).sum() / (N - n)
+        chi2_result = np.sum(result.fun**2)
+        logging.debug(f"cov_x : {cov_x}")
         # See scipy doc for leastsq for explanation of this covariance rescaling
         logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+        result = result.x
 
-        fJ = result[0] * (1 + z_centers)**result[1]
+       # fJ = result[0] * (1 + z_centers)**result[1]
+        fJ = self.rate_function(z_centers, result)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
-
+        logging.debug(f"Final fj: {fJ}")
         logging.debug(f"Predicted Counts Ei: {Ei}")
 
         # Estimate errors on Ei
@@ -453,10 +478,11 @@ class sauron_runner():
 
         self.final_counts[survey]["result"] = result
         self.final_counts[survey]["covariance"] = cov_x
-        self.final_counts[survey]["chi"] = np.sum(infodict['fvec'])
+
+        self.final_counts[survey]["chi"] = chi2_result
         # Should there not be an index here?
 
-        return result, np.sum(infodict['fvec']), Ei, cov_x, Ei_err
+        return result, chi2_result, Ei, cov_x, Ei_err
 
     def save_results(self):
         """Save results to output file specified in args."""
@@ -574,16 +600,22 @@ class sauron_runner():
             logging.debug("updated z_centers for chi2 map:", z_centers)
 
         logging.debug("SANITY CHECK chi2 map values:")
-        chi2_result = chi2((2.27e-5, 1.7), fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
+        chi2_result = chi2(self.x0, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                            z_centers,
                            fit_args_dict['eff_ij'][survey],
                            fit_args_dict['n_data'][survey],
                            self.rate_function,
                            fit_args_dict['cov_sys'][survey])
-        logging.debug(f"chi2 at (2.27e-5, 1.7): {np.sum(chi2_result**2)}")
+        logging.debug(f"chi2 at x0 {np.sum(chi2_result**2)}")
 
-        for i, a in enumerate(np.linspace(2.0e-5, 2.6e-5, n_samples)):
-            for j, b in enumerate(np.linspace(1.4, 2.0, n_samples)):
+
+        alpha_lower = self.results[survey][0]["alpha"]*0.8
+        alpha_upper = self.results[survey][0]["alpha"]*1.2
+        beta_lower = self.results[survey][0]["beta"]*0.8
+        beta_upper = self.results[survey][0]["beta"]*1.2
+
+        for i, a in enumerate(np.linspace(alpha_lower, alpha_upper, n_samples)):
+            for j, b in enumerate(np.linspace(beta_lower, beta_upper, n_samples)):
 
                 values = (a, b)
 
@@ -629,6 +661,7 @@ class sauron_runner():
             ax2 = ax[i+1]
             chi2_map = self.generate_chi2_map(s)
             normalized_map = chi2_map - np.min(chi2_map) + 1  # +1 to avoid log(0)
+            normalized_map = chi2_map
             logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
 
             from funcs import chi2_to_sigma
@@ -639,10 +672,18 @@ class sauron_runner():
 
             #plt.subplot(1, len(surveys), i + 1)
             #plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
-            ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain")
-            plt.colorbar(ax2.imshow(np.log10(normalized_map), extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="terrain"))
-            ax2.axhline(2.27e-5, color='black', linestyle='--')
-            ax2.axvline(1.7, color='black', linestyle='--')
+            alpha_lower = self.results[survey][0]["alpha"]*0.8
+            alpha_upper = self.results[survey][0]["alpha"]*1.2
+            beta_lower = self.results[survey][0]["beta"]*0.8
+            beta_upper = self.results[survey][0]["beta"]*1.2
+            extent = [beta_lower, beta_upper, alpha_lower, alpha_upper]
+            extent = [e.values[0] for e in extent]
+            logging.debug(f"extent {extent}")
+            ax2.imshow(np.log10(normalized_map), extent=extent, origin='lower', aspect='auto', cmap="terrain")
+            plt.colorbar(ax2.imshow(np.log10(normalized_map), extent=extent, origin='lower', aspect='auto', cmap="terrain"))
+            plt.scatter(self.results[survey][0]["beta"], self.results[survey][0]["alpha"])
+            #ax2.axhline(self.x0[0], color='black', linestyle='--')
+            #ax2.axvline(self.x0[1], color='black', linestyle='--')
             #ax2.axvline(0, color='black', linestyle='--')
             # from scipy.stats import chi2 as chi2_scipy
 
