@@ -739,7 +739,7 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.45, 0.5, 0.55],
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
                 xx = np.linspace(0.01, 0.99, 10)
