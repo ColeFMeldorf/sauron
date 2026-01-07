@@ -146,6 +146,7 @@ def test_calc_effij():
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
     args.config = config_path
     args.cheat_cc = False
+    args.debug = False
     runner = sauron_runner(args)
     runner.unpack_dataframes()
     survey = "DES"
@@ -181,6 +182,7 @@ def test_chi():
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     args.config = config_path
     args.cheat_cc = False
+    args.debug = False
     runner = sauron_runner(args)
     datasets, surveys = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
