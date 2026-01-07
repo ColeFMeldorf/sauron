@@ -466,8 +466,9 @@ class sauron_runner():
             logging.debug(f"Least Squares Result: {fit_params}")
             residual_variance = (infodict['fvec']**2).sum() / (N - n)
             logging.debug(f"residual variance leastsq: {residual_variance}")
-            cov_x *= residual_variance  # * 0.5
-            # The factor of 1/2 is needed to agree with minimize, unclear why.
+            cov_x *= residual_variance
+            # * 0.5
+            # The factor of 1/2 is needed to agree with minimize, unclear why. Re-include it to make them agree better.
 
             # See scipy doc for leastsq for explanation of this covariance rescaling
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
@@ -668,6 +669,7 @@ class sauron_runner():
                                    fit_args_dict['n_data'][survey],
                                    self.rate_function,
                                    fit_args_dict['cov_sys'][survey])
+                # Note this is now unsquared
                 chi2_map[i][j] = np.sum(chi2_result)
         return chi2_map
 
@@ -703,10 +705,10 @@ class sauron_runner():
 
             ax2 = ax[i+1]
             chi2_map = self.generate_chi2_map(s)
-            normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
+            # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
             logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
 
-            sigma_map = chi2_to_sigma(normalized_map, dof=len(z_centers) - 2)
+            sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
 
             ax2.imshow(sigma_map, extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="plasma")
             ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)

@@ -268,12 +268,14 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
-    import matplotlib.pyplot as plt
-    plt.hist(product_2, bins=10)
-    plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
-    plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
-    plt.xlabel("Chi-squared statistic")
-    plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_hist.png")
+    plot = False
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.hist(product_2, bins=10)
+        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
+        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.xlabel("Chi-squared statistic")
+        plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_hist.png")
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
