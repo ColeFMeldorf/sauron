@@ -16,8 +16,8 @@ from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
 # Sauron modules
-from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_matrix_term, rescale_CC_for_cov,
-                   calculate_null_counts, AplusB_cosmicSFH)
+from funcs import (power_law, turnover_power_law, chi2_unsummed, calculate_covariance_matrix_term, rescale_CC_for_cov,
+                   calculate_null_counts, AplusB_cosmicSFH, chi2)
 from SN_dataset import SN_dataset
 
 # Get the matplotlib logger
@@ -430,31 +430,48 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        #result, cov_x, infodict = leastsq(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-        #                                  n_data, self.rate_function, cov_sys),
-        #                                  full_output=True)[:3]
-
-        from scipy.optimize import least_squares
-        result = least_squares(chi2, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-                                          n_data, self.rate_function, cov_sys), bounds=((0, 0), (1e-12,np.inf)), x_scale = 'jac')
-
-        hess_inv = np.linalg.inv(np.dot(result.jac.T, result.jac))
-
-        logging.debug(f"Least Squares Result: {result}")
-
         N = len(n_data)
-        n = len(result.x)
+        n = len(self.x0)
 
-        #cov_x *= (infodict['fvec']**2).sum() / (N-n)
-        logging.debug(f"Variance residuals {(result.fun**2).sum() / (N - n)}")
-        cov_x = hess_inv * (result.fun**2).sum() / (N - n)
-        chi2_result = np.sum(result.fun**2)
-        logging.debug(f"cov_x : {cov_x}")
-        # See scipy doc for leastsq for explanation of this covariance rescaling
-        logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-        result = result.x
+        fit_method = "leastsq"  # For now, hardcode this. Later make it an option.
+        if fit_method == "leastsq":
 
-       # fJ = result[0] * (1 + z_centers)**result[1]
+            result, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+                                                  n_data, self.rate_function, cov_sys),
+                                                  full_output=True)[:3]
+            logging.debug(f"Least Squares Result: {result}")
+            residual_variance = (infodict['fvec']**2).sum() / (N - n)
+            logging.debug(f"residual variance leastsq: {residual_variance}")
+            cov_x *= residual_variance
+            # * 0.5
+            # The factor of 1/2 is needed to agree with minimize, unclear why. Re-include it to make them agree better.
+
+            # See scipy doc for leastsq for explanation of this covariance rescaling
+            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+            chi2_result = np.sum(infodict['fvec']) # If we take the square root in the chi func then
+            # I think this should be squared but I am changing back for regression
+            logging.debug(f"chi_squared leastsq: {chi2_result}")
+
+        if fit_method == "least_squares":
+            from scipy.optimize import least_squares
+            result = least_squares(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+                                                           n_data, self.rate_function, cov_sys),
+                                                           bounds=((0, 0), (1e-12, np.inf)),
+                                                           x_scale='jac')
+
+            hess_inv = np.linalg.inv(np.dot(result.jac.T, result.jac))
+
+            logging.debug(f"Least Squares Result: {result.x}")
+
+            #cov_x *= (infodict['fvec']**2).sum() / (N-n)
+            logging.debug(f"Variance residuals {(result.fun**2).sum() / (N - n)}")
+            cov_x = hess_inv * (result.fun**2).sum() / (N - n)
+            chi2_result = np.sum(result.fun**2)
+            logging.debug(f"cov_x : {cov_x}")
+            # See scipy doc for leastsq for explanation of this covariance rescaling
+            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+            result = result.x
+
         fJ = self.rate_function(z_centers, result)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
         logging.debug(f"Final fj: {fJ}")

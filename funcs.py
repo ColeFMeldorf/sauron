@@ -11,15 +11,9 @@ from scipy.special import erfinv
 from scipy.integrate import quad
 
 
-
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
     fJ = rate_function(zJ, x)
-
-    #fJ_power = power_law(zJ, (2.27e-5, 1.7))
-    #logging.debug(f"At params {x}, fJ: {fJ}")
-    #logging.debug(f"At params {x}, fJ_power: {fJ_power}")
-
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
     var_Ei = np.abs(Ei)
     var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
@@ -28,11 +22,50 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
     if cov_sys is None:
         cov_sys = 0
     cov = cov_stat + cov_sys
+
     inv_cov = np.linalg.pinv(cov)
+
     resid_matrix = np.outer(n_data - Ei, n_data - Ei)
     chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
-    #logging.debug(f"Chi2 {np.sum(chi_squared**2)} at params {x}")
+    # The difference between the above and below actually matters even though I think it shouldn't.
+
+    # resid_vector = n_data - Ei
+    # chi_squared = resid_vector.T * inv_cov @ resid_vector
+
+    # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
+    # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
+    # either way I believe.
+    # chi = np.sqrt(chi_squared)
+
+    #chi = np.sqrt(np.abs(chi_squared))
+
+    return chi_squared
+    #return chi
+
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+    zJ = z_centers
+    fJ = rate_function(zJ, x)
+    Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+    var_Ei = np.abs(Ei)
+    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+
+    cov_stat = np.diag(var_Ei + var_Si)
+    if cov_sys is None:
+        cov_sys = 0
+    cov = cov_stat + cov_sys
+
+    inv_cov = np.linalg.pinv(cov)
+
+    resid_vector = n_data - Ei
+
+    # Note this multiplication is different from the unsummed version above.
+    chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+    # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
+    # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
+    # either way I believe.
+    # chi = np.sqrt(chi_squared)
 
     return chi_squared
 
