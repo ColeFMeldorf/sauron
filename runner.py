@@ -45,6 +45,10 @@ default_x0_dictionary = {
     #"AplusB_cosmicSFH": (1.2e-14, 8.1e-4)
 }
 
+default_parameter_name_dictionary = {
+    "power_law": ["alpha", "beta"],
+    "AplusB_cosmicSFH": ["A", "B"]}
+
 
 
 class sauron_runner():
