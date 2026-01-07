@@ -69,6 +69,7 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
 
     return chi_squared
 
+
 def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # Calculate covariance matrix term for a given systematic function and its parameters
     # sys_func should be a function that takes sys_params and returns expected counts
@@ -108,7 +109,6 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
             f"({rescale_vals.shape[0]} vs {len(types)})"
         )
 
-
         N_CC_sim = np.zeros((len(z_bins)-1, len(types)))
         sim_CC = np.zeros((len(z_bins)-1, len(types)))
 
@@ -118,17 +118,15 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
                                  sim_CC_df[sim_CC_df.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
                                  statistic='count', bins=z_bins)[0]
             raw_counts = raw_counts * rescale_factor
-            sim_CC[:,i] = raw_counts
+            sim_CC[:, i] = raw_counts
 
             raw_counts = binstat(sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
                                  sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
                                  statistic='count', bins=z_bins)[0]
             raw_counts = raw_counts * rescale_factor
-            N_CC_sim[:,i] = raw_counts
+            N_CC_sim[:, i] = raw_counts
 
         sim_CC = np.sum(sim_CC, axis=1)
-
-
         IA_frac = np.nan_to_num(sim_IA / (sim_IA + sim_CC))
         N_CC_sim = np.sum(N_CC_sim)
         n_CC_sim = np.sum(sim_CC)
@@ -207,7 +205,6 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
                           time=None, solid_angle=None, cosmo=None):
     """Calculate the number of expected counts for 1 SN / Mpc^3 / yr over the survey volume and time."""
 
-
     # Method 1, stupid method, divide N_gen by true rate.
     if all(v is not None for v in [N_gen, true_rate_function, rate_params]):
         fJ = true_rate_function(z_centers, rate_params)
@@ -234,11 +231,14 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
 def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRANGE_PEAKMJD, cosmo):
     """
     Python translation of the C function SNcount_model.
-    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT) based on the provided C code and documentation,
+    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT) 
+    based on the provided C code and documentation,
     which was then modified by Cole, because Cole has not used C since middle school.
      However, testing it against the SNANA it seems to give consistent results
-    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA. Since those are slightly stochastic, this is 
-    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue when we want to measure rates to
+    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA. 
+    Since those are slightly stochastic, this is 
+    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue 
+    when we want to measure rates to
     that precision. But for now, this should be sufficient for testing and development purposes.
 
     Computes the expected number of SNe between redshifts zMIN and zMAX.
@@ -298,6 +298,7 @@ def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRAN
 
     return SNsum
 
+
 def chi2_to_sigma(chi2_diff, dof):
     """Convert chi2 difference to sigma level."""
     # Get p-value from chi2 difference:
@@ -312,24 +313,3 @@ def chi2_to_sigma(chi2_diff, dof):
 
     sigma = np.sqrt(2) * erfinv(1 - 2 * p_value)
     return sigma
-
-def cov_mat_to_sigma_map(cov_mat, mean):
-    """From the covariance matrix, determine how many sigma each element is from the mean."""
-    sigma_1 = scipy_chi2.ppf([0.68], 2)
-    sigma_2 = scipy_chi2.ppf([0.95], 2)
-
-    a = np.mean(df["alpha_error"]**2)
-    b = np.mean(df["beta_error"]**2)
-    c = np.mean(df["cov_alpha_beta"])
-
-    cov_mat = np.array([[a, c], [c, b]])
-
-    all_alpha = df["alpha"] - 2.27e-5
-    all_beta = df["beta"] - 1.7
-    inv_cov = np.linalg.inv(mean_cov)
-    all_pos = np.vstack([all_alpha, all_beta])
-    product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
-    product_2 = np.einsum("il,il->l", all_pos, product_1)
-
-    sub_one_sigma = np.where(product_2 < sigma_1)
-    sub_two_sigma = np.where(product_2 < sigma_2)

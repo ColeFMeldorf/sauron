@@ -146,6 +146,7 @@ def test_calc_effij():
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
     args.config = config_path
     args.cheat_cc = False
+    args.debug = False
     runner = sauron_runner(args)
     runner.unpack_dataframes()
     survey = "DES"
@@ -181,6 +182,7 @@ def test_chi():
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     args.config = config_path
     args.cheat_cc = False
+    args.debug = False
     runner = sauron_runner(args)
     datasets, surveys = runner.unpack_dataframes()
     runner.z_bins = np.arange(0, 1.4, 0.1)
@@ -268,6 +270,14 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
+    plot = False
+    if plot:
+        import matplotlib.pyplot as plt
+        plt.hist(product_2, bins=10)
+        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
+        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.xlabel("Chi-squared statistic")
+        plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_hist.png")
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
@@ -278,7 +288,7 @@ def test_coverage_no_sys():
 
 def test_coverage_with_sys():
     """In this test we check the coverage properties of SAURON when there are no systematics.
-        We should recover the truth (1, 0) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
+        We should recover the truth (2.27e-5, 1.7) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
     """
     outpath = pathlib.Path(__file__).parent / "test_coverage_sys_output.csv"
     if os.path.exists(outpath):

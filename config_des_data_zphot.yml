@@ -2,9 +2,7 @@
 # The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
 
 FIT_OPTIONS:
-  RATE_FUNCTION: AplusB_cosmicSFH
-#  RATE_FUNCTION: power_law
-
+  RATE_FUNCTION: power_law
 DES:
   FIT_OPTIONS:
     RATE_FUNC: power_law
@@ -12,6 +10,7 @@ DES:
     Z_BINS: 10
     MIN_Z: 0.1
     MAX_Z: 0.9
+
   CUTS:
     x1: -3, 3
     c: -0.3, 0.3

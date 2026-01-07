@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
                         " Data_All.")
     parser.add_argument("--sys_cov", "--systematic_covariance", action=argparse.BooleanOptionalAction,
-                       help="Calculate systematic covariance matrix terms.", default=True)
+                        help="Calculate systematic covariance matrix terms.", default=True)
     parser.add_argument("-p", "--plot", action="store_true", help="Generate diagnostic plots.", default=False)
     parser.add_argument("--debug", action="store_true", help="Enable debug logging.", default=False)
     parser.add_argument("--skip-cuts", action="store_true", help="Skip applying cuts to the data.", default=False)
@@ -44,7 +44,7 @@ def main():
 
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
-        runner.get_counts(survey) # This only gets dump counts, which have no cuts applied
+        runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
         if not args.skip_cuts:
             runner.apply_cuts(survey)
         runner.calculate_transfer_matrix(survey)
@@ -57,7 +57,7 @@ def main():
             runner.fit_args_dict["n_data"][survey] = \
                 runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
             runner.calculate_f_norm(survey, index)
-            runner.fit_rate(survey) # Should this have index?
+            runner.fit_rate(survey)  # Should this have index?
             runner.add_results(survey, index)
 
     # Fit all surveys together
