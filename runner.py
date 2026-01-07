@@ -17,7 +17,7 @@ from astropy.io import fits
 
 # Sauron modules
 from funcs import (power_law, turnover_power_law, chi2_unsummed, calculate_covariance_matrix_term, rescale_CC_for_cov,
-                   calculate_null_counts, AplusB_cosmicSFH, chi2)
+                   calculate_null_counts, AplusB_cosmicSFH, chi2, chi2_to_sigma)
 from SN_dataset import SN_dataset
 
 # Get the matplotlib logger
@@ -447,13 +447,14 @@ class sauron_runner():
         N = len(n_data)
         n = len(self.x0)
 
-        fit_method = "leastsq"  # For now, hardcode this. Later make it an option.
+        fit_method = "least_squares"  # For now, hardcode this. Later make it an option.
+        logging.info(f"Using fit method: {fit_method}")
         if fit_method == "leastsq":
 
-            result, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+            fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
                                                   n_data, self.rate_function, cov_sys),
                                                   full_output=True)[:3]
-            logging.debug(f"Least Squares Result: {result}")
+            logging.debug(f"Least Squares Result: {fit_params}")
             residual_variance = (infodict['fvec']**2).sum() / (N - n)
             logging.debug(f"residual variance leastsq: {residual_variance}")
             cov_x *= residual_variance
@@ -484,7 +485,7 @@ class sauron_runner():
             logging.debug(f"cov_x : {cov_x}")
             # See scipy doc for leastsq for explanation of this covariance rescaling
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-            result = result.x
+            fit_params = result.x
 
         elif fit_method == "minimize":
 
@@ -640,7 +641,7 @@ class sauron_runner():
 
         return n_data
 
-    def generate_chi2_map(self, survey, n_samples=50):
+    def generate_chi2_map(self, survey, n_samples=20):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -728,16 +729,31 @@ class sauron_runner():
 
             #plt.subplot(1, len(surveys), i + 1)
             #plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
-            alpha_lower = self.results[survey][0]["alpha"]*0.8
-            alpha_upper = self.results[survey][0]["alpha"]*1.2
-            beta_lower = self.results[survey][0]["beta"]*0.8
-            beta_upper = self.results[survey][0]["beta"]*1.2
+            alpha_lower = self.results[survey][0]["alpha"] - 3 * self.results[survey][0]["alpha_error"]
+            alpha_upper = self.results[survey][0]["alpha"] + 3 * self.results[survey][0]["alpha_error"]
+            beta_lower = self.results[survey][0]["beta"] - 3 * self.results[survey][0]["beta_error"]
+            beta_upper = self.results[survey][0]["beta"] + 3 * self.results[survey][0]["beta_error"]
             extent = [beta_lower, beta_upper, alpha_lower, alpha_upper]
             extent = [e.values[0] for e in extent]
             logging.debug(f"extent {extent}")
-            ax2.imshow(np.log10(normalized_map), extent=extent, origin='lower', aspect='auto', cmap="terrain")
-            plt.colorbar(ax2.imshow(np.log10(normalized_map), extent=extent, origin='lower', aspect='auto', cmap="terrain"))
-            plt.scatter(self.results[survey][0]["beta"], self.results[survey][0]["alpha"])
+
+            ax2.imshow(sigma_map, extent=extent, origin='lower', aspect='auto', cmap="plasma")
+            ax2.contour(sigma_map, levels=[1, 2, 3], extent=extent, colors='k', linewidths=1)
+            plt.colorbar(ax2.imshow(sigma_map, extent=extent, origin='lower', aspect='auto',
+                         cmap="plasma"), ax=ax2, label="Sigma Level")
+
+            ax2.set_xlim(extent[0], extent[1])
+            ax2.set_ylim(extent[2], extent[3])
+            #ax2.axhline(2.27e-5, color='black', linestyle='--')
+            #ax2.axvline(1.7, color='black', linestyle='--')
+
+            if isinstance(self.results[s], list):
+                df = self.results[s][0]
+            else:
+                df = self.results[s]
+
+            ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
+                         color='white', ms=10, label=f"Fit results {survey}")
             #ax2.axhline(self.x0[0], color='black', linestyle='--')
             #ax2.axvline(self.x0[1], color='black', linestyle='--')
             #ax2.axvline(0, color='black', linestyle='--')
