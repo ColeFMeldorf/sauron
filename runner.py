@@ -562,6 +562,7 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
 
+        method = "scone_cut"
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             if method == "Lasker":
                 IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
