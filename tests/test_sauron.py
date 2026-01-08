@@ -6,6 +6,7 @@ from runner import sauron_runner
 # Standard Library
 import os
 import logging
+from matplotlib import pyplot as plt
 import pathlib
 import pytest
 from types import SimpleNamespace
@@ -20,6 +21,14 @@ import pandas as pd
 # Astronomy
 from astropy.cosmology import LambdaCDM
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
+
+
+# Configure the basic logging setup
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -241,7 +250,7 @@ def test_coverage_no_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov', "--prob_thresh", "0.5", "--cheat_cc"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov', "--prob_thresh", "0.5"]
     # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -270,10 +279,14 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
-    plot = False
+    plot = True
     if plot:
         import matplotlib.pyplot as plt
-        plt.hist(product_2, bins=10)
+
+        plt.hist(product_2, bins=10, density=True, alpha=0.7, color='blue', label='Observed')
+        x = np.linspace(0, 12, 100)
+        # Dof = 6, 8 bins - 2 fitted parameters
+        plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
         plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
         plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
         plt.xlabel("Chi-squared statistic")
@@ -326,6 +339,19 @@ def test_coverage_with_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
+
+    plot = True
+    if plot:
+        import matplotlib.pyplot as plt
+
+        plt.hist(product_2, bins=10, density=True, alpha=0.7, color='blue', label='Observed')
+        x = np.linspace(0, 12, 100)
+        # Dof = 6, 8 bins - 2 fitted parameters
+        plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
+        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
+        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.xlabel("Chi-squared statistic")
+        plt.savefig(pathlib.Path(__file__).parent / "test_coverage_sys_hist.png")
 
     logger.info(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.info(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
@@ -445,3 +471,64 @@ def test_des_data_regression():
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+
+
+
+def test_cc_decontam():
+    config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
+    #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    args = SimpleNamespace()
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    #runner.z_bins = np.arange(0.1, 1.0, 0.1)
+    runner.z_bins = np.linspace(0.1, 1.0, 8)
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+
+    PROB_THRESH = 0.5
+    logger.debug("successfully reran")
+
+    pulls = []
+
+    pulls = np.empty((50, len(runner.z_bins)-1))
+    all_ntrue = np.empty((50, len(runner.z_bins)-1))
+    all_ncalc = np.empty((50, len(runner.z_bins)-1))
+    for i in range(50):
+        index = i+1
+        logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
+        runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
+
+        n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
+        residual = n_true - n_calc
+        pull = residual / np.sqrt(n_true)
+
+        pulls[i,:] = pull
+        all_ntrue[i,:] = n_true
+        all_ncalc[i,:] = n_calc
+        #pulls.extend(list(pull))
+
+    pulls = np.array(pulls)
+
+    means = np.mean(pulls, axis=0)
+    stds = np.std(pulls, axis=0)
+
+    logger.debug(f"MEANS: {means}")
+
+    mean_ntrue = np.mean(all_ntrue, axis=0)
+    mean_ncalc = np.mean(all_ncalc, axis=0)
+    std_ntrue = np.std(all_ntrue, axis=0)
+    std_ncalc = np.std(all_ncalc, axis=0)
+
+    z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
+    plt.clf()
+    plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
+    plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
+    plt.xlabel('Redshift')
+    plt.ylabel('CC Counts')
+    plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts.png")
+
+
+    np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
+
