@@ -572,7 +572,7 @@ class sauron_runner():
         datasets = self.datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
-
+        method = "scone_cut"
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             if method == "Lasker":
                 IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
@@ -712,9 +712,9 @@ class sauron_runner():
                 ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
                              fmt='o', label=f" {survey} Data")
-                ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
-                             yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                             fmt='o', label=f" {survey} Initial Prediction ")
+                # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
+                #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
+                #              fmt='o', label=f" {survey} Initial Prediction ")
                 ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
@@ -731,10 +731,18 @@ class sauron_runner():
             #plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
             alpha_lower = self.results[survey][0]["alpha"] - 3 * self.results[survey][0]["alpha_error"]
             alpha_upper = self.results[survey][0]["alpha"] + 3 * self.results[survey][0]["alpha_error"]
+
+            alpha_lower = 0
+            alpha_upper = 1e-13
             beta_lower = self.results[survey][0]["beta"] - 3 * self.results[survey][0]["beta_error"]
             beta_upper = self.results[survey][0]["beta"] + 3 * self.results[survey][0]["beta_error"]
+            beta_lower = 0.001
+            beta_upper = 0.0016
             extent = [beta_lower, beta_upper, alpha_lower, alpha_upper]
-            extent = [e.values[0] for e in extent]
+
+
+
+            #extent = [e.values[0] for e in extent]
             logging.debug(f"extent {extent}")
 
             ax2.imshow(sigma_map, extent=extent, origin='lower', aspect='auto', cmap="plasma")
