@@ -144,9 +144,26 @@ def test_calc_cov_term():
     datasets, surveys = runner.unpack_dataframes()
     survey = "DES"
     runner.z_bins = np.arange(0, 1.4, 0.1)
-    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
+    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.45, 0.5, 0.55], runner.z_bins, 1,
                                                survey)
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
+    plot = True
+    if plot:
+        plt.clf()
+        plt.subplot(1,2,1)
+        plt.imshow(cov_mat, origin='lower', cmap='viridis', interpolation='nearest')
+        plt.colorbar(label='Covariance Term Value')
+        plt.title('Calculated Covariance Matrix Term')
+        plt.xlabel('Redshift Bin Index')
+        plt.ylabel('Redshift Bin Index')
+        plt.subplot(1,2,2)
+        plt.imshow(regression_cov, origin='lower', cmap='viridis', interpolation='nearest')
+        plt.colorbar(label='Covariance Term Value')
+        plt.title('Regression Covariance Matrix Term')
+        plt.xlabel('Redshift Bin Index')
+        plt.ylabel('Redshift Bin Index')
+        plt.savefig(pathlib.Path(__file__).parent / "test_cov_term.png")
+
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
 

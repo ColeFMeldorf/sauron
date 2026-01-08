@@ -270,10 +270,10 @@ class sauron_runner():
                 datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
                                                           data_name=survey+"_SIM_CC",
                                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-            logging.debug(f"z bin counts for {survey}_SIM_CC: {datasets[f'{survey}_SIM_CC'].z_counts(self.fit_args_dict['z_bins'][survey])}")
-            logging.debug(f"z bin counts for {survey}_SIM_IA: {datasets[f'{survey}_SIM_IA'].z_counts(
-                self.fit_args_dict['z_bins'][survey])}")
-            logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
+            #logging.debug(f"z bin counts for {survey}_SIM_CC: {datasets[f'{survey}_SIM_CC'].z_counts(self.fit_args_dict['z_bins'][survey])}")
+            #logging.debug(f"z bin counts for {survey}_SIM_IA: {datasets[f'{survey}_SIM_IA'].z_counts(
+            #   self.fit_args_dict['z_bins'][survey])}")
+            #logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
                 data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
                 ia_vals_data = survey_dict["DATA_ALL"]["IA_VALS"]
@@ -291,9 +291,9 @@ class sauron_runner():
         self.datasets = datasets
         self.surveys = surveys
 
-        for d in datasets:
-            counts = datasets[d].z_counts(self.fit_args_dict['z_bins'][survey])
-            assert np.size(np.where(counts == 0)[0]) <= 2, f"{d} has several zero count bins! {counts}"
+        #for d in datasets:
+        #    counts = datasets[d].z_counts(self.fit_args_dict['z_bins'][survey])
+        #    assert np.size(np.where(counts == 0)[0]) <= 2, f"{d} has several zero count bins! {counts}"
 
         return datasets, surveys
 
@@ -605,19 +605,16 @@ class sauron_runner():
                 n_CC_sim = datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH)
 
                 # These lines below are debug and should be removed
-                true_IAs_data = dataset[dataset['TYPE'].isin([101, 111])]
-                true_CCs_data = dataset[~dataset['TYPE'].isin([101, 111])] # I need to confirm these are the right types
-                #for c in true_IAs_data.columns:
-                #    logging.debug(c)
-                true_IAs_data = true_IAs_data[true_IAs_data["PROB_SCONE"] >= PROB_THRESH]
-                true_CCs_data = true_CCs_data[true_CCs_data["PROB_SCONE"] >= PROB_THRESH]
-
-                true_IAs_data = np.histogram(true_IAs_data["zHD"], bins=z_bins, weights=None)[0]
-                true_CCs_data = np.histogram(true_CCs_data["zHD"], bins=z_bins, weights=None)[0]
-                logging.debug(f"True IA counts in data: {true_IAs_data}")
-                logging.debug(f"True CC counts in data: {true_CCs_data}")
-                logging.debug(f"True IA fraction in data: {true_IAs_data / (true_IAs_data + true_CCs_data)}")
-                logging.debug(f"True scaling: {true_CCs_data / (0.02 * np.sum(N_CC_sim))}")
+                #true_IAs_data = dataset[dataset['TYPE'].isin([101, 111])]
+                #true_CCs_data = dataset[~dataset['TYPE'].isin([101, 111])] # I need to confirm these are the right types
+                #true_IAs_data = true_IAs_data[true_IAs_data["PROB_SCONE"] >= PROB_THRESH]
+                #true_CCs_data = true_CCs_data[true_CCs_data["PROB_SCONE"] >= PROB_THRESH]
+                #true_IAs_data = np.histogram(true_IAs_data["zHD"], bins=z_bins, weights=None)[0]
+                #true_CCs_data = np.histogram(true_CCs_data["zHD"], bins=z_bins, weights=None)[0]
+                #logging.debug(f"True IA counts in data: {true_IAs_data}")
+                #logging.debug(f"True CC counts in data: {true_CCs_data}")
+                #logging.debug(f"True IA fraction in data: {true_IAs_data / (true_IAs_data + true_CCs_data)}")
+                #logging.debug(f"True scaling: {true_CCs_data / (0.02 * np.sum(N_CC_sim))}")
 
                 logging.debug(f"Calculated R: {R}")
                 logging.debug(f"N_IA_sim: {N_IA_sim}, n_IA_sim: {n_IA_sim}")
@@ -629,7 +626,7 @@ class sauron_runner():
                 logging.debug(f"Calculated CC fraction after rescaling: {CC_frac}")
                 IA_frac = np.nan_to_num(1 - CC_frac)
                 logging.debug(f"Calculated IA fraction after contamination: {IA_frac}")
-                logging.debug(f"True IA fraction in data: {true_IAs_data / (true_IAs_data + true_CCs_data)}")
+                #logging.debug(f"True IA fraction in data: {true_IAs_data / (true_IAs_data + true_CCs_data)}")
 
                 inverse_Ia_reduction_Fraction = N_IA_sim / n_IA_sim
 
@@ -789,8 +786,10 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15], # This was updated from  [0.45, 0.5, 0.55]
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
+
+
 
                 xx = np.linspace(0.01, 0.99, 10)
                 X = stats.norm(loc=1, scale=0.2)

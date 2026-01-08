@@ -24,13 +24,13 @@ def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_functi
 
     inv_cov = np.linalg.pinv(cov)
 
-    resid_matrix = np.outer(n_data - Ei, n_data - Ei)
-    chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
+    #resid_matrix = np.outer(n_data - Ei, n_data - Ei)
+    #chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
     # The difference between the above and below actually matters even though I think it shouldn't.
 
-    # resid_vector = n_data - Ei
-    # chi_squared = resid_vector.T * inv_cov @ resid_vector
+    resid_vector = n_data - Ei
+    chi_squared = resid_vector.T * inv_cov @ resid_vector
 
     # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
     # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
