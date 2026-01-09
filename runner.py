@@ -437,7 +437,7 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        fit_method = "leastsq"
+        fit_method = "minimize"
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
@@ -716,7 +716,6 @@ class sauron_runner():
                                    fit_args_dict['n_data'][survey],
                                    self.rate_function,
                                    fit_args_dict['cov_sys'][survey])
-                # Note this is now unsquared
                 chi2_map[i][j] = np.sum(chi2_result)
         return chi2_map
 
@@ -764,6 +763,11 @@ class sauron_runner():
             ax2.axhline(2.27e-5, color='black', linestyle='--')
             ax2.axvline(1.7, color='black', linestyle='--')
 
+            ax2.set_xlim(1.4, 2)
+            ax2.set_ylim(2.0e-5, 2.6e-5)
+            ax2.set_xlabel("Beta")
+            ax2.set_ylabel("Alpha")
+
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
@@ -786,7 +790,7 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15], # This was updated from  [0.45, 0.5, 0.55]
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.45, 0.5, 0.55], # This was updated from  [0.45, 0.5, 0.55]
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
 
@@ -961,32 +965,32 @@ class sauron_runner():
                         f"{raw_spec!r}. Expected format 'min,max' with numeric values."
                     ) from exc
 
-                logging.info(f"Applying cut on {col} for survey {survey}: min={min_val}, max={max_val}")
+                #logging.info(f"Applying cut on {col} for survey {survey}: min={min_val}, max={max_val}")
 
                 # Apply cuts to all datasets
                 if datasets.get(f"{survey}_SIM_ALL") is not None:
-                    logging.debug(f"Applying cuts to {survey}_SIM_ALL")
+                 #   logging.debug(f"Applying cuts to {survey}_SIM_ALL")
                     datasets[f"{survey}_SIM_ALL"].apply_cut(col, min_val, max_val)
 
                 if datasets.get(f"{survey}_SIM_IA") is not None:
-                    logging.debug(f"Applying cuts to {survey}_SIM_IA")
+                  #  logging.debug(f"Applying cuts to {survey}_SIM_IA")
                     datasets[f"{survey}_SIM_IA"].apply_cut(col, min_val, max_val)
 
                 if datasets.get(f"{survey}_SIM_CC") is not None:
-                    logging.debug(f"Applying cuts to {survey}_SIM_CC")
+                   # logging.debug(f"Applying cuts to {survey}_SIM_CC")
                     datasets[f"{survey}_SIM_CC"].apply_cut(col, min_val, max_val)
 
                 for i in range(n_datasets):
                     if datasets.get(f"{survey}_DATA_ALL_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}, from {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries")
+                    #    logging.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}, from {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_ALL_{i+1}"].apply_cut(col, min_val, max_val)
-                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries remain")
+                     #   logging.debug(f"After cut, {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries remain")
                     if datasets.get(f"{survey}_DATA_IA_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}, from {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries")
+                      #  logging.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}, from {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_IA_{i+1}"].apply_cut(col, min_val, max_val)
-                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries remain")
+                      #  logging.debug(f"After cut, {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries remain")
                     if datasets.get(f"{survey}_DATA_CC_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
+                      #  logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
-                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
+                      #  logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
 
