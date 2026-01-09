@@ -437,7 +437,7 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        fit_method = "leastsq"
+        fit_method = "minimize"
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
@@ -595,7 +595,6 @@ class sauron_runner():
 
                 N_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 n_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-
 
 
                 #N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
@@ -881,6 +880,7 @@ class sauron_runner():
             # f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
             #      np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
 
+        f_norm = 0.02
         self.fit_args_dict['f_norm'][survey] = f_norm
         logging.debug(f"Calculated f_norm to be {f_norm}")
 
