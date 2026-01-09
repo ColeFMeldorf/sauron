@@ -1,6 +1,6 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, chi2_unsummed
+from funcs import chi2, chi2_unsummed, calculate_covariance_matrix_term, power_law, calculate_null_counts
 from runner import sauron_runner
 
 # Standard Library
@@ -427,7 +427,7 @@ def test_des_data_regression():
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "../config_des_data_zphot.yml"
+    config_path = pathlib.Path(__file__).parent / "./config_des_data_test.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
