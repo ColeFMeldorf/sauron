@@ -39,7 +39,7 @@ func_name_dictionary = {
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7),
-    "turnover_power_law": (1, 0, 1, -2),
+    "turnover_power_law": (2.27e-5, 1.7, -1),
     "dual_power_law": (1, 0, 1, -2),
     "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
     #"AplusB_cosmicSFH": (1.2e-14, 8.1e-4)
@@ -47,8 +47,12 @@ default_x0_dictionary = {
 
 default_parameter_name_dictionary = {
     "power_law": ["alpha", "beta"],
-    "AplusB_cosmicSFH": ["A", "B"]}
+    "AplusB_cosmicSFH": ["A", "B"],
+    "turnover_power_law": ["alpha", "beta1", "beta2"]}
 
+default_bounds_dictionary = {
+    "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
+}
 
 
 class sauron_runner():
@@ -81,7 +85,9 @@ class sauron_runner():
         logging.debug(f"Full config file contents: {files_input}")
         fit_options = files_input.get("FIT_OPTIONS", {})
         logging.debug(f"Global fit options: {fit_options}")
-        self.rate_function = func_name_dictionary.get(fit_options.get("RATE_FUNCTION"), None)
+        self.rate_function_name = fit_options.get("RATE_FUNCTION")
+        self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
+
         logging.debug(f"Using rate function: {self.rate_function}")
         if self.rate_function is None:
             logging.warning("No valid RATE_FUNCTION specified in FIT_OPTIONS. Defaulting to power_law.")
@@ -469,9 +475,13 @@ class sauron_runner():
 
         elif fit_method == "least_squares":
             from scipy.optimize import least_squares
+            bounds = default_bounds_dictionary.get(self.rate_function_name, None)
+            if bounds is None:
+                bounds = (-np.inf, np.inf)
+            logging.debug(f"Using bounds: {bounds}")
             result = least_squares(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
                                                            n_data, self.rate_function, cov_sys),
-                                                           bounds=((0, 0), (1e-12, np.inf)),
+                                                           bounds=bounds,
                                                            x_scale='jac')
 
             hess_inv = np.linalg.inv(np.dot(result.jac.T, result.jac))
@@ -641,7 +651,7 @@ class sauron_runner():
 
         return n_data
 
-    def generate_chi2_map(self, survey, n_samples=20):
+    def generate_chi2_map(self, survey, n_samples=30):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -669,16 +679,21 @@ class sauron_runner():
                            fit_args_dict['cov_sys'][survey])
         logging.debug(f"chi2 at x0 {np.sum(chi2_result**2)}")
 
+        param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        if param_names is None:
+            param_names = ["param_" + str(i) for i in range(len(self.x0))]
 
-        alpha_lower = self.results[survey][0]["alpha"]*0.8
-        alpha_upper = self.results[survey][0]["alpha"]*1.2
-        beta_lower = self.results[survey][0]["beta"]*0.8
-        beta_upper = self.results[survey][0]["beta"]*1.2
+        alpha_lower = self.results[survey][0][param_names[0]]*0.8
+        alpha_upper = self.results[survey][0][param_names[0]]*1.2
+        beta_lower = self.results[survey][0][param_names[1]]*0.8
+        beta_upper = self.results[survey][0][param_names[1]]*1.2
 
         for i, a in enumerate(np.linspace(alpha_lower, alpha_upper, n_samples)):
             for j, b in enumerate(np.linspace(beta_lower, beta_upper, n_samples)):
 
                 values = (a, b)
+                if len(param_names) > 2:
+                    values = (a, b) + tuple(self.results[survey][0][param_names[2:]].values)  # Keep other params at result value.
 
                 chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                                    z_centers,
@@ -729,20 +744,23 @@ class sauron_runner():
 
             #plt.subplot(1, len(surveys), i + 1)
             #plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
-            alpha_lower = self.results[survey][0]["alpha"] - 3 * self.results[survey][0]["alpha_error"]
-            alpha_upper = self.results[survey][0]["alpha"] + 3 * self.results[survey][0]["alpha_error"]
 
-            alpha_lower = 0
-            alpha_upper = 1e-13
-            beta_lower = self.results[survey][0]["beta"] - 3 * self.results[survey][0]["beta_error"]
-            beta_upper = self.results[survey][0]["beta"] + 3 * self.results[survey][0]["beta_error"]
-            beta_lower = 0.001
-            beta_upper = 0.0016
+            param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+            if param_names is None:
+                param_names = ["param_" + str(i) for i in range(len(result))]
+
+            alpha_lower = self.results[survey][0][param_names[0]] - 3 * self.results[survey][0][f"{param_names[0]}_error"]
+            alpha_upper = self.results[survey][0][param_names[0]] + 3 * self.results[survey][0][f"{param_names[0]}_error"]
+
+           # alpha_lower = 0
+           # alpha_upper = 1e-13
+            beta_lower = self.results[survey][0][param_names[1]] - 3 * self.results[survey][0][f"{param_names[1]}_error"]
+            beta_upper = self.results[survey][0][param_names[1]] + 3 * self.results[survey][0][f"{param_names[1]}_error"]
+           # beta_lower = 0.001
+           # beta_upper = 0.0016
             extent = [beta_lower, beta_upper, alpha_lower, alpha_upper]
 
-
-
-            #extent = [e.values[0] for e in extent]
+            extent = [e.values[0] for e in extent]
             logging.debug(f"extent {extent}")
 
             ax2.imshow(sigma_map, extent=extent, origin='lower', aspect='auto', cmap="plasma")
@@ -752,88 +770,15 @@ class sauron_runner():
 
             ax2.set_xlim(extent[0], extent[1])
             ax2.set_ylim(extent[2], extent[3])
-            #ax2.axhline(2.27e-5, color='black', linestyle='--')
-            #ax2.axvline(1.7, color='black', linestyle='--')
 
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
                 df = self.results[s]
 
-            ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
+            ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt='o',
                          color='white', ms=10, label=f"Fit results {survey}")
-            #ax2.axhline(self.x0[0], color='black', linestyle='--')
-            #ax2.axvline(self.x0[1], color='black', linestyle='--')
-            #ax2.axvline(0, color='black', linestyle='--')
-            # from scipy.stats import chi2 as chi2_scipy
 
-            # if isinstance(self.results[s], list):
-            #     df = self.results[s][0]
-            # else:
-            #     df = self.results[s]
-
-            # a = np.mean(df["alpha_error"]**2)
-            # b = np.mean(df["beta_error"]**2)
-            # c = np.mean(df["cov_alpha_beta"])
-            # cov = np.array([[a, c], [c, b]])
-            # sigma_1 = chi2_scipy.ppf([0.68], 2)
-            # sigma_2 = chi2_scipy.ppf([0.95], 2)
-            # norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
-
-            # sigma_1_exp = np.exp((-1/2) * sigma_1)
-            # sigma_1_exp = sigma_1_exp[0] / norm
-            # sigma_2_exp = np.exp((-1/2) * sigma_2)
-            # sigma_2_exp = sigma_2_exp[0] / norm
-            # y = np.linspace(0.7, 1.3, 50)
-            # x = np.linspace(-0.3, 0.3, 50)
-            # x, y = np.meshgrid(x, y)
-            # CS = ax2.contour(x, y, normalized_map, levels=[sigma_2_exp, sigma_1_exp], colors="C" + str(i+1))
-            # # label the contours by survey
-            # fmt = {}
-            # strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            # for k, label_str in zip(CS.levels, strs):
-            #     fmt[k] = label_str
-            # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
-            #ax2.legend()
-            #ax2.axvline(1.7, color='black', linestyle='--')
-            # from scipy.stats import multivariate_normal
-            # from scipy.stats import chi2 as chi2_scipy
-
-            # if isinstance(self.results[s], list):
-            #     df = self.results[s][0]
-            # else:
-            #     df = self.results[s]
-
-
-            # a = np.mean(df["alpha_error"]**2)
-            # b = np.mean(df["beta_error"]**2)
-            # c = np.mean(df["cov_alpha_beta"])
-            # cov = np.array([[a, c], [c, b]])
-            # logging.debug(f"Covariance matrix for {survey}:\n{cov}")
-            # sigma_1 = chi2_scipy.ppf([0.68], 2)
-            # sigma_2 = chi2_scipy.ppf([0.95], 2)
-            # norm = np.sqrt((2 * np.pi) ** 2 * np.linalg.det(cov))
-            # logging.debug(f"Determinant of covariance matrix for {survey}: {np.linalg.det(cov)}")
-
-            # sigma_1_exp = np.exp((-1/2) * sigma_1)
-            # sigma_1_exp = sigma_1_exp[0] / norm
-            # sigma_2_exp = np.exp((-1/2) * sigma_2)
-            # sigma_2_exp = sigma_2_exp[0] / norm
-
-            # x = np.linspace(2.0e-5, 2.6e-5, 100)
-            # y = np.linspace(1.4, 2, 100)
-            # x, y = np.meshgrid(x, y)
-            # #[sigma_2_exp, sigma_1_exp]
-            # logging.debug(f"Sigma levels: {[sigma_2_exp, sigma_1_exp]}")
-
-            # CS = ax2.contour(x, y, normalized_map, levels=10, colors="k")
-            # fmt = {}
-            # strs = [f'1 sigma {survey}', f'2 sigma {survey}']
-            # for l, s in zip(CS.levels, strs):
-            #     fmt[l] = s
-            # ax2.clabel(CS, CS.levels, fmt=fmt, fontsize=10)
-            # ax2.set_title(f"Chi2 Map for {survey}")
-            # ax2.legend()
 
         fig.savefig("summary_plot.png")
 
@@ -962,15 +907,22 @@ class sauron_runner():
         chi = self.final_counts[survey]["chi"]
         z_bins = self.fit_args_dict['z_bins'][survey]
 
-        self.results[survey].append(pd.DataFrame({
-            "alpha": result[0],
-            "beta": result[1],
-            "reduced_chi_squared": chi/(len(z_bins)-2),
-            "alpha_error": np.sqrt(cov[0, 0]),
-            "beta_error": np.sqrt(cov[1, 1]),
-            "cov_alpha_beta": cov[0, 1],
-            "survey": survey_name
-            }, index=np.array([0])))
+        param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        if param_names is None:
+            param_names = ["param_" + str(i) for i in range(len(result))]
+
+        result_to_add = {}
+        for i, p in enumerate(param_names):
+            result_to_add[p] = result[i]
+            result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
+            for j, p2 in enumerate(param_names):
+                if i != j:
+                    result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
+
+        result_to_add["chi_squared"] = chi / len(z_bins) - len(param_names)
+        result_to_add["survey"] = survey_name
+
+        self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
 
     def apply_cuts(self, survey):
         """Apply any cuts specified in the config to the datasets for a given survey.

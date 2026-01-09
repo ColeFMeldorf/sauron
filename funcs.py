@@ -158,8 +158,9 @@ def power_law(z, x):
 
 
 def turnover_power_law(z, x):
-    alpha1, beta1, alpha2, beta2 = x
+    alpha1, beta1, beta2 = x
     z_turn = 1
+    alpha2 = alpha1 * (1 + z_turn)**(beta1 - beta2) # Ensure continuity at z_turn
     fJ = np.where(z < z_turn,
                   alpha1 * (1 + z)**beta1,
                   alpha2 * (1 + z)**beta2)
