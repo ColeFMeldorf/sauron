@@ -145,7 +145,7 @@ def test_calc_cov_term():
     survey = "DES"
     runner.fit_args_dict['z_bins'][survey] = np.arange(0, 1.4, 0.1)
     #runner.z_bins = np.arange(0, 1.4, 0.1)
-    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.1, 0.15, 0.2],
+    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15],
                                                runner.fit_args_dict['z_bins'][survey], 1,
                                                survey)
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
