@@ -16,7 +16,7 @@ from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
 # Sauron modules
-from funcs import (power_law, turnover_power_law, chi2, chi2_unsummed, calculate_covariance_matrix_term,
+from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_matrix_term,
                    rescale_CC_for_cov,
                    calculate_null_counts, chi2_to_sigma)
 from SN_dataset import SN_dataset
@@ -26,6 +26,15 @@ matplotlib_logger = logging.getLogger('matplotlib')
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
@@ -320,6 +329,7 @@ class sauron_runner():
         dump = self.datasets[f"{survey}_DUMP_IA"]
         sim = self.datasets[f"{survey}_SIM_IA"]
         z_bins = self.fit_args_dict['z_bins'][survey]
+        logger.debug(f"Z bins for survey {survey}: {z_bins}")
 
         logging.info(f"Using true col: {sim.true_z_col} and recovered col: {sim.z_col}")
         simulated_events = sim.df
@@ -359,6 +369,8 @@ class sauron_runner():
             plt.xlabel("Reconstructed Redshift")
             plt.ylabel("True Redshift")
             plt.savefig(f"transfer_matrix_{survey}.png")
+
+        logger.debug(f"Transfer matrix shape for {survey}: {eff_ij.shape}")
 
         return eff_ij
 
