@@ -73,7 +73,7 @@ class SN_dataset():
             raise KeyError(f"Couldn't find true z col {value} in dataframe")
         self._true_z_col = value
 
-    def z_counts(self, z_bins, prob_thresh=None):
+    def z_counts(self, z_bins, prob_thresh=None, prob_thresh_below=None):
         """Calculate the counts of supernovae in redshift bins, optionally applying a classifier
         probability threshold.
         Inputs
@@ -87,6 +87,12 @@ class SN_dataset():
         counts : array
             The counts of supernovae in each redshift bin.
         """
+
+        if prob_thresh_below is not None and prob_thresh is not None:
+            raise ValueError("Cannot specify both prob_thresh and prob_thresh_below!")
+        if prob_thresh_below is not None:
+            return binstat(self.df[self.z_col][self.prob_scone() < prob_thresh_below],
+                           self.df[self.z_col][self.prob_scone() < prob_thresh_below], statistic='count', bins=z_bins)[0]
         if prob_thresh is not None:
             return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]

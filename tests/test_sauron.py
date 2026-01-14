@@ -548,6 +548,63 @@ def test_cc_decontam():
     plt.ylabel('CC Counts')
     plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts.png")
 
-
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
+
+
+
+def test_cc_decontam_small():
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    args = SimpleNamespace()
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    #runner.z_bins = np.arange(0.1, 1.0, 0.1)
+    runner.z_bins = np.linspace(0.1, 1.0, 4)
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+    #runner.apply_cuts(survey)
+    PROB_THRESH = 0.5
+    logger.debug("successfully reran")
+
+    pulls = []
+
+    pulls = np.empty((5, len(runner.z_bins)-1))
+    all_ntrue = np.empty((5, len(runner.z_bins)-1))
+    all_ncalc = np.empty((5, len(runner.z_bins)-1))
+    for i in range(5):
+        index = i+1
+        logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
+        runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
+
+        n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
+        residual = n_true - n_calc
+        pull = residual / np.sqrt(n_true)
+
+        pulls[i,:] = pull
+        all_ntrue[i,:] = n_true
+        all_ncalc[i,:] = n_calc
+        #pulls.extend(list(pull))
+
+    pulls = np.array(pulls)
+
+    means = np.mean(pulls, axis=0)
+    stds = np.std(pulls, axis=0)
+
+    logger.debug(f"MEANS: {means}")
+
+    mean_ntrue = np.mean(all_ntrue, axis=0)
+    mean_ncalc = np.mean(all_ncalc, axis=0)
+    std_ntrue = np.std(all_ntrue, axis=0)
+    std_ncalc = np.std(all_ncalc, axis=0)
+
+    z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
+    plt.clf()
+    plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
+    plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
+    plt.xlabel('Redshift')
+    plt.ylabel('CC Counts')
+    plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_small_counts.png")
+
+    np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(5))
 
