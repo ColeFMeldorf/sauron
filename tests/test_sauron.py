@@ -143,8 +143,10 @@ def test_calc_cov_term():
     runner = sauron_runner(args)
     datasets, surveys = runner.unpack_dataframes()
     survey = "DES"
-    runner.z_bins = np.arange(0, 1.4, 0.1)
-    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.45, 0.5, 0.55], runner.z_bins, 1,
+    runner.fit_args_dict['z_bins'][survey] = np.arange(0, 1.4, 0.1)
+    #runner.z_bins = np.arange(0, 1.4, 0.1)
+    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.1, 0.15, 0.2],
+                                               runner.fit_args_dict['z_bins'][survey], 1,
                                                survey)
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
     plot = True
