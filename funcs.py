@@ -84,6 +84,7 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     logging.info("Calculating Covariance Matrix Term...")
     expected_counts = []
     for i, param in enumerate(sys_params):
+        logger.debug(f"Expected counts {i} for sys param {sys_func(param, *args)}")
         expected_counts.append(sys_func(param, *args))
 
     for i, E in enumerate(expected_counts):
