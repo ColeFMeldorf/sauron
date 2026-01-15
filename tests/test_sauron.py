@@ -42,7 +42,7 @@ def test_regression_specz():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.13"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -145,7 +145,7 @@ def test_calc_cov_term():
     survey = "DES"
     runner.fit_args_dict['z_bins'][survey] = np.arange(0, 1.4, 0.1)
     #runner.z_bins = np.arange(0, 1.4, 0.1)
-    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15],
+    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.45, 0.5, 0.55],
                                                runner.fit_args_dict['z_bins'][survey], 1,
                                                survey)
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
@@ -344,9 +344,9 @@ def test_coverage_with_sys():
     sigma_1 = scipy_chi2.ppf([0.68], 2)
     sigma_2 = scipy_chi2.ppf([0.95], 2)
 
-    a = np.mean(df["alpha_error"]**2)
-    b = np.mean(df["beta_error"]**2)
-    c = np.mean(df["cov_alpha_beta"])
+    a = np.median(df["alpha_error"]**2)
+    b = np.median(df["beta_error"]**2)
+    c = np.median(df["cov_alpha_beta"])  # One huge outlier so switching to median
 
     mean_cov = np.array([[a, c], [c, b]])
 

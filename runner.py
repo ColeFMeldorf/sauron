@@ -562,7 +562,7 @@ class sauron_runner():
         logging.info(f"Saving to {output_path}")
         output_df.to_csv(output_path, index=False)
 
-    def calculate_CC_contamination(self, PROB_THRESH, index, survey, debug=False, method="Lasker"):
+    def calculate_CC_contamination(self, PROB_THRESH, index, survey, debug=True, method="Lasker"):
         """Calculate CC contamination for a given survey and dataset index.
 
         Inputs
@@ -577,7 +577,7 @@ class sauron_runner():
         datasets = self.datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
-
+        method = "Lasker"
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             if method == "Lasker":
                 IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
@@ -591,8 +591,8 @@ class sauron_runner():
                               f"{datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)}")
                 n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-                N_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
-                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                #N_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+                #n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
 
                 dataset = datasets[f"{survey}_DATA_ALL_{index}"].df
 
@@ -602,19 +602,19 @@ class sauron_runner():
 
                 R = n_data / N_data
 
-                #N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-                #n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+                N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+                n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-                N_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
-                n_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                #N_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
+                #n_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH)
 
 
 
-                #N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
-                #n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
+                N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
+                n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
 
-                N_CC_sim = datasets[f"{survey}_SIM_CC"].z_counts(z_bins)
-                n_CC_sim = datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                #N_CC_sim = datasets[f"{survey}_SIM_CC"].z_counts(z_bins)
+                #n_CC_sim = datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH)
 
                 # These lines below are debug and should be removed
                 #true_IAs_data = dataset[dataset['TYPE'].isin([101, 111])]
@@ -645,27 +645,31 @@ class sauron_runner():
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac *\
                     inverse_Ia_reduction_Fraction
 
-                if debug:
+
+            elif method == "scone_cut":
+                logging.debug("Performing just a scone cut for decontamination.")
+                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
+                                    datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
+                bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
+                n_data /= bias_correction
+                logging.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
+
+            if debug:
                     plt.clf()
                     plt.subplot(1, 2, 1)
-                    plt.plot(CC_frac, label="CC fraction vs z after contamination")
-                    plt.plot(IA_frac, label="IA fraction vs z after contamination")
+                    #plt.plot(CC_frac, label="CC fraction vs z after contamination")
+                    #plt.plot(IA_frac, label="IA fraction vs z after contamination")
                     plt.axhline(0, color='k', linestyle='--', lw=1)
                     plt.legend()
                     plt.subplot(1, 2, 2)
                     plt.plot(n_data, label="DATA ALL counts after CC contamination")
-                    #n_data_scone_cut = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                    #plt.plot(n_data_scone_cut, label="DATA ALL counts using scone cut")
                     n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
                     plt.plot(n_all, label="DATA counts before CC contamination")
                     plt.axhline(0, color='k', linestyle='--', lw=1)
                     logging.debug(f"Calculated n_data after CC contamination: {n_data}")
                     plt.legend()
-                    plt.savefig(f"scone_decontamination_{survey}_dataset{index}.png")
-            elif method == "scone_cut":
-                logging.debug("Performing just a scone cut for decontamination.")
-                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                logging.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
+                    plt.savefig(f"scone_decontam_{survey}_dataset{index}.png")
 
         else:
             if cheat:
@@ -979,30 +983,30 @@ class sauron_runner():
 
                 #logging.info(f"Applying cut on {col} for survey {survey}: min={min_val}, max={max_val}")
 
-                # Apply cuts to all datasets
-                if datasets.get(f"{survey}_SIM_ALL") is not None:
-                 #   logging.debug(f"Applying cuts to {survey}_SIM_ALL")
-                    datasets[f"{survey}_SIM_ALL"].apply_cut(col, min_val, max_val)
+                # # Apply cuts to all datasets
+                # if datasets.get(f"{survey}_SIM_ALL") is not None:
+                #  #   logging.debug(f"Applying cuts to {survey}_SIM_ALL")
+                #     datasets[f"{survey}_SIM_ALL"].apply_cut(col, min_val, max_val)
 
-                if datasets.get(f"{survey}_SIM_IA") is not None:
-                  #  logging.debug(f"Applying cuts to {survey}_SIM_IA")
-                    datasets[f"{survey}_SIM_IA"].apply_cut(col, min_val, max_val)
+                # if datasets.get(f"{survey}_SIM_IA") is not None:
+                #   #  logging.debug(f"Applying cuts to {survey}_SIM_IA")
+                #     datasets[f"{survey}_SIM_IA"].apply_cut(col, min_val, max_val)
 
-                if datasets.get(f"{survey}_SIM_CC") is not None:
-                   # logging.debug(f"Applying cuts to {survey}_SIM_CC")
-                    datasets[f"{survey}_SIM_CC"].apply_cut(col, min_val, max_val)
+                # if datasets.get(f"{survey}_SIM_CC") is not None:
+                #    # logging.debug(f"Applying cuts to {survey}_SIM_CC")
+                #     datasets[f"{survey}_SIM_CC"].apply_cut(col, min_val, max_val)
 
                 for i in range(n_datasets):
                     if datasets.get(f"{survey}_DATA_ALL_{i+1}") is not None:
-                    #    logging.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}, from {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries")
+                        logger.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}, from {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_ALL_{i+1}"].apply_cut(col, min_val, max_val)
-                     #   logging.debug(f"After cut, {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries remain")
+                        logger.debug(f"After cut, {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries remain")
                     if datasets.get(f"{survey}_DATA_IA_{i+1}") is not None:
-                      #  logging.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}, from {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries")
+                        logger.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}, from {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_IA_{i+1}"].apply_cut(col, min_val, max_val)
-                      #  logging.debug(f"After cut, {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries remain")
+                        logger.debug(f"After cut, {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries remain")
                     if datasets.get(f"{survey}_DATA_CC_{i+1}") is not None:
-                      #  logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
+                        logger.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
-                      #  logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
+                        logger.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
 
