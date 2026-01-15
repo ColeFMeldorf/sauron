@@ -9,38 +9,46 @@ from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
-def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
-    zJ = z_centers
-    fJ = rate_function(zJ, x)
-    Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
-    var_Ei = np.abs(Ei)
-    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-    cov_stat = np.diag(var_Ei + var_Si)
-    if cov_sys is None:
-        cov_sys = 0
-    cov = cov_stat + cov_sys
+# def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+#     zJ = z_centers
+#     fJ = rate_function(zJ, x)
+#     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+#     var_Ei = np.abs(Ei)
+#     var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
 
-    inv_cov = np.linalg.pinv(cov)
+#     cov_stat = np.diag(var_Ei + var_Si)
+#     if cov_sys is None:
+#         cov_sys = 0
+#     cov = cov_stat + cov_sys
 
-    resid_matrix = np.outer(n_data - Ei, n_data - Ei)
-    chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
+#     inv_cov = np.linalg.pinv(cov)
 
-    # The difference between the above and below actually matters even though I think it shouldn't.
+#     resid_matrix = np.outer(n_data - Ei, n_data - Ei)
+#     chi_squared = np.sum(inv_cov * resid_matrix, axis=0)
 
-    # resid_vector = n_data - Ei
-    # chi_squared = resid_vector.T * inv_cov @ resid_vector
+#     # The difference between the above and below actually matters even though I think it shouldn't.
 
-    # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
-    # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
-    # either way I believe.
-    # chi = np.sqrt(chi_squared)
+#     #resid_vector = n_data - Ei
+#     #chi_squared = resid_vector.T * inv_cov @ resid_vector
 
-    #chi = np.sqrt(np.abs(chi_squared))
+#     # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
+#     # I believe the minimizer wants the unsquared version, but it is minimizing the same thing
+#     # either way I believe.
+#     # chi = np.sqrt(chi_squared)
 
-    return chi_squared
-    #return chi
+#     #chi = np.sqrt(np.abs(chi_squared))
+
+#     return chi_squared
+#     #return chi
 
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
