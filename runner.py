@@ -319,6 +319,7 @@ class sauron_runner():
 
         logging.info(f"Using true col: {sim.true_z_col} and recovered col: {sim.z_col}")
         simulated_events = sim.df
+
         sim_z_col = sim.z_col
         true_z_col = sim.true_z_col
 
@@ -433,7 +434,7 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        fit_method = "leastsq"
+        fit_method = "minimize"
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
@@ -561,7 +562,7 @@ class sauron_runner():
         datasets = self.datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
-
+        method = "scone_cut"
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             if method == "Lasker":
                 IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
@@ -606,6 +607,14 @@ class sauron_runner():
             elif method == "scone_cut":
                 logging.debug("Performing just a scone cut for decontamination.")
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                logging.debug(f"PROB_THRESH: {PROB_THRESH} --------------")
+                logging.debug(f"n_data using scone cut: {n_data}")
+                bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
+                                    datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
+                bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
+                logging.debug(f"bias correction using scone cut: {bias_correction}")
+                n_data /= bias_correction
+
                 logging.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
         else:
@@ -739,7 +748,8 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
+                logging.info(f"Calculating systematic covariance matrix for {survey}...")
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.3, 0.5, 0.7],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
                 types = self.datasets[f"{survey}_SIM_CC"].df.TYPE.unique()
