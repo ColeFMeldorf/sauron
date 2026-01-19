@@ -145,3 +145,9 @@ class SN_dataset():
             for c in self.df.columns:
                 logging.warning(f" - {c}")
             raise KeyError(f"Couldn't find column {col} in dataframe to apply cut!")
+
+    def print_all_columns(self):
+        """Print all column names in the dataframe for debugging purposes."""
+        logging.info("Available columns in dataset:")
+        for c in self.df.columns:
+            logging.info(f" - {c}")

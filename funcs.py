@@ -103,6 +103,7 @@ def rescale_CC_for_cov(rescale_vals, PROB_THRESH, index, survey, datasets, z_bin
         sim_CC_df_no_cut = datasets[f"{survey}_SIM_CC"].df
         sim_CC_df = sim_CC_df_no_cut[datasets[f"{survey}_SIM_CC"].prob_scone() > PROB_THRESH]
         types = sim_CC_df_no_cut.TYPE.unique()
+        logging.debug(f"Contamination types found: {types}")
         assert (rescale_vals.shape[0] == len(types)), (
             f"I got the wrong number of rescale values compared to contamination types "
             f"({rescale_vals.shape[0]} vs {len(types)})"

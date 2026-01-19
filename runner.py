@@ -239,6 +239,7 @@ class sauron_runner():
             # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
             else:
                 logging.info("Splitting DUMP and SIM files into IA and CC...")
+                datasets[f"{survey}_SIM_ALL"].print_all_columns()
                 try:
                     dump_df = datasets[f"{survey}_DUMP_ALL"].df
                     sim_df = datasets[f"{survey}_SIM_ALL"].df
@@ -253,6 +254,7 @@ class sauron_runner():
                     sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
                     ia_vals_sim = survey_dict["SIM_ALL"]["IA_VALS"]
                 except KeyError:
+                    datasets[f"{survey}_DUMP_ALL"].print_all_columns()
                     raise KeyError(f"Couldn't find SNTYPECOL or IA_VALS in config for {survey}. These are needed to "
                                    "separate DUMP and SIM into IA and CC.")
 
@@ -271,8 +273,6 @@ class sauron_runner():
                 datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
                                                           data_name=survey+"_SIM_CC",
                                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-            logging.debug(f"z bin counts for {survey}_SIM_IA: {datasets[f'{survey}_SIM_IA'].z_counts(
-                self.fit_args_dict['z_bins'][survey])}")
             logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
                 data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
@@ -742,14 +742,14 @@ class sauron_runner():
                 cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
+                types = self.datasets[f"{survey}_SIM_CC"].df.TYPE.unique()
                 xx = np.linspace(0.01, 0.99, 10)
                 X = stats.norm(loc=1, scale=0.2)
                 vals = X.ppf(xx)
-                grid = np.meshgrid(vals, vals, vals, indexing='ij')
-                grid0 = grid[0].flatten()
-                grid1 = grid[1].flatten()
-                grid2 = grid[2].flatten()
-                rescale_vals = np.array([grid0, grid1, grid2]).T
+                val_list = [vals] * len(types)
+                grid = np.meshgrid(*val_list, indexing='ij')
+                grid_list = [grid[i].flatten() for i in range(len(types))]
+                rescale_vals = np.array(grid_list).T
 
                 cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
