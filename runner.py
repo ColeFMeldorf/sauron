@@ -577,7 +577,7 @@ class sauron_runner():
         datasets = self.datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
-        method = "Lasker"
+        method = "scone_cut"
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             if method == "Lasker":
                 IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
@@ -649,10 +649,12 @@ class sauron_runner():
             elif method == "scone_cut":
                 logging.debug("Performing just a scone cut for decontamination.")
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
-                                    datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
-                bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-                n_data /= bias_correction
+                #bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
+                #                    datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
+                #bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
+
+                bias_cor = datasets[f"{survey}_SIM_IA"].z_counts(z_bins) / datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh = PROB_THRESH)
+                n_data *= bias_cor
                 logging.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
             if debug:
