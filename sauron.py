@@ -46,9 +46,9 @@ def main():
     plt.hist(dump_df['GENZ'], bins=30, alpha=0.5, label='DUMP_ALL zHD')
     sim_df = datasets[f"{surveys[0]}_SIM_CC"].df
     plt.hist(sim_df['zHD'], bins=30, alpha=0.5, label='SIM_ALL GENZ')
-    data_df = datasets[f"{surveys[0]}_DATA_CC_1"].df
+    #data_df = datasets[f"{surveys[0]}_DATA_CC_1"].df
     plt.yscale('log')
-    plt.hist(data_df['zHD'], bins=30, alpha=0.5, label='DATA_ALL zHD')
+    #plt.hist(data_df['zHD'], bins=30, alpha=0.5, label='DATA_ALL zHD')
     plt.xlabel('Redshift')
     plt.ylabel('Counts')
     plt.subplot(1,2,2)
@@ -56,8 +56,8 @@ def main():
     plt.hist(dump_df['GENZ'], bins=30, alpha=0.5, label='DUMP_ALL zHD')
     sim_df = datasets[f"{surveys[0]}_SIM_IA"].df
     plt.hist(sim_df['zHD'], bins=30, alpha=0.5, label='SIM_ALL GENZ')
-    data_df = datasets[f"{surveys[0]}_DATA_IA_1"].df
-    plt.hist(data_df['zHD'], bins=30, alpha=0.5, label='DATA_ALL zHD')
+    #data_df = datasets[f"{surveys[0]}_DATA_IA_1"].df
+    #plt.hist(data_df['zHD'], bins=30, alpha=0.5, label='DATA_ALL zHD')
 
     plt.legend()
     plt.yscale('log')

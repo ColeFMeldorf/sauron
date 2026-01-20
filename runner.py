@@ -27,6 +27,11 @@ matplotlib_logger = logging.getLogger('matplotlib')
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
 
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
 # This change was made to match SNANA. If you require the previous values for consistency, revert to Om0=0.3, Ode0=0.7.
@@ -561,7 +566,7 @@ class sauron_runner():
         datasets = self.datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
-
+        method = "scone_cut"
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             if method == "Lasker":
                 IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
@@ -605,7 +610,13 @@ class sauron_runner():
                     plt.savefig(f"scone_decontamination_{survey}_dataset{index}.png")
             elif method == "scone_cut":
                 logging.debug("Performing just a scone cut for decontamination.")
+
+                bias_correction = datasets[f"{survey}_SIM_IA"].z_counts(z_bins) / datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+
+                #logging.debug(f"bias correction using scone cut: {bias_correction}")
+
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                n_data *= bias_correction
                 logging.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
         else:
@@ -863,6 +874,8 @@ class sauron_runner():
             }, index=np.array([0])))
 
     def apply_cuts(self, survey):
+        logger.debug(f"Applying cuts for survey: {survey}")
+        print("Applying cuts for survey:", survey)
         """Apply any cuts specified in the config to the datasets for a given survey.
         The cuts are determined by the CUTS field for each survey in the config file,
         of the form:
@@ -883,11 +896,14 @@ class sauron_runner():
         datasets = self.datasets
         with open(self.args.config, 'r') as config_file:
             files_input = yaml.safe_load(config_file)[survey]
+        print("Files input:", files_input)
         n_datasets = self.fit_args_dict["n_datasets"][survey]
 
         # Something to think about: Should cuts be applied to ALL datasets, CC datasets and IA datasets,
         # or just IA datasets? For now, I am applying to all datasets.
         cuts = files_input.get("CUTS", None)
+        logger.debug(f"Cuts found: {cuts}")
+        print("Cuts found:", cuts)
         if cuts is not None:
             for col in list(cuts.keys()):
                 raw_spec = cuts[col]
@@ -937,7 +953,7 @@ class sauron_runner():
                         datasets[f"{survey}_DATA_IA_{i+1}"].apply_cut(col, min_val, max_val)
                         logging.debug(f"After cut, {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries remain")
                     if datasets.get(f"{survey}_DATA_CC_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
+                        print(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
-                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
+                        print(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
 
