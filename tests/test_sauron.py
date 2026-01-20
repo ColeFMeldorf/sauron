@@ -358,9 +358,6 @@ def test_coverage_with_sys():
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
 
-    print(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
-    print(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
-
     # The expected coverages are the nominal Gaussian 1σ and 2σ fractions (≈0.68 and ≈0.95), but in this
     # test we only have O(50) pseudo-experiments (len(product_2)). The realised fractions therefore have
     # binomial sampling noise of order sqrt(p * (1 - p) / N) ≈ 0.06 for p ≈ 0.95 and N ≈ 50. In addition,
