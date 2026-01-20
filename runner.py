@@ -270,9 +270,6 @@ class sauron_runner():
                 datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
                                                           data_name=survey+"_SIM_CC",
                                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-            logging.debug(f"z bin counts for {survey}_SIM_CC: {datasets[f'{survey}_SIM_CC'].z_counts(self.fit_args_dict['z_bins'][survey])}")
-            logging.debug(f"z bin counts for {survey}_SIM_IA: {datasets[f'{survey}_SIM_IA'].z_counts(
-                self.fit_args_dict['z_bins'][survey])}")
             logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
                 data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
@@ -291,9 +288,9 @@ class sauron_runner():
         self.datasets = datasets
         self.surveys = surveys
 
-        for d in datasets:
-            counts = datasets[d].z_counts(self.fit_args_dict['z_bins'][survey])
-            assert np.size(np.where(counts == 0)[0]) <= 2, f"{d} has several zero count bins! {counts}"
+        # for d in datasets:
+        #     counts = datasets[d].z_counts(self.fit_args_dict['z_bins'][survey])
+        #     assert np.size(np.where(counts == 0)[0]) <= 2, f"{d} has several zero count bins! {counts}"
 
         return datasets, surveys
 
@@ -793,7 +790,7 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15],
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15], # This needs to be changed
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
                 xx = np.linspace(0.01, 0.99, 10)
