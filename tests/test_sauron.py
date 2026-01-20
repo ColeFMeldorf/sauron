@@ -532,3 +532,91 @@ def test_cc_decontam():
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
 
+
+
+
+def test_cc_decontam_small():
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    args = SimpleNamespace()
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    #runner.z_bins = np.arange(0.1, 1.0, 0.1)
+    runner.z_bins = np.linspace(0.1, 1.0, 8)
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+    runner.apply_cuts(survey)
+
+    PROB_THRESH = 0.5
+    logger.debug("successfully reran")
+
+    pulls = []
+    n_trials = 5
+
+    pulls = np.empty((n_trials, len(runner.z_bins)-1))
+    all_ntrue = np.empty((n_trials, len(runner.z_bins)-1))
+    all_ncalc = np.empty((n_trials, len(runner.z_bins)-1))
+    all_ncc = np.empty((n_trials, len(runner.z_bins)-1))
+    for i in range(n_trials):
+        index = i+1
+        logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
+        import matplotlib.pyplot as plt
+        plt.clf()
+        plt.subplot(1,2,1)
+        plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins), label='Sim IA Counts')
+        plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins), label='Sim CC Counts')
+        plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins), label='Sim All Counts')
+        plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Sim IA Counts Cut')
+        plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--" ,label='Sim CC Counts Cut')
+        plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Sim All Counts Cut')
+        plt.yscale("log")
+        plt.legend()
+
+        bias_cor = runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins) / runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh = 0.5)
+        plt.subplot(1,2,2)
+        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins), label='Data IA Counts')
+        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins), label='Data CC Counts')
+        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins), label='Data All Counts')
+        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data IA Counts Cut')
+        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data CC Counts Cut')
+        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH)*bias_cor, color = "k", lw= 3,ls = "--", label='Data All Counts Cut w/ BCor')
+        plt.yscale("log")
+        plt.legend()
+        plt.savefig(pathlib.Path(__file__).parent / f"aaaa_test_cc_decontam_simcounts_{index}_small.png")
+
+        runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
+
+        n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
+        n_CC = runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins)
+        residual = n_true - n_calc
+        pull = residual / np.sqrt(n_true)
+
+        pulls[i,:] = pull
+        all_ntrue[i,:] = n_true
+        all_ncalc[i,:] = n_calc
+        all_ncc[i,:] = n_CC
+        #pulls.extend(list(pull))
+
+    pulls = np.array(pulls)
+
+    means = np.mean(pulls, axis=0)
+    stds = np.std(pulls, axis=0)
+
+    logger.debug(f"MEANS: {means}")
+
+    mean_ntrue = np.mean(all_ntrue, axis=0)
+    mean_ncalc = np.mean(all_ncalc, axis=0)
+    std_ntrue = np.std(all_ntrue, axis=0)
+    std_ncalc = np.std(all_ncalc, axis=0)
+
+    z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
+    plt.clf()
+    plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
+    plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
+    plt.xlabel('Redshift')
+    plt.ylabel('CC Counts')
+    plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts_small.png")
+
+
+    np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
