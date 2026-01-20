@@ -434,7 +434,7 @@ class sauron_runner():
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        fit_method = "leastsq"
+        fit_method = "minimize"
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
