@@ -137,19 +137,20 @@ def test_perfect_recovery_pz():
 
 
 # Currently broken, pending fix
-# def test_calc_cov_term():
-#     args = SimpleNamespace()
-#     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-#     args.config = config_path
-#     args.cheat_cc = False
-#     runner = sauron_runner(args)
-#     datasets, surveys = runner.unpack_dataframes()
-#     survey = "DES"
-#     runner.z_bins = np.arange(0, 1.4, 0.1)
-#     cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
-#                                                survey)
-#     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
-#     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
+def test_calc_cov_term():
+    args = SimpleNamespace()
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+    runner.z_bins = np.arange(0, 1.4, 0.1)
+    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.45, 0.5, 0.55], runner.z_bins, 1,
+                                               survey)
+
+    regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
+    np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
 def test_rescale_CC_for_cov():
     args = SimpleNamespace()

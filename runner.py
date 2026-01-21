@@ -26,6 +26,7 @@ matplotlib_logger = logging.getLogger('matplotlib')
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
@@ -641,7 +642,7 @@ class sauron_runner():
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
                 n_data /= bias_correction
-                logging.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
+                logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
         else:
             if cheat:
