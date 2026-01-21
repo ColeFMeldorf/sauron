@@ -9,15 +9,8 @@ from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
-)
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+
 
 def chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
     zJ = z_centers
@@ -101,6 +94,7 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
 
     return C_ij
 
+
 def rescale_CC_for_cov(rescale_vals_and_seeds, PROB_THRESH, index, survey, datasets, z_bins, cheat):
     if cheat:
         datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
@@ -108,87 +102,33 @@ def rescale_CC_for_cov(rescale_vals_and_seeds, PROB_THRESH, index, survey, datas
     else:
         rescale_vals = rescale_vals_and_seeds[:-1]
         seed = int(rescale_vals_and_seeds[-1])
+        # The last entry is the seed for reproducibility.
         sim_IA = datasets[f"{survey}_SIM_IA"]
-
         sim_CC_df_no_cut = datasets[f"{survey}_SIM_CC"].df
-        #sim_CC_df = sim_CC_df_no_cut[datasets[f"{survey}_SIM_CC"].prob_scone() > PROB_THRESH]
         types = sim_CC_df_no_cut.TYPE.unique()
+        # Separate the CC SNe by type
         sim_CC_sep_on_type = [sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t] for t in types]
+        # Resample each type according to the rescale values
         sizes = np.array([len(df) for df in sim_CC_sep_on_type])
         new_sizes = np.round(sizes * rescale_vals, decimals=0).astype(int)
-        logger.debug(new_sizes)
-        new_CC_sep_on_type = [sim_CC_sep_on_type[i].sample(n=new_sizes[i], replace=True, random_state=seed) if new_sizes[i] > 0 else sim_CC_sep_on_type[i].iloc[0:0] for i in range(len(types))]
+        new_CC_sep_on_type = [sim_CC_sep_on_type[i].sample(n=new_sizes[i], replace=True, random_state=seed)
+                              for i in range(len(types))]
         new_sim_CC_df = pd.concat(new_CC_sep_on_type)
-        logger.debug("New sim CC df size after rescaling:")
-        logger.debug(len(new_sim_CC_df))
 
+        # Now apply the probability cut. This is doing the CC decontamination.
         scone_col_name = datasets[f"{survey}_SIM_CC"].scone_col
         cc_scone_col = new_sim_CC_df[scone_col_name]
-        new_sim_CC_df_cut = new_sim_CC_df.iloc[np.where(cc_scone_col > PROB_THRESH)]
-        logger.debug("New sim CC df size after rescaling and cutting:")
-        logger.debug(len(new_sim_CC_df_cut))
+        new_sim_CC_df_cut = new_sim_CC_df[cc_scone_col > PROB_THRESH]
         sim_IA_df_cut = sim_IA.df[sim_IA.df[sim_IA.scone_col] > PROB_THRESH]
         temp_sim_all_df = pd.concat([new_sim_CC_df_cut, sim_IA_df_cut])
-        logger.debug("Temp sim all df size after cutting:")
-        logger.debug(len(temp_sim_all_df))
         temp_sim_all_cut_counts = binstat(temp_sim_all_df[datasets[f"{survey}_SIM_CC"].z_col],
-                                         temp_sim_all_df[datasets[f"{survey}_SIM_CC"].z_col],
-                                         statistic='count', bins=z_bins)[0]
-        logger.debug("Temp sim all cut counts:")
-        logger.debug(np.sum(temp_sim_all_cut_counts))
-
+                                          temp_sim_all_df[datasets[f"{survey}_SIM_CC"].z_col],
+                                          statistic='count', bins=z_bins)[0]
+        # Finally do the bias correction as in CC decontam in the main analysis.
         n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-        bias_correction =  datasets[f"{survey}_SIM_IA"].z_counts(z_bins) / temp_sim_all_cut_counts
+        bias_correction = datasets[f"{survey}_SIM_IA"].z_counts(z_bins) / temp_sim_all_cut_counts
         bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
         n_data *= bias_correction
-        logger.debug("n_data after bias correction:")
-        logger.debug(n_data)
-        # logger.debug(n_data)
-        # assert False
-
-
-
-
-        # assert (rescale_vals.shape[0] == len(types)), (
-        #     f"I got the wrong number of rescale values compared to contamination types "
-        #     f"({rescale_vals.shape[0]} vs {len(types)})"
-        # )
-
-        # N_CC_sim = np.zeros((len(z_bins)-1, len(types)))
-        # sim_CC = np.zeros((len(z_bins)-1, len(types)))
-
-        # for i, t in enumerate(types):
-        #     rescale_factor = rescale_vals[i]
-        #     raw_counts = binstat(sim_CC_df[sim_CC_df.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
-        #                          sim_CC_df[sim_CC_df.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
-        #                          statistic='count', bins=z_bins)[0]
-        #     raw_counts = raw_counts * rescale_factor
-        #     sim_CC[:, i] = raw_counts
-
-        #     raw_counts = binstat(sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
-        #                          sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t][datasets[f"{survey}_SIM_CC"].z_col],
-        #                          statistic='count', bins=z_bins)[0]
-        #     raw_counts = raw_counts * rescale_factor
-        #     N_CC_sim[:, i] = raw_counts
-
-        # sim_CC = np.sum(sim_CC, axis=1)
-        # IA_frac = np.nan_to_num(sim_IA / (sim_IA + sim_CC))
-        # N_CC_sim = np.sum(N_CC_sim)
-        # n_CC_sim = np.sum(sim_CC)
-
-        # N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
-        # n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-        # R = n_data / N_data
-
-        # N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-        # n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-
-        # S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
-
-        # CC_frac = (1 - IA_frac) * S
-        # IA_frac = np.nan_to_num(1 - CC_frac)
-
-        # n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac
 
     return n_data
 

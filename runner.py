@@ -38,7 +38,7 @@ func_name_dictionary = {
 }
 
 default_x0_dictionary = {
-    "power_law": (2.3e-5, 1.8), # Change this back
+    "power_law": (2.27e-5, 1.7),
     "turnover_power_law": (1, 0, 1, -2),
     "dual_power_law": (1, 0, 1, -2)
 }
@@ -460,13 +460,7 @@ class sauron_runner():
         elif fit_method == "minimize":
 
             from scipy.optimize import minimize
-            logging.debug("Using scipy minimize for fitting.")
-            logging.debug(f"null_counsts: {null_counts}")
-            logging.debug(f"f_norms: {f_norms}")
-            logging.debug(f"z_centers: {z_centers}")
-            logging.debug(f"eff_ij: {eff_ij}")
-            logging.debug(f"n_data: {n_data}")
-            logging.debug(f"cov_sys: {cov_sys}")
+
             result = minimize(
                         chi2,
                         x0=self.x0,
@@ -780,10 +774,10 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.45, 0.5, 0.55], # This needs to be changed
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.45, 0.5, 0.55],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
-                xx = [0.05, 0.16, 0.5, 0.84, 0.95]
+                xx = [0.05, 0.16, 0.5, 0.84, 0.95] # 5 values between +/- 2 sigma \
                 X = stats.norm(loc=1, scale=0.2)
                 vals = X.ppf(xx)
                 grid = np.meshgrid(vals, vals, vals, indexing='ij')
