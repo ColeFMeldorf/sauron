@@ -1,6 +1,7 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, chi2_unsummed
+from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, chi2_unsummed, \
+    rescale_CC_for_cov
 from runner import sauron_runner
 
 # Standard Library
@@ -11,7 +12,7 @@ import pathlib
 import pytest
 from types import SimpleNamespace
 import subprocess
-from scipy.stats import chi2 as scipy_chi2
+from scipy.stats import chi2 as scipy_chi2, ks_2samp, norm
 
 
 import numpy as np
@@ -136,19 +137,59 @@ def test_perfect_recovery_pz():
 
 
 # Currently broken, pending fix
-# def test_calc_cov_term():
-#     args = SimpleNamespace()
-#     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
-#     args.config = config_path
-#     args.cheat_cc = False
-#     runner = sauron_runner(args)
-#     datasets, surveys = runner.unpack_dataframes()
-#     survey = "DES"
-#     runner.z_bins = np.arange(0, 1.4, 0.1)
-#     cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.05, 0.1, 0.15], runner.z_bins, 1,
-#                                                survey)
-#     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
-#     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
+def test_calc_cov_term():
+    args = SimpleNamespace()
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    datasets, surveys = runner.unpack_dataframes()
+    survey = "DES"
+    runner.z_bins = np.arange(0, 1.4, 0.1)
+    cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.45, 0.5, 0.55], runner.z_bins, 1,
+                                               survey)
+
+    regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
+    np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
+
+def test_rescale_CC_for_cov():
+    args = SimpleNamespace()
+    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    _, _ = runner.unpack_dataframes()
+    survey = "DES"
+    runner.z_bins = np.arange(0.1, 1.0, 0.1)
+
+    xx = np.array([0.05, 0.15865525, 0.5, 0.84134475, 0.95])  # 5 sigma points for normal dist
+    X = norm(loc=1, scale=0.2)
+    vals = X.ppf(xx)
+    grid = np.meshgrid(vals, vals, vals, indexing='ij')
+    grid0 = grid[0].flatten()
+    grid1 = grid[1].flatten()
+    grid2 = grid[2].flatten()
+
+    seeds = np.array(np.arange(len(grid0)))
+    rescale_vals = np.array([grid0, grid1, grid2, seeds]).T
+
+    logger.debug(rescale_vals)
+    PROB_THRESH = 0.5
+
+    cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
+                                                     runner.z_bins, PROB_THRESH,
+                                                     1, survey, runner.datasets,
+                                                     runner.z_bins, False)
+
+    logger.debug(cov_rate_norm)
+
+    plt.imshow(cov_rate_norm, origin='lower')
+    plt.colorbar()
+    plt.savefig(pathlib.Path(__file__).parent / "test_rescale_cov_term.png")
+
+    regression_cov = np.load(pathlib.Path(__file__).parent / "test_rescale_cov_term.npy")
+
+    np.testing.assert_allclose(cov_rate_norm, regression_cov, atol=1e-7)
 
 
 def test_calc_effij():
@@ -260,14 +301,15 @@ def test_coverage_no_sys():
             f"stdout:\n{result.stdout}\n"
             f"stderr:\n{result.stderr}"
         )
+    logger.debug(f"Reading outpath {outpath}")
     df = pd.read_csv(outpath)
 
     sigma_1 = scipy_chi2.ppf([0.68], 2)
     sigma_2 = scipy_chi2.ppf([0.95], 2)
 
-    a = np.mean(df["alpha_error"]**2)
-    b = np.mean(df["beta_error"]**2)
-    c = np.mean(df["cov_alpha_beta"])
+    a = np.median(df["alpha_error"]**2)
+    b = np.median(df["beta_error"]**2)
+    c = np.median(df["cov_alpha_beta"])
 
     mean_cov = np.array([[a, c], [c, b]])
 
@@ -295,10 +337,24 @@ def test_coverage_no_sys():
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
-
+    logger.debug(f"df alpha: {df['alpha']}")
 
     np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.1)
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.1)
+
+    # We also perform some additional strict testing with these tolerances.
+    output = scipy_chi2.fit(product_2)
+    np.testing.assert_array_less(output[0], 1.97)
+    np.testing.assert_array_less(1.38, output[0])
+    # fitted dof should be close to 2. However, according to simulations, the distribution is slightly
+    # biased to recover dofs lower than 2 even with data simulated with 2 dofs. Hence the asymmetric bounds above.
+    # This is a cut between the 5th - 95th percentiles of the dof distribution from simulations.
+
+    # Finally we also check using a KS test that the observed distribution is consistent with chi2 with 2 dofs.
+    np.random.seed(seed=42)
+    simulated_data = scipy_chi2.rvs(df=2, size=50, scale=1.0)
+    p_value = ks_2samp(simulated_data, product_2)
+    np.testing.assert_array_less(0.05, p_value.pvalue)
 
 
 def test_coverage_with_sys():
@@ -319,8 +375,6 @@ def test_coverage_with_sys():
             f"stderr:\n{result.stderr}"
         )
     df = pd.read_csv(outpath)
-
-
 
     sigma_1 = scipy_chi2.ppf([0.68], 2)
     sigma_2 = scipy_chi2.ppf([0.95], 2)
@@ -354,19 +408,32 @@ def test_coverage_with_sys():
         plt.xlabel("Chi-squared statistic")
         plt.savefig(pathlib.Path(__file__).parent / "test_coverage_sys_hist.png")
 
-
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
 
     # The expected coverages are the nominal Gaussian 1σ and 2σ fractions (≈0.68 and ≈0.95), but in this
     # test we only have O(50) pseudo-experiments (len(product_2)). The realised fractions therefore have
-    # binomial sampling noise of order sqrt(p * (1 - p) / N) ≈ 0.06 for p ≈ 0.95 and N ≈ 50. In addition,
+    # binomial sampling noise of order sqrt(p * (1 - p) / N) ≈ 0.07 for p ≈ 0.68 and N ≈ 50. We then round
+    # to the nearest whole number of tests (4/50) for a cut of 0.08. In addition,
     # the test statistic is chi-squared–like rather than exactly Gaussian, which further broadens the
-    # empirical distribution. We therefore use atol=0.07 to avoid flaky failures while still detecting
+    # empirical distribution. We therefore use atol=0.08 to avoid flaky failures while still detecting
     # substantial coverage regressions; tighter tolerances (e.g. 0.05) were observed to fail spuriously.
-    np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.07)
-    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.07)  # Note the stricter
-    # tolerance here. We expect better coverage when systematics are included because they inflate the error bars.
+    np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.08)
+    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.08)
+
+    # We also perform some additional strict testing with these tolerances.
+    output = scipy_chi2.fit(product_2)
+    np.testing.assert_array_less(output[0], 1.88)
+    np.testing.assert_array_less(1.5, output[0])
+    # fitted dof should be close to 2. However, according to simulations, the distribution is slightly
+    # biased to recover dofs lower than 2 even with data simulated with 2 dofs. Hence the asymmetric bounds above.
+    # This is a cut between the 16th - 84th percentiles of the dof distribution from simulations.
+
+    # Finally we also check using a KS test that the observed distribution is consistent with chi2 with 2 dofs.
+    np.random.seed(seed=42)
+    simulated_data = scipy_chi2.rvs(df = 2, size=50, scale=1.0)
+    p_value = ks_2samp(simulated_data, product_2)
+    np.testing.assert_array_less(0.05, p_value.pvalue)
 
 
 def test_perfect_recovery_multisurvey():
@@ -481,15 +548,12 @@ def test_des_data_regression():
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
 
 
-
 def test_cc_decontam():
     config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
-    #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     args = SimpleNamespace()
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    #runner.z_bins = np.arange(0.1, 1.0, 0.1)
     runner.z_bins = np.linspace(0.1, 1.0, 8)
     datasets, surveys = runner.unpack_dataframes()
     survey = "DES"
@@ -512,15 +576,13 @@ def test_cc_decontam():
         residual = n_true - n_calc
         pull = residual / np.sqrt(n_true)
 
-        pulls[i,:] = pull
-        all_ntrue[i,:] = n_true
-        all_ncalc[i,:] = n_calc
-        #pulls.extend(list(pull))
+        pulls[i, :] = pull
+        all_ntrue[i, :] = n_true
+        all_ncalc[i, :] = n_calc
 
     pulls = np.array(pulls)
 
     means = np.mean(pulls, axis=0)
-    stds = np.std(pulls, axis=0)
 
     logger.debug(f"MEANS: {means}")
 
@@ -530,17 +592,16 @@ def test_cc_decontam():
     std_ncalc = np.std(all_ncalc, axis=0)
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
-    plt.clf()
-    plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
-    plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
-    plt.xlabel('Redshift')
-    plt.ylabel('CC Counts')
-    plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts.png")
-
+    plot = False
+    if plot:
+        plt.clf()
+        plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
+        plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
+        plt.xlabel('Redshift')
+        plt.ylabel('CC Counts')
+        plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts.png")
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
-
-
 
 
 def test_cc_decontam_small():
@@ -549,7 +610,6 @@ def test_cc_decontam_small():
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
-    #runner.z_bins = np.arange(0.1, 1.0, 0.1)
     runner.z_bins = np.linspace(0.1, 1.0, 8)
     datasets, surveys = runner.unpack_dataframes()
     survey = "DES"
@@ -568,15 +628,17 @@ def test_cc_decontam_small():
     for i in range(n_trials):
         index = i+1
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
-        import matplotlib.pyplot as plt
         plt.clf()
         plt.subplot(1,2,1)
         plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins), label='Sim IA Counts')
         plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins), label='Sim CC Counts')
         plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins), label='Sim All Counts')
-        plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Sim IA Counts Cut')
-        plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--" ,label='Sim CC Counts Cut')
-        plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Sim All Counts Cut')
+        plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins, prob_thresh=PROB_THRESH), ls="--",
+                 label='Sim IA Counts Cut')
+        plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins, prob_thresh=PROB_THRESH), ls="--" ,
+                 label='Sim CC Counts Cut')
+        plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh=PROB_THRESH), ls="--",
+                 label='Sim All Counts Cut')
         plt.yscale("log")
         plt.legend()
 

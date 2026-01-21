@@ -26,6 +26,7 @@ matplotlib_logger = logging.getLogger('matplotlib')
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
@@ -439,26 +440,6 @@ class sauron_runner():
         n = len(self.x0)  # number of parameters
 
 
-        #### doing an extra fit to compare ###
-        # from scipy.optimize import minimize
-        # result = minimize(
-        #                 chi2,
-        #                 x0=self.x0,
-        #                 args=(null_counts, f_norms, z_centers, eff_ij,
-        #                       n_data, self.rate_function, cov_sys),
-        #                 method=None
-        #             )
-        # residual_variance_minimize = result.fun / (N - n)
-        # fit_params_minimize = result.x
-        # cov_x_minimize = result.hess_inv * residual_variance_minimize
-        # chi_squared_minimize = result.fun
-        # logging.debug(f"Minimize Result: {fit_params_minimize}")
-        # def errFit(hess_inv, resVariance):
-        #     return np.sqrt( np.diag( hess_inv * resVariance))
-        # dFit = errFit( result.hess_inv,  residual_variance_minimize)
-        # logging.debug(f"Standard errors Stack Overflow: {dFit}")
-        # logging.debug(f"residual variance minimize: {residual_variance_minimize}")
-
         if fit_method == "leastsq":
 
             fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
@@ -480,6 +461,7 @@ class sauron_runner():
         elif fit_method == "minimize":
 
             from scipy.optimize import minimize
+
             result = minimize(
                         chi2,
                         x0=self.x0,
@@ -547,7 +529,7 @@ class sauron_runner():
         logging.info(f"Saving to {output_path}")
         output_df.to_csv(output_path, index=False)
 
-    def calculate_CC_contamination(self, PROB_THRESH, index, survey, debug=False, method="Lasker"):
+    def calculate_CC_contamination(self, PROB_THRESH, index, survey, datasets=None, debug=False, method="Lasker"):
         """Calculate CC contamination for a given survey and dataset index.
 
         Inputs
@@ -558,8 +540,11 @@ class sauron_runner():
             Dataset index.
         survey : str
             Name of the survey.
+        datasets: dict
+            Dictionary of datasets. Note, this is stored in this class as self.datasets, but since this function is also
+            used for the rescaling contaminant rates systematic, it is passed as an argument here.
         """
-        datasets = self.datasets
+        datasets = self.datasets if datasets is None else datasets
         z_bins = self.fit_args_dict['z_bins'][survey]
         cheat = self.args.cheat_cc
         method = "scone_cut"
@@ -657,7 +642,7 @@ class sauron_runner():
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
                 n_data /= bias_correction
-                logging.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
+                logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
         else:
             if cheat:
@@ -778,7 +763,7 @@ class sauron_runner():
 
         fig.savefig("summary_plot.png")
 
-    def calculate_covariance(self, PROB_THRESH=0.13):
+    def calculate_covariance(self, PROB_THRESH=0.5):
         """Calculate systematic covariance matrix for each survey.
         Inputs
         ------
@@ -790,17 +775,18 @@ class sauron_runner():
             do_sys_cov = getattr(self.args, "sys_cov", None)
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
-                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.05, 0.1, 0.15], # This needs to be changed
+                cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.45, 0.5, 0.55],
                                                               self.fit_args_dict["z_bins"][survey], 1, survey)
 
-                xx = np.linspace(0.01, 0.99, 10)
+                xx = [0.05, 0.16, 0.5, 0.84, 0.95] # 5 values between +/- 2 sigma \
                 X = stats.norm(loc=1, scale=0.2)
                 vals = X.ppf(xx)
                 grid = np.meshgrid(vals, vals, vals, indexing='ij')
                 grid0 = grid[0].flatten()
                 grid1 = grid[1].flatten()
                 grid2 = grid[2].flatten()
-                rescale_vals = np.array([grid0, grid1, grid2]).T
+                seeds = np.array(np.arange(len(grid0)))
+                rescale_vals = np.array([grid0, grid1, grid2, seeds]).T
 
                 cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
