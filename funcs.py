@@ -30,7 +30,7 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
 
     chi_squared = resid_vector.T @ inv_cov @ resid_vector
 
-    # This vector is X^2 contribution for each z bin. It has ALREADY been squared.
+    # This is the X^2 contribution for each z bin. It has ALREADY been squared.
     # This is what scipy.optimize.minimize needs.
 
     return chi_squared

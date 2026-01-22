@@ -440,9 +440,6 @@ class sauron_runner():
         n = len(self.x0)  # number of parameters
 
         if fit_method == "minimize":
-
-
-
             result = minimize(
                         chi2,
                         x0=self.x0,
@@ -460,7 +457,7 @@ class sauron_runner():
                 return np.sqrt(np.diag(hess_inv * resVariance))
 
             residual_variance = result.fun / (N - n)
-            dFit = errFit( result.hess_inv,  residual_variance)
+            dFit = errFit(result.hess_inv, residual_variance)
             logging.debug(f"Standard errors Stack Overflow: {dFit}")
             cov_x = result.hess_inv * residual_variance
             chi_squared = result.fun

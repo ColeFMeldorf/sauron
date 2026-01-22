@@ -251,9 +251,9 @@ def test_chi():
                                         z_centers=z_centers)
 
     regression_chi = 10.444929
-
-    np.testing.assert_allclose(chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
-                               regression_chi, atol=1e-7)
+    measured_chi = chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law)
+    assert isinstance(measured_chi, float), "Measured chi is not a float."
+    np.testing.assert_allclose(measured_chi, regression_chi, atol=1e-7)
 
 
 def test_regression_pz_5datasets_covariance():
