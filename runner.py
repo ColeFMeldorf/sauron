@@ -978,3 +978,65 @@ class sauron_runner():
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
                         logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
 
+    def perform_sanity_checks(self, survey):
+        """Perform sanity checks on the datasets and fit arguments."""
+        logging.debug("Performing sanity checks on datasets")
+        # DUMP should be larger than SIM in all bins
+
+        plt.subplot(1, 2, 1)
+        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DUMP_IA')
+        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                self.datasets[f"{survey}_SIM_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='SIM_IA')
+        plt.xlabel("Redshift")
+        plt.ylabel("Counts")
+        plt.legend()
+        #plt.subplot(1, 3, 2)
+        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                self.datasets[f"{survey}_DUMP_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DUMP_CC')
+        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                self.datasets[f"{survey}_SIM_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='SIM_CC')
+        plt.xlabel("Redshift")
+        plt.ylabel("Counts")
+        plt.legend()
+        plt.subplot(1, 2, 2)
+        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DUMP_ALL')
+        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='SIM_ALL')
+        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                self.datasets[f"{survey}_DATA_ALL_1"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DATA_ALL_1')
+        plt.xlabel("Redshift")
+        plt.savefig(f"sanity_check_counts_{survey}.png")
+
+        assert self.datasets[f"{survey}_DUMP_ALL"].total_counts >= self.datasets[f"{survey}_SIM_ALL"].total_counts, \
+            f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset for survey {survey}!"
+        assert all(self.datasets[f'{survey}_DUMP_ALL'].z_counts(self.fit_args_dict['z_bins'][survey]) >=
+                     self.datasets[f'{survey}_SIM_ALL'].z_counts(self.fit_args_dict['z_bins'][survey])), \
+            f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!"
+        # No dataset should have zero total counts
+        for key in self.datasets.keys():
+            assert self.datasets[key].total_counts > 0, f"Dataset {key} has zero total counts!"
+
+        #The ratio between CC and IA should be reasonable
+        sim_IA = self.datasets[f"{survey}_SIM_IA"].total_counts
+        sim_CC = self.datasets[f"{survey}_SIM_CC"].total_counts
+        ratio = sim_CC / sim_IA if sim_IA > 0 else np.inf
+        assert ratio < 5, f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}"
+        assert ratio > 0.2, f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}"
+
+        dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
+        dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
+        dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
+        assert dump_ratio < 100, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
+        assert dump_ratio > 0.01, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
+
+        np.testing.assert_allclose(dump_ratio, ratio, atol=0.2, err_msg=f"CC to IA ratios in SIM and DUMP datasets differ significantly for survey {survey}: SIM ratio = {ratio}, DUMP ratio = {dump_ratio}")
+

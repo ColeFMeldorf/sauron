@@ -8,6 +8,8 @@ import logging
 # Sauron modules
 from runner import sauron_runner
 
+
+
 # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
@@ -29,6 +31,8 @@ def main():
     parser.add_argument("--skip-cuts", action="store_true", help="Skip applying cuts to the data.", default=False)
     parser.add_argument("--prob_thresh", type=float, default=0.5,
                         help="Probability threshold for classifying SNe as Type IA.")
+    parser.add_argument("--sanity-check", action="store_true", help="Perform sanity checks"
+                        "that simulations look reasonable.", default=True)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -38,6 +42,8 @@ def main():
 
     datasets, surveys = runner.unpack_dataframes()
 
+
+
     # Covariance calculations, if requested
 
     runner.calculate_covariance(PROB_THRESH=PROB_THRESH)
@@ -45,6 +51,7 @@ def main():
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
         runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
+        runner.perform_sanity_checks(survey) if args.sanity_check else None
         if not args.skip_cuts:
             runner.apply_cuts(survey)
         runner.calculate_transfer_matrix(survey)
