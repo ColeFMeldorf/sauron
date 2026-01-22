@@ -6,7 +6,7 @@ import logging
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.optimize import leastsq
+from scipy.optimize import minimize
 from scipy.sparse import block_diag
 from scipy import stats
 
@@ -16,7 +16,7 @@ from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
 # Sauron modules
-from funcs import (power_law, turnover_power_law, chi2, chi2_unsummed, calculate_covariance_matrix_term,
+from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_matrix_term,
                    rescale_CC_for_cov,
                    calculate_null_counts, chi2_to_sigma)
 from SN_dataset import SN_dataset
@@ -439,29 +439,7 @@ class sauron_runner():
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
-
-        if fit_method == "leastsq":
-
-            fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-                                                  n_data, self.rate_function, cov_sys),
-                                                  full_output=True)[:3]
-            logging.debug(f"Least Squares Result: {fit_params}")
-            residual_variance = (infodict['fvec']**2).sum() / (N - n)
-            logging.debug(f"residual variance leastsq: {residual_variance}")
-            cov_x *= residual_variance
-            # * 0.5
-            # The factor of 1/2 is needed to agree with minimize, unclear why. Re-include it to make them agree better.
-
-            # See scipy doc for leastsq for explanation of this covariance rescaling
-            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-            chi_squared = np.sum(infodict['fvec']) # If we take the square root in the chi func then
-            # I think this should be squared but I am changing back for regression
-            logging.debug(f"chi_squared leastsq: {chi_squared}")
-
-        elif fit_method == "minimize":
-
-            from scipy.optimize import minimize
-
+        if fit_method == "minimize":
             result = minimize(
                         chi2,
                         x0=self.x0,
@@ -476,9 +454,10 @@ class sauron_runner():
             # This calculation of residual variance is only valid if minimizing sum of squares
 
             def errFit(hess_inv, resVariance):
-                return np.sqrt( np.diag( hess_inv * resVariance))
+                return np.sqrt(np.diag(hess_inv * resVariance))
+
             residual_variance = result.fun / (N - n)
-            dFit = errFit( result.hess_inv,  residual_variance)
+            dFit = errFit(result.hess_inv, residual_variance)
             logging.debug(f"Standard errors Stack Overflow: {dFit}")
             cov_x = result.hess_inv * residual_variance
             chi_squared = result.fun
