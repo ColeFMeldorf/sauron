@@ -737,6 +737,7 @@ class sauron_runner():
 
             ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
             #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
+            # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
             ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
             plt.colorbar(ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto',
                          cmap="plasma"), ax=ax2, label="Delta Chi-squared")
