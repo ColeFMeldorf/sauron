@@ -645,7 +645,7 @@ class sauron_runner():
 
         return n_data
 
-    def generate_chi2_map(self, survey, n_samples=50):
+    def generate_chi2_map(self, survey, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -671,10 +671,10 @@ class sauron_runner():
                            fit_args_dict['n_data'][survey],
                            self.rate_function,
                            fit_args_dict['cov_sys'][survey])
-        logging.debug(f"chi2 at (2.27e-5, 1.7): {np.sum(chi2_result**2)}")
+        logging.debug(f"chi2 at (2.27e-5, 1.7): {np.sum(chi2_result)}")
 
-        for i, a in enumerate(np.linspace(2.0e-5, 2.6e-5, n_samples)):
-            for j, b in enumerate(np.linspace(1.4, 2.0, n_samples)):
+        for i, a in enumerate(np.linspace(extent[2], extent[3], n_samples)):
+            for j, b in enumerate(np.linspace(extent[0], extent[1], n_samples)):
 
                 values = (a, b)
 
@@ -718,27 +718,37 @@ class sauron_runner():
                 ax1.set_ylabel("Counts")
                 ax1.set_yscale("log")
 
-            ax2 = ax[i+1]
-            chi2_map = self.generate_chi2_map(s)
-            # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
-
-            sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-
-            ax2.imshow(sigma_map, extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto', cmap="plasma")
-            ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-            plt.colorbar(ax2.imshow(sigma_map, extent=[1.4, 2, 2.0e-5, 2.6e-5], origin='lower', aspect='auto',
-                         cmap="plasma"), ax=ax2, label="Sigma Level")
-            ax2.axhline(2.27e-5, color='black', linestyle='--')
-            ax2.axvline(1.7, color='black', linestyle='--')
-
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
                 df = self.results[s]
 
+            ax2 = ax[i+1]
+            extent_chi = [df["beta"][0] - 5 * df["beta_error"][0], df["beta"][0] + 5 * df["beta_error"][0],
+                          df["alpha"][0] - 5 * df["alpha_error"][0], df["alpha"][0] + 5 * df["alpha_error"][0]]
+            logger.debug(extent_chi)
+            chi2_map = self.generate_chi2_map(s, extent=extent_chi)
+            # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
+            chi2_map -= np.min(chi2_map)
+            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
+
+            #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
+            sigma_map = chi2_map
+
+            im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
+            #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
+            # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+            ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
+            plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
+            #ax2.axhline(2.27e-5, color='black', linestyle='--')
+            #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
             ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
                          color='white', ms=10, label=f"Fit results {survey}")
+            ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
+            ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
+            ax2.set_xlabel("beta")
+            ax2.set_ylabel("alpha")
+            ax2.legend()
 
         fig.savefig("summary_plot.png")
 
