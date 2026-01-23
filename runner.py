@@ -739,19 +739,9 @@ class sauron_runner():
             #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
             # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
             ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
-<<<<<<< HEAD
             plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
             #ax2.axhline(2.27e-5, color='black', linestyle='--')
             #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-=======
-            plt.colorbar(ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto',
-                         cmap="plasma"), ax=ax2, label="Delta Chi-squared")
-            ax2.axhline(2.27e-5, color='black', linestyle='--')
-            ax2.axvline(1.7, color='black', linestyle='--')
-
-
-
->>>>>>> bc79e9f71de2cdd771f90eeff916adeb874d415c
             ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
                          color='white', ms=10, label=f"Fit results {survey}")
             ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
