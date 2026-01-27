@@ -809,7 +809,9 @@ class sauron_runner():
                 #grid = np.meshgrid(vals, vals, vals, indexing='ij')
 
                 # Create a copy for each unique type of CC contaminant
-                grid = np.meshgrid((vals,) * len(self.datasets[f"{survey}_SIM_CC"].df.TYPE.unique()), indexing='ij')
+                val_list = [vals] * len(self.datasets[f"{survey}_SIM_CC"].df.TYPE.unique())
+
+                grid = np.meshgrid(*val_list, indexing='ij')
                 # grid0 = grid[0].flatten()
                 # grid1 = grid[1].flatten()
                 # grid2 = grid[2].flatten()
