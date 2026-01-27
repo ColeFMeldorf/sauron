@@ -462,6 +462,38 @@ class sauron_runner():
             cov_x = result.hess_inv * residual_variance
             chi_squared = result.fun
 
+        elif fit_method == "curve_fit":
+            from scipy.optimize import curve_fit
+
+            fJ_0 = self.rate_function(z_centers, self.x0)
+            Ei = np.sum(null_counts * eff_ij * f_norm * fJ_0, axis=0)
+            var_Ei = np.abs(Ei)
+            var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ_0**2, axis=0)
+
+            cov_stat = np.diag(var_Ei + var_Si)
+
+            cov = cov_stat + cov_sys
+            logger.debug(f"Sys Covariance Matrix Diag: {np.diag(cov_sys)}")
+            logger.debug(f"Stat Covariance Matrix Diag: {np.diag(cov_stat)}")
+            logger.debug(f"Covariance Matrix Diag: {np.diag(cov)}")
+
+            popt, pcov = curve_fit(
+                lambda z, a, b: np.sum(null_counts * eff_ij * f_norms *
+                                      self.rate_function(z, [a, b]), axis=0), sigma=cov,
+                                      absolute_sigma=False,
+                xdata=z_centers,
+                ydata=n_data,
+                p0=self.x0
+            )
+
+            fit_params = popt
+            cov_x = pcov
+            chi_squared = chi2(fit_params, null_counts, f_norms, z_centers,
+                               eff_ij, n_data, self.rate_function, cov_sys)
+            logging.debug(f"Curve Fit Result: {fit_params}")
+            logging.debug(f"Covariance Matrix from curve_fit: {cov_x}")
+            logging.debug(f"Standard errors from curve_fit: {np.sqrt(np.diag(cov_x))}")
+
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
 
@@ -696,8 +728,8 @@ class sauron_runner():
         fig, ax = plt.subplots(2, sides, figsize=(12, 6))
         ax = ax.flatten()
         surveys = list(surveys)
-        if "combined" in surveys:
-            surveys.remove("combined")
+        #if "combined" in surveys:
+        #    surveys.remove("combined")
         for i, survey in enumerate(surveys):
             s = survey
             if survey != "combined":
@@ -710,9 +742,9 @@ class sauron_runner():
                 ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
                              fmt='o', label=f" {survey} Data")
-                ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
-                             yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                             fmt='o', label=f" {survey} Initial Prediction ")
+                # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
+                #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
+                #              fmt='o', label=f" {survey} Initial Prediction ")
                 ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
@@ -724,8 +756,8 @@ class sauron_runner():
                 df = self.results[s]
 
             ax2 = ax[i+1]
-            extent_chi = [df["beta"][0] - 5 * df["beta_error"][0], df["beta"][0] + 5 * df["beta_error"][0],
-                          df["alpha"][0] - 5 * df["alpha_error"][0], df["alpha"][0] + 5 * df["alpha_error"][0]]
+            extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
+                          df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
             logger.debug(extent_chi)
             chi2_map = self.generate_chi2_map(s, extent=extent_chi)
             # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
@@ -748,6 +780,8 @@ class sauron_runner():
             ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
             ax2.set_xlabel("beta")
             ax2.set_ylabel("alpha")
+            ax2.set_xlim(extent_chi[0], extent_chi[1])
+            ax2.set_ylim(extent_chi[2], extent_chi[3])
             ax2.legend()
 
         fig.savefig("summary_plot.png")
@@ -770,12 +804,21 @@ class sauron_runner():
                 xx = [0.05, 0.16, 0.5, 0.84, 0.95] # 5 values between +/- 2 sigma \
                 X = stats.norm(loc=1, scale=0.2)
                 vals = X.ppf(xx)
-                grid = np.meshgrid(vals, vals, vals, indexing='ij')
-                grid0 = grid[0].flatten()
-                grid1 = grid[1].flatten()
-                grid2 = grid[2].flatten()
-                seeds = np.array(np.arange(len(grid0)))
-                rescale_vals = np.array([grid0, grid1, grid2, seeds]).T
+
+
+                #grid = np.meshgrid(vals, vals, vals, indexing='ij')
+
+                # Create a copy for each unique type of CC contaminant
+                grid = np.meshgrid((vals,) * len(self.datasets[f"{survey}_SIM_CC"].df.TYPE.unique()), indexing='ij')
+                # grid0 = grid[0].flatten()
+                # grid1 = grid[1].flatten()
+                # grid2 = grid[2].flatten()
+                seeds = np.array(np.arange(len(grid[0].flatten())))
+                # rescale_vals = np.array([grid0, grid1, grid2, seeds]).T
+
+                rescale_vals = [grid[i].flatten() for i in range(len(grid))]
+                rescale_vals.append(seeds)
+                rescale_vals = np.array(rescale_vals).T
 
                 cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                                  self.fit_args_dict["z_bins"][survey], PROB_THRESH,
