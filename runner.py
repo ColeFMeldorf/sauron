@@ -6,7 +6,7 @@ import logging
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.optimize import leastsq
+from scipy.optimize import minimize
 from scipy.sparse import block_diag
 from scipy import stats
 
@@ -16,7 +16,7 @@ from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
 # Sauron modules
-from funcs import (power_law, turnover_power_law, chi2_unsummed, calculate_covariance_matrix_term, rescale_CC_for_cov,
+from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, AplusB_cosmicSFH, chi2, chi2_to_sigma)
 from SN_dataset import SN_dataset
 
@@ -503,8 +503,6 @@ class sauron_runner():
 
         elif fit_method == "minimize":
 
-            from scipy.optimize import minimize
-
             result = minimize(
                         chi2,
                         x0=self.x0,
@@ -519,9 +517,10 @@ class sauron_runner():
             # This calculation of residual variance is only valid if minimizing sum of squares
 
             def errFit(hess_inv, resVariance):
-                return np.sqrt( np.diag( hess_inv * resVariance))
+                return np.sqrt(np.diag(hess_inv * resVariance))
+
             residual_variance = result.fun / (N - n)
-            dFit = errFit( result.hess_inv,  residual_variance)
+            dFit = errFit(result.hess_inv, residual_variance)
             logging.debug(f"Standard errors Stack Overflow: {dFit}")
             cov_x = result.hess_inv * residual_variance
             chi_squared = result.fun
@@ -709,7 +708,7 @@ class sauron_runner():
 
         return n_data
 
-    def generate_chi2_map(self, survey, n_samples=30):
+    def generate_chi2_map(self, survey, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -741,13 +740,12 @@ class sauron_runner():
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(self.x0))]
 
-        alpha_lower = self.results[survey][0][param_names[0]]*0.8
-        alpha_upper = self.results[survey][0][param_names[0]]*1.2
-        beta_lower = self.results[survey][0][param_names[1]]*0.8
-        beta_upper = self.results[survey][0][param_names[1]]*1.2
-
-        for i, a in enumerate(np.linspace(alpha_lower, alpha_upper, n_samples)):
-            for j, b in enumerate(np.linspace(beta_lower, beta_upper, n_samples)):
+#        alpha_lower = self.results[survey][0][param_names[0]]*0.8
+#        alpha_upper = self.results[survey][0][param_names[0]]*1.2
+#        beta_lower = self.results[survey][0][param_names[1]]*0.8
+#        beta_upper = self.results[survey][0][param_names[1]]*1.2
+        for i, a in enumerate(np.linspace(extent[2], extent[3], n_samples)):
+            for j, b in enumerate(np.linspace(extent[0], extent[1], n_samples)):
 
                 values = (a, b)
                 if len(param_names) > 2:
@@ -793,49 +791,39 @@ class sauron_runner():
                 ax1.set_ylabel("Counts")
                 ax1.set_yscale("log")
 
-            ax2 = ax[i+1]
-            chi2_map = self.generate_chi2_map(s)
-            # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
-
-            sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-
-            #plt.subplot(1, len(surveys), i + 1)
-            #plt.imshow(normalized_map, extent=(1.4, 2.4, 1.5e-5, 2.5e-5), origin='lower', aspect='auto', cmap="jet")
-
-            param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
-            if param_names is None:
-                param_names = ["param_" + str(i) for i in range(len(result))]
-
-            alpha_lower = self.results[survey][0][param_names[0]] - 3 * self.results[survey][0][f"{param_names[0]}_error"]
-            alpha_upper = self.results[survey][0][param_names[0]] + 3 * self.results[survey][0][f"{param_names[0]}_error"]
-
-           # alpha_lower = 0
-           # alpha_upper = 1e-13
-            beta_lower = self.results[survey][0][param_names[1]] - 3 * self.results[survey][0][f"{param_names[1]}_error"]
-            beta_upper = self.results[survey][0][param_names[1]] + 3 * self.results[survey][0][f"{param_names[1]}_error"]
-           # beta_lower = 0.001
-           # beta_upper = 0.0016
-            extent = [beta_lower, beta_upper, alpha_lower, alpha_upper]
-
-            extent = [e.values[0] for e in extent]
-            logging.debug(f"extent {extent}")
-
-            ax2.imshow(sigma_map, extent=extent, origin='lower', aspect='auto', cmap="plasma")
-            ax2.contour(sigma_map, levels=[1, 2, 3], extent=extent, colors='k', linewidths=1)
-            plt.colorbar(ax2.imshow(sigma_map, extent=extent, origin='lower', aspect='auto',
-                         cmap="plasma"), ax=ax2, label="Sigma Level")
-
-            ax2.set_xlim(extent[0], extent[1])
-            ax2.set_ylim(extent[2], extent[3])
-
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
                 df = self.results[s]
+            
+            
+            # Need to update these names still.
+            ax2 = ax[i+1]
+            extent_chi = [df["beta"][0] - 5 * df["beta_error"][0], df["beta"][0] + 5 * df["beta_error"][0],
+                          df["alpha"][0] - 5 * df["alpha_error"][0], df["alpha"][0] + 5 * df["alpha_error"][0]]
+            logger.debug(extent_chi)
+            chi2_map = self.generate_chi2_map(s, extent=extent_chi)
+            # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
+            chi2_map -= np.min(chi2_map)
+            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
 
-            ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt='o',
+            #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
+            sigma_map = chi2_map
+
+            im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
+            #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
+            # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+            ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
+            plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
+            #ax2.axhline(2.27e-5, color='black', linestyle='--')
+            #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
+            ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
                          color='white', ms=10, label=f"Fit results {survey}")
+            ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
+            ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
+            ax2.set_xlabel("beta")
+            ax2.set_ylabel("alpha")
+            ax2.legend()
 
 
         fig.savefig("summary_plot.png")

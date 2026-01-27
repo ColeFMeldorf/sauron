@@ -1,6 +1,6 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, chi2_unsummed, \
+from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, \
     rescale_CC_for_cov
 from runner import sauron_runner
 
@@ -250,10 +250,10 @@ def test_chi():
     null_counts = calculate_null_counts(N_gen=N_gen, true_rate_function=power_law, rate_params=x, z_bins=runner.z_bins,
                                         z_centers=z_centers)
 
-    regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
-
-    np.testing.assert_allclose(chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
-                               regression_chi, atol=1e-7)
+    regression_chi = 10.444929
+    measured_chi = chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law)
+    assert isinstance(measured_chi, float), "Measured chi is not a float."
+    np.testing.assert_allclose(measured_chi, regression_chi, atol=1e-7)
 
 
 def test_regression_pz_5datasets_covariance():
