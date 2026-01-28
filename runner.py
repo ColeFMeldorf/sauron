@@ -271,6 +271,19 @@ class sauron_runner():
                 datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
                                                           data_name=survey+"_SIM_CC",
                                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                logging.debug(f"Splitting finished. New counts: ")
+                logging.debug(f"{survey}_DUMP_IA: {datasets[f'{survey}_DUMP_IA'].total_counts}, \n {survey}_DUMP_CC: {datasets[f'{survey}_DUMP_CC'].total_counts}, \n {survey}_SIM_IA: {datasets[f'{survey}_SIM_IA'].total_counts}, \n {survey}_SIM_CC: {datasets[f'{survey}_SIM_CC'].total_counts}")
+                if any([datasets[f"{survey}_DUMP_IA"].total_counts == 0,
+                        datasets[f"{survey}_DUMP_CC"].total_counts == 0,
+                        datasets[f"{survey}_SIM_IA"].total_counts == 0,
+                        datasets[f"{survey}_SIM_CC"].total_counts == 0]):
+                    logging.warning("One of the split datasets has zero total counts! "
+                                    "Check your SNTYPECOL and IA_VALS settings. ")
+                    logging.warning("Dump ALL has these unique types: ")
+                    logging.warning("" + ", ".join([str(t) for t in datasets[f"{survey}_DUMP_ALL"].df[dump_sn_col].unique()]))
+                    logging.warning("Sim ALL has these unique types: ")
+                    logging.warning("" + ", ".join([str(t) for t in datasets[f"{survey}_SIM_ALL"].df[sim_sn_col].unique()]))
+
             logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
                 data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
@@ -778,6 +791,7 @@ class sauron_runner():
                          color='white', ms=10, label=f"Fit results {survey}")
             ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
             ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
+            ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt='o', ms=10, label="Dilday")
             ax2.set_xlabel("beta")
             ax2.set_ylabel("alpha")
             ax2.set_xlim(extent_chi[0], extent_chi[1])
