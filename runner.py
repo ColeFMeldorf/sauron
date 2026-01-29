@@ -148,6 +148,7 @@ class sauron_runner():
             fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
             self.parse_survey_fit_options(fit_args_dict, survey)
             for i, file in enumerate(list(survey_dict.keys())):
+                logging.debug(f"Processing file key: {file} for survey: {survey}")
                 if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
                     continue  # Skip non-data files
 
@@ -161,8 +162,11 @@ class sauron_runner():
                 # Either use the paths provided or glob the directory provided
                 if survey_dict[file].get('PATH') is not None:
                     paths = survey_dict[file]['PATH']
+                    logging.debug(f"paths for {survey}_{file}: {paths}")
                     paths = [paths] if type(paths) is not list else paths  # Make it a list for later
-                    paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
+                    logging.debug(f"paths for {survey}_{file}: {paths}")
+                    #paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
+                    logging.debug(f"paths for {survey}_{file}: {paths}")
                 elif survey_dict[file].get('DIR') is not None:
                     paths = []
                     for dir in survey_dict[file]['DIR']:
@@ -190,13 +194,16 @@ class sauron_runner():
 
                 else:
                     dataframe = pd.DataFrame()
+                    logging.debug(f"paths for {survey}_{file}: {paths}")
                     for path in paths:
+                        logging.debug(f"Loading file {path} for {survey}_{file}")
                         if ".FITS" in path:
                             dataframe = pd.concat([dataframe, pd.DataFrame(np.array(fits.open(path)[1].data))])
                         elif ".csv" in path:
                             dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#")])
                         else:
                             dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#", sep=r"\s+")])
+                    logging.debug(f"DATAFRAME HEAD: {dataframe.head()}")
                     datasets[survey+"_"+file] = SN_dataset(dataframe,
                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
                     logging.debug(f"z bin counts for {survey}_{file}: {datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
@@ -664,6 +671,7 @@ class sauron_runner():
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
+                logging.debug(f"Calculated bias correction using scone cut: {bias_correction}")
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
                 n_data /= bias_correction
                 logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
