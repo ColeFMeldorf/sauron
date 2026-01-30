@@ -2,7 +2,7 @@
 # The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
 
 FIT_OPTIONS:
-  RATE_FUNCTION: double_power_law
+  RATE_FUNCTION: power_law
 SDSS:
   FIT_OPTIONS:
     RATE_FUNC: power_law
@@ -11,7 +11,7 @@ SDSS:
     MIN_Z: 0.05
     MAX_Z: 0.45
     CC_ARE_SEPARATE: false
-
+# Masao doesn't make these cuts in the SDSS paper, should I not?
   CUTS:
     x1: -3, 3
     c: -0.3, 0.3
@@ -31,8 +31,8 @@ SDSS:
     IA_VALS:
       - 1
   DATA_ALL:
-    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM-SDSS-RATE/5_MERGE/MERGE_SDSSFIT_SDSS/output/PIP_CFM-SDSS-RATE_SDSS/FITOPT000.FITRES.gz
-    #PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM-SDSS-RATE/5_MERGE/MERGE_SDSSFIT_DATASDSS/output/SDSS_allCandidates+BOSS_P19/FITOPT000.FITRES.gz
+    #PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM-SDSS-RATE/5_MERGE/MERGE_SDSSFIT_SDSS/output/PIP_CFM-SDSS-RATE_SDSS/FITOPT000.FITRES.gz
+    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM-SDSS-RATE/5_MERGE/MERGE_SDSSFIT_DATASDSS/output/SDSS_allCandidates+BOSS_P19/FITOPT000.FITRES.gz
     ZCOL: zPHOT
 
 
