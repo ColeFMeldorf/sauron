@@ -11,18 +11,19 @@ SDSS:
     MIN_Z: 0.05
     MAX_Z: 0.45
     CC_ARE_SEPARATE: false
-  # Masao doesn't make these cuts in the SDSS paper, should I not?
+# Masao doesn't make these cuts in the SDSS paper, should I not?
   CUTS:
     x1: -3, 3
     c: -0.3, 0.3
     FITPROB: 0.001, 1000
     PKMJDERR: 0, 2
   DUMP_ALL:
-    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM-SDSS-RATE/1_SIM/SDSS_BCOR/PIP_CFM-SDSS-RATE_SDSS_BCOR/PIP_CFM-SDSS-RATE_SDSS_BCOR.DUMP.gz
+    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM-SDSS-RATE/1_SIM/SDSS_BCOR/PIP_CFM-SDSS-RATE_SDSS_BCOR/PIP_CFM-SDSS-RATE_SDSS_BCOR.DUMP.gz 
     ZCOL: GENZ
     SNTYPECOL: GENTYPE
     IA_VALS:
       - 1
+    # Rick said to always use zHD
   SIM_ALL:
     PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM-SDSS-RATE/5_MERGE/MERGE_SDSSFIT_SDSS_BCOR/output/PIP_CFM-SDSS-RATE_SDSS_BCOR/FITOPT000.FITRES.gz
     ZCOL: zPHOT

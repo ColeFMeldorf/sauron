@@ -436,54 +436,54 @@ def test_coverage_with_sys():
     np.testing.assert_array_less(0.05, p_value.pvalue)
 
 
-# def test_perfect_recovery_multisurvey():
-#     """In this test, we use the simulation as data (eliminating shot noise) and skip CC decontam.
-#     Therefore, we should get perfect recovery, i.e. (2.27e-5, 1.7) with a chi squared of 0.
-#     This time, we do DES, LOWZ and ROMAN together.
-#     """
-#     outpath = pathlib.Path(__file__).parent / "test_perfect_output_multisurvey.csv"
-#     if os.path.exists(outpath):
-#         os.remove(outpath)
-#     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-#     config_path = pathlib.Path(__file__).parent / "test_config_sim_multisurvey.yml"
-#     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov"]
-#     result = subprocess.run(cmd, capture_output=False, text=True)
-#     if result.returncode != 0:
-#         raise RuntimeError(
-#             f"Command failed with exit code {result.returncode}\n"
-#             f"stdout:\n{result.stdout}\n"
-#             f"stderr:\n{result.stderr}"
-#         )
+def test_perfect_recovery_multisurvey():
+    """In this test, we use the simulation as data (eliminating shot noise) and skip CC decontam.
+    Therefore, we should get perfect recovery, i.e. (2.27e-5, 1.7) with a chi squared of 0.
+    This time, we do DES, LOWZ and ROMAN together.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_perfect_output_multisurvey.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_sim_multisurvey.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
 
-#     results = pd.read_csv(outpath)
-#     regression_vals = [2.27e-5, 1.7, 0.0]
-#     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-#         np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
+    results = pd.read_csv(outpath)
+    regression_vals = [2.27e-5, 1.7, 0.0]
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
+        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
 
 
-# def test_regression_multisurvey():
-#     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
-#     This time, we do DES, LOWZ and ROMAN together.
-#     """
-#     outpath = pathlib.Path(__file__).parent / "test_regmultisurvey_output.csv"
-#     if os.path.exists(outpath):
-#         os.remove(outpath)
-#     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-#     config_path = pathlib.Path(__file__).parent / "test_config_multisurvey.yml"
-#     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
-#     result = subprocess.run(cmd, capture_output=False, text=True)
-#     if result.returncode != 0:
-#         raise RuntimeError(
-#             f"Command failed with exit code {result.returncode}\n"
-#             f"stdout:\n{result.stdout}\n"
-#             f"stderr:\n{result.stderr}"
-#         )
+def test_regression_multisurvey():
+    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
+    This time, we do DES, LOWZ and ROMAN together.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_regmultisurvey_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_multisurvey.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
 
-#     results = pd.read_csv(outpath)
-#     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regmultisurvey_regression.csv")
-#     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
-#     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-#         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+    results = pd.read_csv(outpath)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regmultisurvey_regression.csv")
+    # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
+        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
 
 
 def test_apply_cut():
@@ -712,6 +712,5 @@ def test_regression_SDSS():
 
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "SDSS_multi_regression.csv")
-    # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)

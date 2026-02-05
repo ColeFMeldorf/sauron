@@ -200,7 +200,6 @@ class sauron_runner():
                             dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#")])
                         else:
                             dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#", sep=r"\s+")])
-                    logging.debug(f"DATAFRAME HEAD: {dataframe.head()}")
                     datasets[survey+"_"+file] = SN_dataset(dataframe,
                                                            sntype, data_name=survey+"_"+file, zcol=zcol)
                     logging.debug(f"z bin counts for {survey}_{file}: {datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
