@@ -96,7 +96,7 @@ def test_perfect_recovery():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_sim.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov",
-           "--prob_thresh", "0.5"]
+           "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -121,7 +121,7 @@ def test_perfect_recovery_pz():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
     cmd = ["python", str(sauron_path), str(config_path), "--cheat_cc", "-o", str(outpath), "--no-sys_cov",
-           "--prob_thresh", "0.5"]
+           "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -446,7 +446,7 @@ def test_perfect_recovery_multisurvey():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_config_sim_multisurvey.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(

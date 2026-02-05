@@ -991,10 +991,14 @@ class sauron_runner():
         logging.debug("Performing sanity checks on datasets")
         # DUMP should be larger than SIM in all bins
 
-        plt.subplot(1, 2, 1)
+        logging.debug("Generating sanity check plots")
+        #plt.subplot(1, 2, 1)
+        logging.debug("Starting dump bar 1")
+        logging.debug(f"z counts {self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey])}")
         plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
                 self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
                 width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DUMP_IA')
+        logging.debug("Starting sim bar 1")
         plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
                 self.datasets[f"{survey}_SIM_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
                 width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='SIM_IA')
@@ -1013,6 +1017,7 @@ class sauron_runner():
         plt.ylabel("Counts")
         plt.yscale("log")
         plt.legend()
+        logging.debug("Generating sanity check plots - part 2")
         plt.subplot(1, 2, 2)
         plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
                 self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
@@ -1027,6 +1032,7 @@ class sauron_runner():
         plt.yscale("log")
         plt.ylabel("Counts")
         plt.legend()
+        logging.debug(f"Saving sanity check plots to sanity_check_counts_{survey}.png ")
         plt.savefig(f"sanity_check_counts_{survey}.png")
 
         assert self.datasets[f"{survey}_DUMP_ALL"].total_counts >= self.datasets[f"{survey}_SIM_ALL"].total_counts, \

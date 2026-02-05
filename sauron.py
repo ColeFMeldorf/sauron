@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--skip-cuts", action="store_true", help="Skip applying cuts to the data.", default=False)
     parser.add_argument("--prob_thresh", type=float, default=0.5,
                         help="Probability threshold for classifying SNe as Type IA.")
-    parser.add_argument("--sanity-check", action="store_true", help="Perform sanity checks"
+    parser.add_argument("--sanity-check", action=argparse.BooleanOptionalAction, help="Perform sanity checks"
                         "that simulations look reasonable.", default=True)
     args = parser.parse_args()
 
