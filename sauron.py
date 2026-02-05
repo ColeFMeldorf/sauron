@@ -47,53 +47,6 @@ def main():
         runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
         if not args.skip_cuts:
             runner.apply_cuts(survey)
-
-        # from matplotlib import pyplot as plt
-        # import numpy as np
-        # #df_fitopt = datasets["SDSS_SIM_ALL"].df
-        # # index = 1
-        # df_fitopt = datasets[f"SDSS_SIM_ALL"].df
-        # scone_col = datasets[f"SDSS_SIM_ALL"].scone_col
-        # df_fitopt = df_fitopt[df_fitopt[scone_col] > PROB_THRESH]
-        # # plt.scatter(df_fitopt["SIM_ZCMB"], df_fitopt["zPHOT"], s = 1)
-        # # plt.plot([0,0.5], [0,0.5], color='k', linestyle='--')
-        # # plt.xlabel("True ZCMB")
-        # # plt.ylabel("Fitted zPHOT")
-        # # plt.savefig(f"test_{survey.lower()}_zphot_vs_true_scone_cut.png")
-        # # df_fitopt.to_csv(f"test_{survey.lower()}_data_all__scone_cut.csv")
-
-        # df_passed_cuts = df_fitopt
-        # df_bad = df_passed_cuts[(df_passed_cuts["zPHOT"] > 0.5) & (df_passed_cuts["SIM_ZCMB"] < 0.3)]
-
-        # plt.figure(figsize=(10,10))
-
-        # plt.subplot(2,2,1)
-        # bins = np.linspace(-0.5, 0.5, 10)
-        # plt.hist(df_bad["c"] - df_bad["SIM_c"], histtype = "step", label = "Bad Photo-zs", bins = bins, density=True)
-        # plt.hist(df_passed_cuts["c"] - df_passed_cuts["SIM_c"], histtype = "step", label = "All Passed Cuts", bins = bins, density=True)
-        # plt.xlabel("c - SIM_c")
-        # plt.legend()
-
-        # plt.subplot(2,2,2)
-        # plt.hist(df_bad["x1"] - df_bad["SIM_x1"], histtype = "step", label = "Bad Photo-zs", density = True)
-        # plt.hist(df_passed_cuts["x1"] - df_passed_cuts["SIM_x1"], histtype = "step", label = "All Passed Cuts", density = True)
-        # plt.xlabel("x1 - SIM_x1")
-        # plt.legend()
-
-        # plt.subplot(2,2,3)
-        # bins = np.linspace(-20, 20, 15)
-        # plt.hist(df_bad["PKMJD"] - df_bad["SIM_PEAKMJD"], histtype = "step", label = "Bad Photo-zs", bins = bins, density = True)
-        # plt.hist(df_passed_cuts["PKMJD"] - df_passed_cuts["SIM_PEAKMJD"], histtype = "step", label = "All Passed Cuts", bins = bins, density = True)
-        # plt.xlabel("PKMJD - SIM_PEAKMJD")
-
-        # plt.subplot(2,2,4)
-        # bins = np.linspace(0, 1, 15)
-        # plt.hist(df_bad["FITPROB"], histtype = "step", label = "Bad Photo-zs", density = True, bins = bins)
-        # plt.hist(df_passed_cuts["FITPROB"], histtype = "step", label = "All Passed Cuts", density = True, bins = bins)
-        # plt.xlabel("FITPROB")
-
-        # plt.savefig(f"test_{survey.lower()}_bad_photoz_diagnostics.png")
-        # break
         runner.calculate_transfer_matrix(survey)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]

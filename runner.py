@@ -162,11 +162,8 @@ class sauron_runner():
                 # Either use the paths provided or glob the directory provided
                 if survey_dict[file].get('PATH') is not None:
                     paths = survey_dict[file]['PATH']
-                    logging.debug(f"paths for {survey}_{file}: {paths}")
                     paths = [paths] if type(paths) is not list else paths  # Make it a list for later
-                    logging.debug(f"paths for {survey}_{file}: {paths}")
-                    #paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
-                    logging.debug(f"paths for {survey}_{file}: {paths}")
+                    paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
                 elif survey_dict[file].get('DIR') is not None:
                     paths = []
                     for dir in survey_dict[file]['DIR']:

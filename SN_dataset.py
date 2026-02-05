@@ -91,13 +91,6 @@ class SN_dataset():
             return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
 
-        # logging.debug(f"Calculating z_counts without prob_thresh")
-        # logging.debug(f"Datset: {self.df}")
-        # logging.debug("z bins: " + ", ".join([str(z) for z in z_bins]))
-        # logging.debug(f"Number of SNe in dataset: {len(self.df)}")
-        # logging.debug(f"First 5 z values: {self.df[self.z_col].values[:5]}")
-        # logging.debug(f"z col name: {self.z_col}")
-
         return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
 
     def mu_res(self):
