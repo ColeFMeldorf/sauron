@@ -81,9 +81,9 @@ def main():
         plt.legend()
 
         plt.subplot(2,2,3)
-        bins = np.linspace(-20, 20, 15)
-        plt.hist(df_bad["zPHOT_ERR"], histtype = "step", label = "Bad Photo-zs", bins = bins, density = True)
-        plt.hist(df_passed_cuts["zPHOT_ERR"], histtype = "step", label = "All Passed Cuts", bins = bins, density = True)
+        bins = np.linspace(0, 0.3, 15)
+        plt.hist(df_bad["zPHOTERR"], histtype = "step", label = "Bad Photo-zs", bins = bins, density = True)
+        plt.hist(df_passed_cuts["zPHOTERR"], histtype = "step", label = "All Passed Cuts", bins = bins, density = True)
         plt.xlabel("REDSHIFT_ERR")
 
         plt.subplot(2,2,4)
