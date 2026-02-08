@@ -3,6 +3,8 @@ import pandas as pd
 from scipy.stats import binned_statistic as binstat
 import logging
 
+logger = logging.getLogger(__name__)
+
 # Astronomy
 from astropy.cosmology import LambdaCDM
 
@@ -13,6 +15,7 @@ class SN_dataset():
     """A class to hold a dataset of supernovae for one survey and type."""
     def __init__(self, dataframe, sntype, zcol=None, data_name=None, true_z_col=None):
         self.df = dataframe
+        logging.debug(f"Initializing SN_dataset for {data_name} with {len(self.df)} entries.")
         self.sntype = sntype
         self._true_z_col = true_z_col
         if self.sntype not in ["IA", "CC", "all"]:
@@ -33,10 +36,14 @@ class SN_dataset():
                 else:
                     raise ValueError(f"Multiple valid zcols found in {data_name}. I found: {self.z_col} and {i}")
         if self.z_col is None:
+            err = ""
             for c in self.df.columns:
+                logger.debug(f"Available column: {c}")
+                print(f"Available column: {c}")
                 logging.debug(f"Available column: {c}")
+                err += f" - {c}\n"
             if z_col_specified:
-                raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
+                raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!" + err)
 
             else:
 
@@ -88,6 +95,10 @@ class SN_dataset():
             The counts of supernovae in each redshift bin.
         """
         if prob_thresh is not None:
+            logger.debug(self.df[self.z_col])
+            #print(self.df[self.z_col])
+            print(self.prob_scone())
+            print(self.df[self.z_col][self.prob_scone() > prob_thresh])
             return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
 

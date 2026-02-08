@@ -26,7 +26,17 @@ matplotlib_logger = logging.getLogger('matplotlib')
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
+#logger = logging.getLogger(__name__)
+
+# Configure the basic logging setup
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
@@ -180,9 +190,12 @@ class sauron_runner():
                         else:
                             dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
 
+                        logger.debug(f"Reading {path} into {survey}_{file}_{i+1}")
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(dataframe,
                                                                             sntype, data_name=survey+"_"+file,
                                                                             zcol=zcol)
+                        logger.debug(f"z bin counts for {survey}_{file}_{i+1}: "
+                                        f"{datasets[survey+'_'+file+'_'+str(i+1)].z_counts(self.fit_args_dict['z_bins'][survey])}")
                     n_datasets = len(paths)
                     self.fit_args_dict["n_datasets"][survey] = n_datasets
                     self.fit_args_dict["n_datasets"]["combined"] = 1  # This needs to be fixed later TODO

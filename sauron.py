@@ -8,8 +8,6 @@ import logging
 # Sauron modules
 from runner import sauron_runner
 
-
-
 # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
@@ -41,8 +39,6 @@ def main():
     PROB_THRESH = args.prob_thresh
 
     datasets, surveys = runner.unpack_dataframes()
-
-
 
     # Covariance calculations, if requested
 
