@@ -41,7 +41,7 @@ class SN_dataset():
             else:
 
                 raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!"
-                                 f" I checked: {possible_z_cols}.")
+                                 f" I checked: {possible_z_cols}. All columns with 'z' in the name were: {[c for c in self.df.columns if 'z' in c.lower()]}")
 
         scone_col = []
         for c in self.df.columns:
