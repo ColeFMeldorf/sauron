@@ -152,6 +152,7 @@ def test_calc_cov_term():
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
+
 def test_rescale_CC_for_cov():
     args = SimpleNamespace()
     config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
