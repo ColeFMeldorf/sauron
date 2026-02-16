@@ -1,8 +1,9 @@
 # Standard Library
+import numpy as np
 import pandas as pd
 from scipy.stats import binned_statistic as binstat
 import logging
-
+logger = logging.getLogger(__name__)
 # Astronomy
 from astropy.cosmology import LambdaCDM
 
@@ -11,48 +12,38 @@ cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 class SN_dataset():
     """A class to hold a dataset of supernovae for one survey and type."""
-    def __init__(self, dataframe, sntype, zcol=None, data_name=None, true_z_col=None):
+    def __init__(self, paths, sntype, zcol=None, data_name=None, true_z_col=None, cuts=None):
+        self.data_name = data_name
+        logging.debug(f"Initializing SN_dataset for {data_name} with paths: {paths}")
+        if not isinstance(paths, list):
+            paths = [paths]
+
+        dataframe = pd.DataFrame()
+        for path in paths:
+            if path is None:
+                continue
+            self._true_z_col = true_z_col
+            self.determine_needed_columns(path, zcol)
+            potential_cols = [self.z_col, self.scone_col, self._true_z_col] # Include redshift and scone columns
+            if "DUMP" not in data_name: # If this is a dump dataset, cuts aren't applied.
+                potential_cols.extend(list(cuts.keys()) if cuts is not None else []) # Need to get the cols being cut on
+            logging.debug(f"Potential columns to load for {data_name}: {potential_cols}")
+            cols = [c for c in potential_cols if c is not None]
+
+            if sntype == "CC" and "SIM" in data_name:
+                cols.append("TYPE")
+                # THIS IS EXTREMELY HACKY AND CANNOT STAY. THIS IS JUST TO SEE IF I CAN GET IT RUNNING.
+
+            df = self.open_dataset(path, usecols=cols)
+            self.sntype = sntype
+            #self._true_z_col = true_z_col
+            #self.true_z_col = true_z_col
+            if self.sntype not in ["IA", "CC", "all"]:
+                logger.warning(f"unrecognized type: {self.sntype}")
+            dataframe = pd.concat([dataframe, df])
         self.df = dataframe
-        self.sntype = sntype
-        self._true_z_col = true_z_col
-        if self.sntype not in ["IA", "CC", "all"]:
-            logging.warning(f"unrecognized type: {self.sntype}")
+        logger.debug(f"z col for {data_name}: {getattr(self, 'z_col', None)}")
 
-        if zcol is not None:
-            possible_z_cols = [zcol]
-            z_col_specified = True
-        else:
-            possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
-            z_col_specified = False
-
-        self.z_col = None
-        for i in possible_z_cols:
-            if i in self.df.columns:
-                if self.z_col is None:
-                    self.z_col = i
-                else:
-                    raise ValueError(f"Multiple valid zcols found in {data_name}. I found: {self.z_col} and {i}")
-        if self.z_col is None:
-            for c in self.df.columns:
-                logging.debug(f"Available column: {c}")
-            if z_col_specified:
-                raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {data_name}!")
-
-            else:
-
-                raise ValueError(f"Couldn't find any valid zcol in dataframe for {data_name}!"
-                                 f" I checked: {possible_z_cols}.")
-
-        scone_col = []
-        for c in self.df.columns:
-            if "PROB_SCONE" in c or "SCONE_pred" in c:
-                scone_col.append(c)
-        if len(scone_col) == 0:
-            self.scone_col = None
-        elif len(scone_col) > 1:
-            raise ValueError(f"Multiple Valid scone columns found in {data_name}! Which do I use? I found: {scone_col}")
-        else:
-            self.scone_col = scone_col[0]
 
     @property
     def total_counts(self):
@@ -123,7 +114,28 @@ class SN_dataset():
         if self.scone_col is not None and dataset.scone_col is not None:
             scone_prob_col = pd.concat([self.prob_scone(), dataset.prob_scone()])
             new_df["PROB_SCONE"] = scone_prob_col
-        return SN_dataset(new_df, newtype, zcol=self.z_col, data_name=data_name)
+
+        ####
+        new_z_col = pd.concat([self.df[self.z_col], dataset.df[dataset.z_col]])
+        new_df[self.z_col] = new_z_col
+
+        ####
+
+        new_dataset = SN_dataset(None, newtype, zcol=self.z_col, data_name=data_name)
+        new_dataset.df = new_df
+        new_dataset.z_col = self.z_col
+
+        new_dataset.scone_col = "PROB_SCONE" if self.scone_col is not None and dataset.scone_col is not None else None
+        if self.true_z_col == dataset.true_z_col:
+            new_dataset.true_z_col = self.true_z_col
+        else:
+            raise ValueError(f"True z cols don't match for datasets being combined! {self.true_z_col} vs {dataset.true_z_col}")
+
+        logging.debug(f"Combined dataset {data_name} has z col: {new_dataset.z_col} and scone col: {new_dataset.scone_col} and true z col: {new_dataset.true_z_col}")
+        return new_dataset
+
+        # what if the two datasets ahave different zcols? I need to determine how to do the above more properly.
+
         # Note that this forces the two data sets to have the
         # same z_col. I can't think of a scenario where this would be a problem, but maybe it could be.
 
@@ -145,3 +157,76 @@ class SN_dataset():
             for c in self.df.columns:
                 logging.warning(f" - {c}")
             raise KeyError(f"Couldn't find column {col} in dataframe to apply cut!")
+
+    def open_dataset(self, path, nrows=None, usecols=None):
+        """Open a dataset from an unknown file type and return it as a pandas dataframe."""
+        if ".FITS" in path:
+            raise NotImplementedError("FITS file reading not implemented yet. Please convert to CSV or whitespace-delimited text file.")
+            dataframe = fits.open(path)[1].data
+            dataframe = pd.DataFrame(np.array(dataframe))
+        elif ".csv" in path:
+            dataframe = pd.read_csv(path, comment="#", nrows=nrows, usecols=usecols)
+        else:
+            dataframe = pd.read_csv(path, comment="#", sep=r"\s+", nrows=nrows, usecols=usecols)
+
+        return dataframe
+
+    def determine_needed_columns(self, path, zcol):
+        logger.debug(f"Determining needed columns for {self.data_name} using file {path}")
+        logger.debug(f"Specified zcol: {zcol}")
+        # Only load the columns needed. This is important for memory management, especially for large datasets.
+        if path is not None:
+            test_dataframe = self.open_dataset(path, nrows=1)
+            all_cols = test_dataframe.columns
+        else:
+            all_cols = []
+
+        # Find the appropriate recovered redshift column.
+        if zcol is not None:
+            possible_z_cols = [zcol]
+            logger.debug(f"zcol specified in config file: {zcol}")
+            z_col_specified = True
+        else:
+            possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
+            z_col_specified = False
+
+        self.z_col = getattr(self, "z_col", None)
+        for i in possible_z_cols:
+            if i in all_cols:
+                if self.z_col is None:
+                    self.z_col = i
+                else:
+                    raise ValueError(f"Multiple valid zcols found in {self.data_name}. I found: {self.z_col} and {i}")
+        if self.z_col is None:
+            for c in all_cols:
+                logging.debug(f"Available column: {c}")
+            if z_col_specified:
+                raise ValueError(f"Couldn't find specified zcol {zcol} in dataframe for {self.data_name}!")
+            else:
+                raise ValueError(f"Couldn't find any valid zcol in dataframe for {self.data_name}!"
+                                 f" I checked: {possible_z_cols}.")
+
+        # Find the appropriate SCONE probability column, if it exists.
+        scone_col = []
+        for c in all_cols:
+            if "PROB_SCONE" in c or "SCONE_pred" in c:
+                scone_col.append(c)
+        if len(scone_col) == 0:
+            self.scone_col = None
+        elif len(scone_col) > 1:
+            raise ValueError(f"Multiple Valid scone columns found in {self.data_name}! Which do I use? I found: {scone_col}")
+        else:
+            self.scone_col = scone_col[0]
+
+        if self.data_name is not None and "DATA" not in self.data_name:
+            print("Looking for true z col in ", self.data_name)
+            if self._true_z_col is None:
+                possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
+                cols_in_df = [col for col in possible_true_z_cols if
+                              col in all_cols]
+                if len(cols_in_df) > 1:
+                    raise ValueError(f"Multiple possible true z cols found for {self.data_name}: {cols_in_df}. "
+                                      "Please specify TRUEZCOL in config file.")
+                elif len(cols_in_df) == 1:
+                    self._true_z_col = cols_in_df[0]
+                    logging.info(f"Auto-setting true z col for {self.data_name} to {cols_in_df[0]}")

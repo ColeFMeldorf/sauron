@@ -161,8 +161,10 @@ class sauron_runner():
                 # Either use the paths provided or glob the directory provided
                 if survey_dict[file].get('PATH') is not None:
                     paths = survey_dict[file]['PATH']
-                    paths = [paths] if type(paths) is not list else paths  # Make it a list for later
+                    paths = [paths] if not isinstance(paths, list) else paths  # Make it a list for later
                     paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
+                    if len(paths) == 0:
+                        raise FileNotFoundError(f"No files found for {survey} {file} with path {survey_dict[file]['PATH']}")
                 elif survey_dict[file].get('DIR') is not None:
                     paths = []
                     for dir in survey_dict[file]['DIR']:
@@ -170,53 +172,37 @@ class sauron_runner():
                         paths.extend(glob.glob(dir + "*.gz"))  # This extension can't be hardcoded
                     logging.info(f"Found {len(paths)} files in {survey_dict[file]['DIR']}")
 
+                logging.debug(f"Paths for {survey} {file}: {paths}")
+
                 if "DATA" in file:
                     for i, path in enumerate(paths):
-                        if ".FITS" in path:
-                            dataframe = fits.open(path)[1].data
-                            dataframe = pd.DataFrame(np.array(dataframe))
-                        elif ".csv" in path:
-                            dataframe = pd.read_csv(path, comment="#")
-                        else:
-                            dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
-
-                        datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(dataframe,
+                        cuts = survey_dict.get("CUTS", None)
+                        datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(path,
                                                                             sntype, data_name=survey+"_"+file,
-                                                                            zcol=zcol)
+                                                                            zcol=zcol, cuts=cuts)
                     n_datasets = len(paths)
                     self.fit_args_dict["n_datasets"][survey] = n_datasets
                     self.fit_args_dict["n_datasets"]["combined"] = 1  # This needs to be fixed later TODO
                     logging.info(f"Found {n_datasets} data sets for {survey}")
 
                 else:
-                    dataframe = pd.DataFrame()
-                    for path in paths:
-                        if ".FITS" in path:
-                            dataframe = pd.concat([dataframe, pd.DataFrame(np.array(fits.open(path)[1].data))])
-                        elif ".csv" in path:
-                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#")])
-                        else:
-                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#", sep=r"\s+")])
-                    datasets[survey+"_"+file] = SN_dataset(dataframe,
-                                                           sntype, data_name=survey+"_"+file, zcol=zcol)
-                    logging.debug(f"z bin counts for {survey}_{file}: {datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
+                    cuts = survey_dict.get("CUTS", None)
+                    true_z_col = survey_dict[file].get("TRUEZCOL", None)
+                    datasets[survey+"_"+file] = SN_dataset(paths, sntype, data_name=survey+"_"+file, zcol=zcol,
+                                                           cuts=cuts, true_z_col=true_z_col)
+                    #logging.debug(f"z bin counts for {survey}_{file}: "
+                    #              f"{datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
+                    #logging.debug(f"True z col for {survey}_{file}: {datasets[survey+'_'+file].true_z_col}")
+                    logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
 
-                    datasets[survey+"_"+file].true_z_col = survey_dict[file].get("TRUEZCOL", None)
-                    if datasets[survey+"_"+file].true_z_col is None:
-                        possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
-                        cols_in_df = [col for col in possible_true_z_cols if
-                                      col in datasets[survey+"_"+file].df.columns]
-                        if len(cols_in_df) > 1:
-                            raise ValueError(f"Multiple possible true z cols found for {survey}_{file}: {cols_in_df}. "
-                                             "Please specify TRUEZCOL in config file.")
-                        elif len(cols_in_df) == 1:
-                            datasets[survey+"_"+file].true_z_col = cols_in_df[0]
-                            logging.info(f"Auto-setting true z col for {survey}_{file} to {cols_in_df[0]}")
 
             if self.fit_args_dict["cc_are_sep"].get(survey) is None:
                 self.fit_args_dict["cc_are_sep"][survey] = True
                 logging.warning("CC_ARE_SEPARATE not specified in config file for "f"{survey}. Defaulting to True.")
             # Combine IA and CC files if they are separate
+
+            assert datasets[f"{survey}_SIM_IA"].true_z_col is not None, "true_z_col must be set for SIM_IA dataset to apply cuts."
+
             if self.fit_args_dict["cc_are_sep"][survey]:
 
                 if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
@@ -308,6 +294,7 @@ class sauron_runner():
 
         self.final_counts[survey] = {}
         self.final_counts["combined"] = {}
+
 
     def calculate_transfer_matrix(self, survey):
         """Calculate the transfer matrix, epsilon_ij, for a given survey.
@@ -993,6 +980,7 @@ class sauron_runner():
                 if datasets.get(f"{survey}_SIM_IA") is not None:
                     logging.debug(f"Applying cuts to {survey}_SIM_IA")
                     datasets[f"{survey}_SIM_IA"].apply_cut(col, min_val, max_val)
+
 
                 if datasets.get(f"{survey}_SIM_CC") is not None:
                     logging.debug(f"Applying cuts to {survey}_SIM_CC")
