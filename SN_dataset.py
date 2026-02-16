@@ -156,3 +156,4 @@ class SN_dataset():
             for c in self.df.columns:
                 logging.warning(f" - {c}")
             raise KeyError(f"Couldn't find column {col} in dataframe to apply cut!")
+

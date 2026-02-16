@@ -189,6 +189,7 @@ class sauron_runner():
                             dataframe = pd.read_csv(path, comment="#")
                         else:
                             dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
+                        logger.debug(f"Type of dataframe for {survey}_{file}_{i+1}: {type(dataframe)}")
 
                         logger.debug(f"Reading {path} into {survey}_{file}_{i+1}")
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(dataframe,
@@ -654,7 +655,7 @@ class sauron_runner():
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-                n_data /= bias_correction
+                #n_data /= bias_correction
                 logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
         else:
@@ -1071,4 +1072,3 @@ class sauron_runner():
         assert dump_ratio > 0.01, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
 
         #np.testing.assert_allclose(dump_ratio, ratio, atol=0.2, err_msg=f"CC to IA ratios in SIM and DUMP datasets differ significantly for survey {survey}: SIM ratio = {ratio}, DUMP ratio = {dump_ratio}")
-
