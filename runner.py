@@ -177,9 +177,11 @@ class sauron_runner():
                 if "DATA" in file:
                     for i, path in enumerate(paths):
                         cuts = survey_dict.get("CUTS", None)
+                        sntypecol = survey_dict[file].get("SNTYPECOL", None)
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(path,
                                                                             sntype, data_name=survey+"_"+file,
-                                                                            zcol=zcol, cuts=cuts)
+                                                                            zcol=zcol, cuts=cuts,
+                                                                            sntypecol=sntypecol)
                     n_datasets = len(paths)
                     self.fit_args_dict["n_datasets"][survey] = n_datasets
                     self.fit_args_dict["n_datasets"]["combined"] = 1  # This needs to be fixed later TODO
@@ -188,8 +190,9 @@ class sauron_runner():
                 else:
                     cuts = survey_dict.get("CUTS", None)
                     true_z_col = survey_dict[file].get("TRUEZCOL", None)
+                    sntypecol = survey_dict[file].get("SNTYPECOL", None)
                     datasets[survey+"_"+file] = SN_dataset(paths, sntype, data_name=survey+"_"+file, zcol=zcol,
-                                                           cuts=cuts, true_z_col=true_z_col)
+                                                           cuts=cuts, true_z_col=true_z_col, sntypecol=sntypecol)
                     #logging.debug(f"z bin counts for {survey}_{file}: "
                     #              f"{datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
                     #logging.debug(f"True z col for {survey}_{file}: {datasets[survey+'_'+file].true_z_col}")
@@ -201,7 +204,6 @@ class sauron_runner():
                 logging.warning("CC_ARE_SEPARATE not specified in config file for "f"{survey}. Defaulting to True.")
             # Combine IA and CC files if they are separate
 
-            assert datasets[f"{survey}_SIM_IA"].true_z_col is not None, "true_z_col must be set for SIM_IA dataset to apply cuts."
 
             if self.fit_args_dict["cc_are_sep"][survey]:
 
@@ -224,50 +226,61 @@ class sauron_runner():
 
             # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
             else:
-                logging.info("Splitting DUMP and SIM files into IA and CC...")
-                try:
-                    dump_df = datasets[f"{survey}_DUMP_ALL"].df
-                    sim_df = datasets[f"{survey}_SIM_ALL"].df
-                except KeyError:
-                    raise KeyError(f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL."
-                                   " If your DUMP and SIM files are "
-                                   "separate for IA and CC, set corecollapse_are_separate to True.")
+                # logging.info("Splitting DUMP and SIM files into IA and CC...")
+                # try:
+                #     dump_df = datasets[f"{survey}_DUMP_ALL"].df
+                #     sim_df = datasets[f"{survey}_SIM_ALL"].df
+                # except KeyError:
+                #     raise KeyError(f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL."
+                #                    " If your DUMP and SIM files are "
+                #                    "separate for IA and CC, set corecollapse_are_separate to True.")
 
-                try:
-                    dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
-                    ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
-                    sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
-                    ia_vals_sim = survey_dict["SIM_ALL"]["IA_VALS"]
-                except KeyError:
-                    raise KeyError(f"Couldn't find SNTYPECOL or IA_VALS in config for {survey}. These are needed to "
-                                   "separate DUMP and SIM into IA and CC.")
+                # try:
+                #     dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
+                #     ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
+                #     sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
+                #     ia_vals_sim = survey_dict["SIM_ALL"]["IA_VALS"]
+                # except KeyError:
+                #     raise KeyError(f"Couldn't find SNTYPECOL or IA_VALS in config for {survey}. These are needed to "
+                #                    "separate DUMP and SIM into IA and CC.")
 
-                dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
-                dump_cc_df = dump_df[~dump_df[dump_sn_col].isin(ia_vals)]
-                sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
-                sim_cc_df = sim_df[~sim_df[sim_sn_col].isin(ia_vals_sim)]
+                # dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
+                # dump_cc_df = dump_df[~dump_df[dump_sn_col].isin(ia_vals)]
+                # sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
+                # sim_cc_df = sim_df[~sim_df[sim_sn_col].isin(ia_vals_sim)]
 
-                datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
-                                                           data_name=survey+"_DUMP_IA")
-                datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
-                                                           data_name=survey+"_DUMP_CC")
-                datasets[f"{survey}_SIM_IA"] = SN_dataset(sim_ia_df, "IA", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                                                          data_name=survey+"_SIM_IA",
-                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-                datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                                                          data_name=survey+"_SIM_CC",
-                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                # datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
+                #                                            data_name=survey+"_DUMP_IA")
+                # datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
+                #                                            data_name=survey+"_DUMP_CC")
+                # datasets[f"{survey}_SIM_IA"] = SN_dataset(sim_ia_df, "IA", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
+                #                                           data_name=survey+"_SIM_IA",
+                #                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                # datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
+                #                                           data_name=survey+"_SIM_CC",
+                #                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+
+                datasets[f"{survey}_DUMP_IA"], datasets[f"{survey}_DUMP_CC"] = datasets[f"{survey}_DUMP_ALL"].split_into_IA_and_CC(
+                    survey_dict["DUMP_ALL"]["SNTYPECOL"], survey_dict["DUMP_ALL"]["IA_VALS"])
+                datasets[f"{survey}_SIM_IA"], datasets[f"{survey}_SIM_CC"] = datasets[f"{survey}_SIM_ALL"].split_into_IA_and_CC(
+                    survey_dict["SIM_ALL"]["SNTYPECOL"], survey_dict["SIM_ALL"]["IA_VALS"])
+
             logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
                 data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
                 ia_vals_data = survey_dict["DATA_ALL"]["IA_VALS"]
                 for i in range(n_datasets):
                     logging.debug("Splitting DATA into IA and CC using cheat mode...")
-                    data_df = datasets[f"{survey}_DATA_ALL_"+str(i+1)].df
-                    data_ia_df = data_df[data_df[data_sn_col].isin(ia_vals_data)]
-                    datasets[f"{survey}_DATA_IA_"+str(i+1)] =\
-                        SN_dataset(data_ia_df, "IA", zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
-                                   data_name=survey+f"_DATA_IA_{i+1}")
+                    datasets[f"{survey}_DATA_IA_"+str(i+1)], _ =\
+                        datasets[f"{survey}_DATA_ALL_"+str(i+1)].split_into_IA_and_CC(
+                            data_sn_col, ia_vals_data)
+
+
+                    # data_df = datasets[f"{survey}_DATA_ALL_"+str(i+1)].df
+                    # data_ia_df = data_df[data_df[data_sn_col].isin(ia_vals_data)]
+                    # datasets[f"{survey}_DATA_IA_"+str(i+1)] =\
+                    #     SN_dataset(data_ia_df, "IA", zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
+                    #                data_name=survey+f"_DATA_IA_{i+1}")
                     logging.debug("z bin counts for {survey}_DATA_IA_{i+1}: "
                                   f"{datasets[f'{survey}_DATA_IA_'+str(i+1)].z_counts(
                                     self.fit_args_dict['z_bins'][survey])}")

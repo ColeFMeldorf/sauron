@@ -6,13 +6,14 @@ import logging
 logger = logging.getLogger(__name__)
 # Astronomy
 from astropy.cosmology import LambdaCDM
+from astropy.io import fits
 
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
 class SN_dataset():
     """A class to hold a dataset of supernovae for one survey and type."""
-    def __init__(self, paths, sntype, zcol=None, data_name=None, true_z_col=None, cuts=None):
+    def __init__(self, paths, sntype, zcol=None, data_name=None, true_z_col=None, cuts=None, sntypecol=None):
         self.data_name = data_name
         logging.debug(f"Initializing SN_dataset for {data_name} with paths: {paths}")
         if not isinstance(paths, list):
@@ -27,17 +28,26 @@ class SN_dataset():
             potential_cols = [self.z_col, self.scone_col, self._true_z_col] # Include redshift and scone columns
             if "DUMP" not in data_name: # If this is a dump dataset, cuts aren't applied.
                 potential_cols.extend(list(cuts.keys()) if cuts is not None else []) # Need to get the cols being cut on
-            logging.debug(f"Potential columns to load for {data_name}: {potential_cols}")
+
             cols = [c for c in potential_cols if c is not None]
 
             if sntype == "CC" and "SIM" in data_name:
-                cols.append("TYPE")
+                if sntypecol is None:
+                    sntypecol = "TYPE"  # default sntype column name for simulated data. This is a bit hacky, but I don't want to require the user to specify this in the config file if it's always the same.
+                cols.append(sntypecol)  # need the sntypecol to apply the CC cut for simulated data.
                 # THIS IS EXTREMELY HACKY AND CANNOT STAY. THIS IS JUST TO SEE IF I CAN GET IT RUNNING.
+            if sntype == "CC" and "DUMP" in data_name:
+                if sntypecol is not None:
+                    cols.append(sntypecol)  # We only need this if it is specified for splitting. This is still so hacky.
+            if sntypecol is not None and "DATA" in data_name:
+                cols.append(sntypecol)  # This is for fake Data only. This is really hacky now, come back and fix this.
+            logging.debug(f"Columns to load for {data_name}: {cols}")
 
             df = self.open_dataset(path, usecols=cols)
+            if "SIM" in data_name and sntype == "CC" and sntypecol != "TYPE":
+                df["TYPE"] = df[sntypecol]
+
             self.sntype = sntype
-            #self._true_z_col = true_z_col
-            #self.true_z_col = true_z_col
             if self.sntype not in ["IA", "CC", "all"]:
                 logger.warning(f"unrecognized type: {self.sntype}")
             dataframe = pd.concat([dataframe, df])
@@ -78,11 +88,14 @@ class SN_dataset():
         counts : array
             The counts of supernovae in each redshift bin.
         """
-        if prob_thresh is not None:
-            return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
-                           self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
+        try:
+            if prob_thresh is not None:
+                return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
+                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
 
-        return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
+            return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
+        except AttributeError:
+            raise AttributeError(f"z_col is not set for {self.data_name}! Can't calculate z counts without a valid z_col. Available columns: {self.df.columns}")
 
     def mu_res(self):
         """Calculate the Hubble residuals for the supernovae in this dataset. Currently not used."""
@@ -161,9 +174,13 @@ class SN_dataset():
     def open_dataset(self, path, nrows=None, usecols=None):
         """Open a dataset from an unknown file type and return it as a pandas dataframe."""
         if ".FITS" in path:
-            raise NotImplementedError("FITS file reading not implemented yet. Please convert to CSV or whitespace-delimited text file.")
+            # note that since I have to fully open the fits file, this does not save memory like it does for CSVs.
             dataframe = fits.open(path)[1].data
             dataframe = pd.DataFrame(np.array(dataframe))
+            dataframe = dataframe[:nrows] if nrows is not None else dataframe
+            if usecols is not None:
+                dataframe = dataframe[usecols]
+
         elif ".csv" in path:
             dataframe = pd.read_csv(path, comment="#", nrows=nrows, usecols=usecols)
         else:
@@ -230,3 +247,30 @@ class SN_dataset():
                 elif len(cols_in_df) == 1:
                     self._true_z_col = cols_in_df[0]
                     logging.info(f"Auto-setting true z col for {self.data_name} to {cols_in_df[0]}")
+
+    def split_into_IA_and_CC(self, sntype_col, ia_vals):
+        """ Split the Dataset in two, returning two new SN_datasets. Only works for datasets with a valid sntypecol."""
+        if sntype_col is None:
+            raise ValueError("No sntype_col specified for splitting dataset!")
+        if sntype_col not in self.df.columns:
+            raise ValueError(f"Couldn't find sntype_col {sntype_col} in dataframe for splitting! Available columns: {self.df.columns}")
+
+        df_ia = self.df[self.df[sntype_col].isin(ia_vals)]
+        df_cc = self.df[~self.df[sntype_col].isin(ia_vals)]
+
+        dataset_ia = SN_dataset(None, "IA", zcol=self.z_col, data_name=f"{self.data_name.split('_ALL')[0]}_IA")
+        dataset_cc = SN_dataset(None, "CC", zcol=self.z_col, data_name=f"{self.data_name.split('_ALL')[0]}_CC")
+
+        dataset_ia.df = df_ia
+        dataset_cc.df = df_cc
+
+        dataset_ia.scone_col = self.scone_col
+        dataset_cc.scone_col = self.scone_col
+
+        dataset_ia.true_z_col = self.true_z_col
+        dataset_cc.true_z_col = self.true_z_col
+
+        dataset_ia.z_col = self.z_col
+        dataset_cc.z_col = self.z_col
+
+        return dataset_ia, dataset_cc
