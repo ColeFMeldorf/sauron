@@ -150,11 +150,23 @@ def test_calc_cov_term():
                                                survey)
 
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
+
+    plot = False
+    if plot:
+        plt.subplot(1, 2, 1)
+        plt.imshow(cov_mat, origin='lower')
+        plt.colorbar()
+        plt.title("Calculated Covariance Term")
+        plt.subplot(1, 2, 2)
+        plt.imshow(regression_cov, origin='lower')
+        plt.colorbar()
+        plt.savefig(pathlib.Path(__file__).parent / "check_test_cov_term.png")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
 def test_rescale_CC_for_cov():
     args = SimpleNamespace()
-    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    config_path = pathlib.Path(__file__).parent / "../config_des_data_zphot.yml"
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
@@ -173,21 +185,27 @@ def test_rescale_CC_for_cov():
     seeds = np.array(np.arange(len(grid0)))
     rescale_vals = np.array([grid0, grid1, grid2, seeds]).T
 
-    logger.debug(rescale_vals)
     PROB_THRESH = 0.5
 
     cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                      runner.z_bins, PROB_THRESH,
                                                      1, survey, runner.datasets,
                                                      runner.z_bins, False)
+    regression_cov = np.load(pathlib.Path(__file__).parent / "test_rescale_cov_term.npy")
 
     logger.debug(cov_rate_norm)
+    plot = True
+    if plot:
+        plt.subplot(1, 2, 1)
+        plt.imshow(cov_rate_norm, origin='lower')
+        plt.colorbar()
+        plt.title("Calculated Rescaled Covariance Term")
+        plt.subplot(1, 2, 2)
+        plt.imshow(regression_cov, origin='lower')
+        plt.colorbar()
+        plt.savefig(pathlib.Path(__file__).parent / "test_rescale_cov_term.png")
 
-    plt.imshow(cov_rate_norm, origin='lower')
-    plt.colorbar()
-    plt.savefig(pathlib.Path(__file__).parent / "test_rescale_cov_term.png")
 
-    regression_cov = np.load(pathlib.Path(__file__).parent / "test_rescale_cov_term.npy")
 
     np.testing.assert_allclose(cov_rate_norm, regression_cov, atol=1e-7)
 
