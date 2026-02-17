@@ -163,6 +163,7 @@ def test_calc_cov_term():
         plt.savefig(pathlib.Path(__file__).parent / "check_test_cov_term.png")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
+
 def test_rescale_CC_for_cov():
     args = SimpleNamespace()
     #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
