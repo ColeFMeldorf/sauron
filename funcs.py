@@ -50,9 +50,6 @@ def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
             fiducial = E
             C_ij = np.zeros((len(E), len(E)))
         else:
-            # logger.debug("E-Fiducial: " + str(E - fiducial))
-            # logging.debug("Outer product term: " + str(E - fiducial))
-            # print("E-Fiducial: " + str(E - fiducial))
             C_ij_term = np.outer(E - fiducial, E - fiducial) * 1/(len(sys_params)-1)  # Fixed this error
             C_ij += C_ij_term
 
@@ -96,7 +93,6 @@ def rescale_CC_for_cov(rescale_vals_and_seeds, PROB_THRESH, index, survey, datas
         n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
         bias_correction = datasets[f"{survey}_SIM_IA"].z_counts(z_bins) / temp_sim_all_cut_counts
         bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-        print("BC: " + str(bias_correction))
         n_data *= bias_correction
 
     return n_data

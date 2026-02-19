@@ -226,44 +226,34 @@ class sauron_runner():
 
             # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
             else:
-                # logging.info("Splitting DUMP and SIM files into IA and CC...")
-                # try:
-                #     dump_df = datasets[f"{survey}_DUMP_ALL"].df
-                #     sim_df = datasets[f"{survey}_SIM_ALL"].df
-                # except KeyError:
-                #     raise KeyError(f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL."
-                #                    " If your DUMP and SIM files are "
-                #                    "separate for IA and CC, set corecollapse_are_separate to True.")
-
-                # try:
-                #     dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
-                #     ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
-                #     sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
-                #     ia_vals_sim = survey_dict["SIM_ALL"]["IA_VALS"]
-                # except KeyError:
-                #     raise KeyError(f"Couldn't find SNTYPECOL or IA_VALS in config for {survey}. These are needed to "
-                #                    "separate DUMP and SIM into IA and CC.")
-
-                # dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
-                # dump_cc_df = dump_df[~dump_df[dump_sn_col].isin(ia_vals)]
-                # sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
-                # sim_cc_df = sim_df[~sim_df[sim_sn_col].isin(ia_vals_sim)]
-
-                # datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
-                #                                            data_name=survey+"_DUMP_IA")
-                # datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
-                #                                            data_name=survey+"_DUMP_CC")
-                # datasets[f"{survey}_SIM_IA"] = SN_dataset(sim_ia_df, "IA", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                #                                           data_name=survey+"_SIM_IA",
-                #                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-                # datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                #                                           data_name=survey+"_SIM_CC",
-                #                                           true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-
-                datasets[f"{survey}_DUMP_IA"], datasets[f"{survey}_DUMP_CC"] = datasets[f"{survey}_DUMP_ALL"].split_into_IA_and_CC(
-                    survey_dict["DUMP_ALL"]["SNTYPECOL"], survey_dict["DUMP_ALL"]["IA_VALS"])
-                datasets[f"{survey}_SIM_IA"], datasets[f"{survey}_SIM_CC"] = datasets[f"{survey}_SIM_ALL"].split_into_IA_and_CC(
-                    survey_dict["SIM_ALL"]["SNTYPECOL"], survey_dict["SIM_ALL"]["IA_VALS"])
+                # Validate that combined DUMP and SIM datasets exist when corecollapse_are_separate is False
+                try:
+                    dump_all_dataset = datasets[f"{survey}_DUMP_ALL"]
+                    sim_all_dataset = datasets[f"{survey}_SIM_ALL"]
+                except KeyError as exc:
+                    raise KeyError(
+                        f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL in datasets. "
+                        "If your DUMP and SIM files are already separate for IA and CC, "
+                        "set corecollapse_are_separate to True in the config."
+                    ) from exc
+                # Validate that required config keys are present to split combined samples into IA and CC
+                try:
+                    dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
+                    dump_ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
+                    sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
+                    sim_ia_vals = survey_dict["SIM_ALL"]["IA_VALS"]
+                except KeyError as exc:
+                    raise KeyError(
+                        f"Missing configuration for survey '{survey}' when corecollapse_are_separate is False. "
+                        "Expected keys in the survey's config section: "
+                        "'DUMP_ALL.SNTYPECOL', 'DUMP_ALL.IA_VALS', "
+                        "'SIM_ALL.SNTYPECOL', and 'SIM_ALL.IA_VALS'. "
+                        "These are needed to separate DUMP and SIM into IA and CC."
+                    ) from exc
+                datasets[f"{survey}_DUMP_IA"], datasets[f"{survey}_DUMP_CC"] = dump_all_dataset.split_into_IA_and_CC(
+                    dump_sn_col, dump_ia_vals)
+                datasets[f"{survey}_SIM_IA"], datasets[f"{survey}_SIM_CC"] = sim_all_dataset.split_into_IA_and_CC(
+                    sim_sn_col, sim_ia_vals)
 
             logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:

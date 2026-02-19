@@ -13,11 +13,17 @@ cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 class SN_dataset():
     """A class to hold a dataset of supernovae for one survey and type."""
-    def __init__(self, paths, sntype, zcol=None, data_name=None, true_z_col=None, cuts=None, sntypecol=None):
+    def __init__(self, paths, sntype, data_name, zcol=None, true_z_col=None, cuts=None, sntypecol=None):
         self.data_name = data_name
         logging.debug(f"Initializing SN_dataset for {data_name} with paths: {paths}")
         if not isinstance(paths, list):
             paths = [paths]
+
+        # Initialize these here so they exist. If z_col fails because it is None, it is likely due to this
+        # never being set.
+        self.z_col = None
+        self.scone_col = None
+        self._true_z_col = None
 
         dataframe = pd.DataFrame()
         for path in paths:
@@ -175,8 +181,9 @@ class SN_dataset():
         """Open a dataset from an unknown file type and return it as a pandas dataframe."""
         if ".FITS" in path:
             # note that since I have to fully open the fits file, this does not save memory like it does for CSVs.
-            dataframe = fits.open(path)[1].data
-            dataframe = pd.DataFrame(np.array(dataframe))
+            with fits.open(path) as hdul:
+                fits_data = hdul[1].data
+            dataframe = pd.DataFrame(np.array(fits_data))
             dataframe = dataframe[:nrows] if nrows is not None else dataframe
             if usecols is not None:
                 dataframe = dataframe[usecols]
@@ -228,15 +235,45 @@ class SN_dataset():
         for c in all_cols:
             if "PROB_SCONE" in c or "SCONE_pred" in c:
                 scone_col.append(c)
-        if len(scone_col) == 0:
-            self.scone_col = None
-        elif len(scone_col) > 1:
-            raise ValueError(f"Multiple Valid scone columns found in {self.data_name}! Which do I use? I found: {scone_col}")
+        #
+                # Determine or validate the dataset-level SCONE column across files.
+        existing_scone_col = getattr(self, "scone_col", None)
+        if existing_scone_col is None:
+            # First time we are determining the SCONE column (or no SCONE column has been found yet).
+            if len(scone_col) == 0:
+                # No SCONE column in this file; leave self.scone_col as None for now.
+                self.scone_col = None
+            elif len(scone_col) > 1:
+                raise ValueError(
+                    f"Multiple valid SCONE columns found in {self.data_name}! "
+                    f"Which do I use? I found: {scone_col}"
+                )
+            else:
+                # Exactly one SCONE column found; set it for the whole dataset.
+                self.scone_col = scone_col[0]
         else:
-            self.scone_col = scone_col[0]
+            # We have already chosen a SCONE column from a previous file; enforce consistency.
+            if len(scone_col) == 0:
+                raise ValueError(
+                    f"SCONE probability column '{existing_scone_col}' was found in an earlier file for "
+                    f"{self.data_name}, but is missing in file {path}. "
+                    "All files in a multi-file dataset must either all include the same SCONE column "
+                    "or none at all."
+                )
+            elif len(scone_col) > 1:
+                raise ValueError(
+                    f"Multiple valid SCONE columns found in {self.data_name} for file {path}! "
+                    f"Expected a single column named '{existing_scone_col}', but found: {scone_col}"
+                )
+            else:
+                current_scone_col = scone_col[0]
+                if current_scone_col != existing_scone_col:
+                    raise ValueError(
+                        f"Inconsistent SCONE probability column across files for {self.data_name}: "
+                        f"previous files used '{existing_scone_col}', but file {path} has '{current_scone_col}'."
+                    )
 
         if self.data_name is not None and "DATA" not in self.data_name:
-            print("Looking for true z col in ", self.data_name)
             if self._true_z_col is None:
                 possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
                 cols_in_df = [col for col in possible_true_z_cols if

@@ -164,6 +164,7 @@ def test_calc_cov_term():
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
 
+@pytest.mark.xfail(reason="This test is currently broken until new photoz runs")
 def test_rescale_CC_for_cov():
     args = SimpleNamespace()
     #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
@@ -195,7 +196,7 @@ def test_rescale_CC_for_cov():
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_rescale_cov_term.npy")
 
     logger.debug(cov_rate_norm)
-    plot = True
+    plot = False
     if plot:
         plt.subplot(1, 2, 1)
         plt.imshow(cov_rate_norm, origin='lower')
@@ -205,9 +206,6 @@ def test_rescale_CC_for_cov():
         plt.imshow(regression_cov, origin='lower')
         plt.colorbar()
         plt.savefig(pathlib.Path(__file__).parent / "test_rescale_cov_term.png")
-
-
-
     np.testing.assert_allclose(cov_rate_norm, regression_cov, atol=1e-7)
 
 
@@ -274,7 +272,7 @@ def test_chi():
     assert isinstance(measured_chi, float), "Measured chi is not a float."
     np.testing.assert_allclose(measured_chi, regression_chi, atol=1e-7)
 
-
+@pytest.mark.xfail(reason="This test is currently broken until new photoz runs")
 def test_regression_pz_5datasets_covariance():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
        This also uses 5 datasets rather than 1 to test that functionality.
@@ -341,7 +339,7 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 
@@ -414,7 +412,7 @@ def test_coverage_with_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 
