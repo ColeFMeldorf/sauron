@@ -653,7 +653,7 @@ class sauron_runner():
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
                 logger.debug(f"Bias correction factor for scone cut: {1 / bias_correction}")
-                n_data /= bias_correction
+                #n_data /= bias_correction
                 logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
         else:
