@@ -29,6 +29,48 @@ matplotlib_logger = logging.getLogger('matplotlib')
 matplotlib_logger.setLevel(logging.WARNING)
 #logger = logging.getLogger(__name__)
 
+
+from matplotlib import rcParams
+import matplotlib as mpl
+def update_rcParams(key, val):
+    if key in rcParams:
+        rcParams[key] = val
+
+def LaurenNicePlots():
+    update_rcParams('font.size', 10)
+    update_rcParams('font.family', 'serif')
+    update_rcParams('xtick.major.size', 8)
+    update_rcParams('xtick.labelsize', 'large')
+    update_rcParams('xtick.direction', "in")
+    update_rcParams('xtick.minor.visible', True)
+    update_rcParams('xtick.top', True)
+    update_rcParams('ytick.major.size', 8)
+    update_rcParams('ytick.labelsize', 'large')
+    update_rcParams('ytick.direction', "in")
+    update_rcParams('ytick.minor.visible', True)
+    update_rcParams('ytick.right', True)
+    update_rcParams('xtick.minor.size', 4)
+    update_rcParams('ytick.minor.size', 4)
+    update_rcParams('xtick.major.pad', 10)
+    update_rcParams('ytick.major.pad', 10)
+    update_rcParams('legend.numpoints', 1)
+    update_rcParams('mathtext.fontset', 'cm')
+    update_rcParams('mathtext.rm', 'serif')
+    update_rcParams('axes.labelsize', 'x-large')
+    update_rcParams('lines.marker', 'None')
+    update_rcParams('lines.markersize', 1)
+    update_rcParams('lines.markeredgewidth', 1.0)
+    update_rcParams('lines.markeredgecolor', 'auto')
+
+    cycle_colors = ['navy', 'maroon','darkorange', 'darkorchid', 'darkturquoise', 'darkmagenta', '6FADFA','7D7D7D','black']
+    # cycle_colors = ['9F6CE6','FF984A','538050','6FADFA','7D7D7D','black']
+    cycle_markers = ['o','^','*','s','X','d', '1','2', '3']
+    # cycle_colors = ['darkorchid','darkorange','darkturquoise']
+    # cycle_markers = ['o','^','*']
+    #+ mpl.cycler(marker=cycle_markers)
+    update_rcParams('axes.prop_cycle', mpl.cycler(color=cycle_colors) )
+
+
 # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
@@ -1006,50 +1048,54 @@ class sauron_runner():
         logging.debug("Performing sanity checks on datasets")
         # DUMP should be larger than SIM in all bins
 
-        logging.debug("Generating sanity check plots")
-        #plt.subplot(1, 2, 1)
-        plt.clf()
-        logging.debug("Starting dump bar 1")
-        logging.debug(f"z counts {self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey])}")
-        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DUMP_IA')
-        logging.debug("Starting sim bar 1")
-        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                self.datasets[f"{survey}_SIM_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='SIM_IA')
-        plt.xlabel("Redshift")
-        plt.ylabel("Counts")
-        plt.legend()
+        if self.args.plot:
+            LaurenNicePlots()
+            logging.debug("Generating sanity check plots")
 
-        #plt.subplot(1, 3, 2)
-        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                self.datasets[f"{survey}_DUMP_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DUMP_CC')
-        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                self.datasets[f"{survey}_SIM_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='SIM_CC')
-        plt.xlabel("Redshift")
-        plt.ylabel("Counts")
-        plt.yscale("log")
-        plt.legend()
-        logging.debug("Generating sanity check plots - part 2")
-        plt.subplot(1, 2, 2)
-        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DUMP_ALL')
-        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='SIM_ALL')
-        plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                self.datasets[f"{survey}_DATA_ALL_1"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=0.5, label='DATA_ALL_1')
-        plt.xlabel("Redshift")
-        plt.yscale("log")
-        plt.ylabel("Counts")
-        plt.legend()
-        logging.debug(f"Saving sanity check plots to sanity_check_counts_{survey}.png ")
-        plt.savefig(f"sanity_check_counts_{survey}.png")
+            plt.clf()
+            plt.figure(figsize=(8, 6))
+            plt.subplot(2, 1, 1, sharex=True)
+            plt.tight_layout(pad=3.0)
+            logging.debug("Starting dump bar 1")
+            logging.debug(f"z counts {self.datasets[f'{survey}_DUMP_IA'].z_counts(self.fit_args_dict['z_bins'][survey])}")
+            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                    self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Uncut Simulation IA', histtype = "step", lw = 3)
+            logging.debug("Starting sim bar 1")
+            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                    self.datasets[f"{survey}_SIM_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Simulated Detected IA', histtype = "step", lw = 3)
+            plt.xlabel("Redshift")
+            plt.ylabel("Counts")
+            plt.legend()
+
+            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                    self.datasets[f"{survey}_DUMP_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Uncut Simulation CC', histtype = "step", lw = 3)
+            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                    self.datasets[f"{survey}_SIM_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Simulated Detected CC', histtype = "step", lw = 3)
+            plt.xlabel("Redshift")
+            plt.ylabel("Counts")
+            plt.yscale("log")
+            plt.legend()
+            logging.debug("Generating sanity check plots - part 2")
+            plt.subplot(2, 1, 2, sharex=True)
+            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                    self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Uncut Simulation IA+CC', histtype = "step", lw = 3)
+            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                    self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Simulated Detected IA+CC', histtype = "step", lw = 3)
+            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
+                    self.datasets[f"{survey}_DATA_ALL_1"].z_counts(self.fit_args_dict['z_bins'][survey]),
+                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label=f'{survey} Data', histtype = "step", lw = 3)
+            plt.xlabel("Redshift")
+            plt.yscale("log")
+            plt.ylabel("Counts")
+            plt.legend()
+            logging.debug(f"Saving sanity check plots to sanity_check_counts_{survey}.png ")
+            plt.savefig(f"sanity_check_counts_{survey}.png")
 
         assert self.datasets[f"{survey}_DUMP_ALL"].total_counts >= self.datasets[f"{survey}_SIM_ALL"].total_counts, \
             f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset for survey {survey}!"
