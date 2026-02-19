@@ -6,6 +6,7 @@ import logging
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+import pathlib
 from scipy.optimize import leastsq
 from scipy.sparse import block_diag
 from scipy import stats
@@ -1007,6 +1008,7 @@ class sauron_runner():
 
         logging.debug("Generating sanity check plots")
         #plt.subplot(1, 2, 1)
+        plt.clf()
         logging.debug("Starting dump bar 1")
         logging.debug(f"z counts {self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey])}")
         plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
@@ -1072,3 +1074,38 @@ class sauron_runner():
         assert dump_ratio > 0.01, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
 
         #np.testing.assert_allclose(dump_ratio, ratio, atol=0.2, err_msg=f"CC to IA ratios in SIM and DUMP datasets differ significantly for survey {survey}: SIM ratio = {ratio}, DUMP ratio = {dump_ratio}")
+
+    # def sanity_check_plot(self, survey, index):
+    #     plt.clf()
+    #     plt.subplot(1,2,1)
+
+    #     self.z_bins = self.fit_args_dict['z_bins'][survey]
+
+    #     plt.plot(self.datasets[f"{survey}_DUMP_IA"].z_counts(self.z_bins), label='Uncut simulation IA Counts')
+    #     plt.plot(self.datasets[f"{survey}_DUMP_CC"].z_counts(self.z_bins), label='Uncut simulation CC Counts')
+    #     plt.plot(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.z_bins), label='Uncut simulation All Counts')
+
+    #     plt.plot(self.datasets[f"{survey}_SIM_IA"].z_counts(self.z_bins), label='Simulated IA Counts')
+    #     plt.plot(self.datasets[f"{survey}_SIM_CC"].z_counts(self.z_bins), label='Simulated CC Counts')
+    #     plt.plot(self.datasets[f"{survey}_SIM_ALL"].z_counts(self.z_bins), label='Simulated All Counts')
+    #     # plt.plot(self.datasets[f"{survey}_SIM_IA"].z_counts(self.z_bins, prob_thresh=PROB_THRESH), ls="--",
+    #     #          label='Sim IA Counts Cut')
+    #     # plt.plot(self.datasets[f"{survey}_SIM_CC"].z_counts(self.z_bins, prob_thresh=PROB_THRESH), ls="--" ,
+    #     #          label='Sim CC Counts Cut')
+    #     # plt.plot(self.datasets[f"{survey}_SIM_ALL"].z_counts(self.z_bins, prob_thresh=PROB_THRESH), ls="--",
+    #     #          label='Sim All Counts Cut')
+    #     plt.yscale("log")
+    #     plt.legend()
+
+    #     #bias_cor = self.datasets[f"{survey}_SIM_IA"].z_counts(self.z_bins) / self.datasets[f"{survey}_SIM_ALL"].z_counts(self.z_bins, prob_thresh = 0.5)
+    #     #plt.subplot(1,2,2)
+    #     #plt.plot(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(self.z_bins), label='Data IA Counts')
+    #     #plt.plot(self.datasets[f"{survey}_DATA_CC_{index}"].z_counts(self.z_bins), label='Data CC Counts')
+    #     plt.plot(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(self.z_bins), label='Data All Counts')
+    #    # plt.plot(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(self.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data IA Counts Cut')
+    #    # plt.plot(self.datasets[f"{survey}_DATA_CC_{index}"].z_counts(self.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data CC Counts Cut')
+    #    # plt.plot(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(self.z_bins, prob_thresh = PROB_THRESH)*bias_cor, color = "k", lw= 3,ls = "--", label='Data All Counts Cut w/ BCor')
+    #     plt.yscale("log")
+    #     plt.legend()
+    #     #pulls.extend(list(pull))
+    #     plt.savefig(f"{survey}_dataset_{index}_sanity_check.png")
