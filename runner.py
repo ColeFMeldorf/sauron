@@ -28,6 +28,47 @@ matplotlib_logger = logging.getLogger('matplotlib')
 matplotlib_logger.setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
+from matplotlib import rcParams
+import matplotlib as mpl
+def update_rcParams(key, val):
+    if key in rcParams:
+        rcParams[key] = val
+
+def LaurenNicePlots():
+    update_rcParams('font.size', 10)
+    update_rcParams('font.family', 'serif')
+    update_rcParams('xtick.major.size', 8)
+    update_rcParams('xtick.labelsize', 'large')
+    update_rcParams('xtick.direction', "in")
+    update_rcParams('xtick.minor.visible', True)
+    update_rcParams('xtick.top', True)
+    update_rcParams('ytick.major.size', 8)
+    update_rcParams('ytick.labelsize', 'large')
+    update_rcParams('ytick.direction', "in")
+    update_rcParams('ytick.minor.visible', True)
+    update_rcParams('ytick.right', True)
+    update_rcParams('xtick.minor.size', 4)
+    update_rcParams('ytick.minor.size', 4)
+    update_rcParams('xtick.major.pad', 10)
+    update_rcParams('ytick.major.pad', 10)
+    update_rcParams('legend.numpoints', 1)
+    update_rcParams('mathtext.fontset', 'cm')
+    update_rcParams('mathtext.rm', 'serif')
+    update_rcParams('axes.labelsize', 'x-large')
+    update_rcParams('lines.marker', 'None')
+    update_rcParams('lines.markersize', 1)
+    update_rcParams('lines.markeredgewidth', 1.0)
+    update_rcParams('lines.markeredgecolor', 'auto')
+
+    cycle_colors = ['navy', 'maroon','darkorange', 'darkorchid', 'darkturquoise', 'darkmagenta', '6FADFA','7D7D7D','black']
+    # cycle_colors = ['9F6CE6','FF984A','538050','6FADFA','7D7D7D','black']
+    cycle_markers = ['o','^','*','s','X','d', '1','2', '3']
+    # cycle_colors = ['darkorchid','darkorange','darkturquoise']
+    # cycle_markers = ['o','^','*']
+    #+ mpl.cycler(marker=cycle_markers)
+    update_rcParams('axes.prop_cycle', mpl.cycler(color=cycle_colors) )
+
+
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
 # This change was made to match SNANA. If you require the previous values for consistency, revert to Om0=0.3, Ode0=0.7.
@@ -189,33 +230,6 @@ class sauron_runner():
                     logging.info(f"Found {n_datasets} data sets for {survey}")
 
                 else:
-<<<<<<< SDSS
-                    dataframe = pd.DataFrame()
-                    logging.debug(f"paths for {survey}_{file}: {paths}")
-                    for path in paths:
-                        logging.debug(f"Loading file {path} for {survey}_{file}")
-                        if ".FITS" in path:
-                            dataframe = pd.concat([dataframe, pd.DataFrame(np.array(fits.open(path)[1].data))])
-                        elif ".csv" in path:
-                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#")])
-                        else:
-                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#", sep=r"\s+")])
-                    datasets[survey+"_"+file] = SN_dataset(dataframe,
-                                                           sntype, data_name=survey+"_"+file, zcol=zcol)
-                    logging.debug(f"z bin counts for {survey}_{file}: {datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
-
-                    datasets[survey+"_"+file].true_z_col = survey_dict[file].get("TRUEZCOL", None)
-                    if datasets[survey+"_"+file].true_z_col is None:
-                        possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
-                        cols_in_df = [col for col in possible_true_z_cols if
-                                      col in datasets[survey+"_"+file].df.columns]
-                        if len(cols_in_df) > 1:
-                            raise ValueError(f"Multiple possible true z cols found for {survey}_{file}: {cols_in_df}. "
-                                             "Please specify TRUEZCOL in config file.")
-                        elif len(cols_in_df) == 1:
-                            datasets[survey+"_"+file].true_z_col = cols_in_df[0]
-                            logging.info(f"Auto-setting true z col for {survey}_{file} to {cols_in_df[0]}")
-=======
                     cuts = survey_dict.get("CUTS", None)
                     true_z_col = survey_dict[file].get("TRUEZCOL", None)
                     sntypecol = survey_dict[file].get("SNTYPECOL", None)
@@ -226,7 +240,6 @@ class sauron_runner():
                     #logging.debug(f"True z col for {survey}_{file}: {datasets[survey+'_'+file].true_z_col}")
                     logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
 
->>>>>>> main
 
             if self.fit_args_dict["cc_are_sep"].get(survey) is None:
                 self.fit_args_dict["cc_are_sep"][survey] = True
@@ -270,40 +283,6 @@ class sauron_runner():
                     dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
                     dump_ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
                     sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
-<<<<<<< SDSS
-                    ia_vals_sim = survey_dict["SIM_ALL"]["IA_VALS"]
-                except KeyError:
-                    raise KeyError(f"Couldn't find SNTYPECOL or IA_VALS in config for {survey}. These are needed to "
-                                   "separate DUMP and SIM into IA and CC.")
-
-                dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
-                dump_cc_df = dump_df[~dump_df[dump_sn_col].isin(ia_vals)]
-                sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
-                sim_cc_df = sim_df[~sim_df[sim_sn_col].isin(ia_vals_sim)]
-
-                datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
-                                                           data_name=survey+"_DUMP_IA")
-                datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
-                                                           data_name=survey+"_DUMP_CC")
-                datasets[f"{survey}_SIM_IA"] = SN_dataset(sim_ia_df, "IA", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                                                          data_name=survey+"_SIM_IA",
-                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-                datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
-                                                          data_name=survey+"_SIM_CC",
-                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
-                logging.debug(f"Splitting finished. New counts: ")
-                logging.debug(f"{survey}_DUMP_IA: {datasets[f'{survey}_DUMP_IA'].total_counts}, \n {survey}_DUMP_CC: {datasets[f'{survey}_DUMP_CC'].total_counts}, \n {survey}_SIM_IA: {datasets[f'{survey}_SIM_IA'].total_counts}, \n {survey}_SIM_CC: {datasets[f'{survey}_SIM_CC'].total_counts}")
-                if any([datasets[f"{survey}_DUMP_IA"].total_counts == 0,
-                        datasets[f"{survey}_DUMP_CC"].total_counts == 0,
-                        datasets[f"{survey}_SIM_IA"].total_counts == 0,
-                        datasets[f"{survey}_SIM_CC"].total_counts == 0]):
-                    logging.warning("One of the split datasets has zero total counts! "
-                                    "Check your SNTYPECOL and IA_VALS settings. ")
-                    logging.warning("Dump ALL has these unique types: ")
-                    logging.warning("" + ", ".join([str(t) for t in datasets[f"{survey}_DUMP_ALL"].df[dump_sn_col].unique()]))
-                    logging.warning("Sim ALL has these unique types: ")
-                    logging.warning("" + ", ".join([str(t) for t in datasets[f"{survey}_SIM_ALL"].df[sim_sn_col].unique()]))
-=======
                     sim_ia_vals = survey_dict["SIM_ALL"]["IA_VALS"]
                 except KeyError as exc:
                     raise KeyError(
@@ -317,7 +296,6 @@ class sauron_runner():
                     dump_sn_col, dump_ia_vals)
                 datasets[f"{survey}_SIM_IA"], datasets[f"{survey}_SIM_CC"] = sim_all_dataset.split_into_IA_and_CC(
                     sim_sn_col, sim_ia_vals)
->>>>>>> main
 
             logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
@@ -401,16 +379,19 @@ class sauron_runner():
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
 
-        if self.args.debug:
+        if self.args.plot:
+            LaurenNicePlots()
             plt.clf()
-            plt.imshow(eff_ij, origin='lower', aspect='auto',
+            log_eff_ij = np.log10(eff_ij)
+            log_eff_ij[np.isneginf(log_eff_ij)] = -5  # Set log(0) to a finite value for plotting
+            plt.imshow(log_eff_ij, origin='lower', aspect='auto',
                        extent=[z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]],
-                       vmin=0, vmax=1)
+                       vmin=-5, vmax=0)
             plt.colorbar(label="Efficiency")
-            plt.title(f"Transfer Matrix for {survey}")
+            plt.title(f"Log Transfer Matrix for {survey}")
             plt.xlabel("Reconstructed Redshift")
             plt.ylabel("True Redshift")
-            plt.savefig(f"transfer_matrix_{survey}.png")
+            plt.savefig(f"pub_transfer_matrix_{survey}.png")
 
         return eff_ij
 
@@ -443,6 +424,8 @@ class sauron_runner():
         # This needs to be done survey by survey because f_norm is per survey
         n_data = np.concatenate([self.fit_args_dict['n_data'][s] for s in survey])
         N_gen = np.concatenate([self.fit_args_dict['N_gen'][s] for s in survey])
+        logging.debug(self.fit_args_dict)
+        logging.debug(self.fit_args_dict["eff_ij"])
         eff_ij_list = [self.fit_args_dict['eff_ij'][s] for s in survey]
         eff_ij = block_diag(eff_ij_list).toarray()
         cov_sys_list = [self.fit_args_dict['cov_sys'][s] for s in survey]
@@ -782,23 +765,34 @@ class sauron_runner():
         surveys = self.results.keys()
         num_plots = len(surveys) + 1
         sides = int(np.ceil(num_plots/2))
-        fig, ax = plt.subplots(2, sides, figsize=(12, 6))
-        ax = ax.flatten()
+        LaurenNicePlots()
+        #fig, ax = plt.subplots(2, sides, figsize=(12, 6))
+        fig, ax = plt.subplots(2, figsize = (9,5))
+        #ax = ax.flatten()
+
+        fig = plt.figure(figsize=(12, 4))
+        import matplotlib.gridspec as gridspec
+        gs = gridspec.GridSpec(1, 2, width_ratios=[1.6, 1])
+
+        ax1 = plt.subplot(gs[0])
+        ax2 = plt.subplot(gs[1])
+
+        plt.tight_layout()
+        fig.tight_layout(pad=3.0)
+
         surveys = list(surveys)
-        #if "combined" in surveys:
-        #    surveys.remove("combined")
         for i, survey in enumerate(surveys):
             s = survey
             if survey != "combined":
-                ax1 = ax[0]
+                #ax1 = ax[0]
                 z_centers = np.array(self.fit_args_dict['z_centers'][survey])
 
                 ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
                              yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                             label=f" {survey} Sauron Prediction ")
+                             label=f" {survey} Sauron Prediction ", ms = 5)
                 ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
-                             fmt='o', label=f" {survey} Data")
+                             fmt='o', label=f" {survey} Data", ms = 5)
                 # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
                 #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
                 #              fmt='o', label=f" {survey} Initial Prediction ")
@@ -806,41 +800,58 @@ class sauron_runner():
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
                 ax1.set_yscale("log")
+                ax1.grid(True, which="both", ls="--", lw=0.5)
 
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
                 df = self.results[s]
 
-            ax2 = ax[i+1]
-            extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
-                          df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
-            logger.debug(extent_chi)
-            chi2_map = self.generate_chi2_map(s, extent=extent_chi)
-            # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-            chi2_map -= np.min(chi2_map)
-            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
+            #ax2 = ax[i+1]
 
-            #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-            sigma_map = chi2_map
+            if "combined" in surveys:
+                extraplot_survey = "combined"
+            else:
+                extraplot_survey = surveys[-1]
 
-            im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
-            #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-            # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-            ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
-            plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
-            #ax2.axhline(2.27e-5, color='black', linestyle='--')
-            #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-            ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
-                         color='white', ms=10, label=f"Fit results {survey}")
-            ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
-            ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
-            ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt='o', ms=10, label="Dilday")
-            ax2.set_xlabel("beta")
-            ax2.set_ylabel("alpha")
-            ax2.set_xlim(extent_chi[0], extent_chi[1])
-            ax2.set_ylim(extent_chi[2], extent_chi[3])
-            ax2.legend()
+            if survey == extraplot_survey:
+
+                if "combined" in surveys:
+                    non_combined_datasets = [survey for survey in surveys if survey != "combined"]
+                    label = "+".join(non_combined_datasets)
+                else:
+                    label = survey
+
+
+                #ax2 = fig.add_subplot(1, 2, 2)
+                extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
+                            df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
+                logger.debug(extent_chi)
+                chi2_map = self.generate_chi2_map(s, extent=extent_chi)
+                # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
+                chi2_map -= np.min(chi2_map)
+                logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
+
+                #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
+                sigma_map = chi2_map
+
+                im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
+                #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
+                # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
+                plt.colorbar(im, ax=ax2, label="Δχ²")
+                #ax2.axhline(2.27e-5, color='black', linestyle='--')
+                #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
+                ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
+                            color='white', ms=10, label=f"Fit results {label}")
+                ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker (2020)")
+                ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier (2019)")
+                ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt='o', ms=10, label="Dilday (2010)")
+                ax2.set_xlabel("$\\beta$")
+                ax2.set_ylabel("$\\alpha$")
+                ax2.set_xlim(extent_chi[0], extent_chi[1])
+                ax2.set_ylim(extent_chi[2], extent_chi[3])
+                ax2.legend(loc="lower left", fontsize=9)
 
         fig.savefig("summary_plot.png")
 
