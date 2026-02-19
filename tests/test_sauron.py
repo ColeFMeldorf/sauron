@@ -1,6 +1,6 @@
 
 # Sauron
-from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, chi2_unsummed, \
+from funcs import chi2, calculate_covariance_matrix_term, power_law, calculate_null_counts, \
     rescale_CC_for_cov
 from runner import sauron_runner
 
@@ -150,11 +150,25 @@ def test_calc_cov_term():
                                                survey)
 
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
+
+    plot = False
+    if plot:
+        plt.subplot(1, 2, 1)
+        plt.imshow(cov_mat, origin='lower')
+        plt.colorbar()
+        plt.title("Calculated Covariance Term")
+        plt.subplot(1, 2, 2)
+        plt.imshow(regression_cov, origin='lower')
+        plt.colorbar()
+        plt.savefig(pathlib.Path(__file__).parent / "check_test_cov_term.png")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
+
+@pytest.mark.xfail(reason="This test is currently broken until new photoz runs")
 def test_rescale_CC_for_cov():
     args = SimpleNamespace()
-    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    config_path = pathlib.Path(__file__).parent / "../config_des_data_zphot.yml"
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
@@ -173,22 +187,25 @@ def test_rescale_CC_for_cov():
     seeds = np.array(np.arange(len(grid0)))
     rescale_vals = np.array([grid0, grid1, grid2, seeds]).T
 
-    logger.debug(rescale_vals)
     PROB_THRESH = 0.5
 
     cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
                                                      runner.z_bins, PROB_THRESH,
                                                      1, survey, runner.datasets,
                                                      runner.z_bins, False)
-
-    logger.debug(cov_rate_norm)
-
-    plt.imshow(cov_rate_norm, origin='lower')
-    plt.colorbar()
-    plt.savefig(pathlib.Path(__file__).parent / "test_rescale_cov_term.png")
-
     regression_cov = np.load(pathlib.Path(__file__).parent / "test_rescale_cov_term.npy")
 
+    logger.debug(cov_rate_norm)
+    plot = False
+    if plot:
+        plt.subplot(1, 2, 1)
+        plt.imshow(cov_rate_norm, origin='lower')
+        plt.colorbar()
+        plt.title("Calculated Rescaled Covariance Term")
+        plt.subplot(1, 2, 2)
+        plt.imshow(regression_cov, origin='lower')
+        plt.colorbar()
+        plt.savefig(pathlib.Path(__file__).parent / "test_rescale_cov_term.png")
     np.testing.assert_allclose(cov_rate_norm, regression_cov, atol=1e-7)
 
 
@@ -250,12 +267,12 @@ def test_chi():
     null_counts = calculate_null_counts(N_gen=N_gen, true_rate_function=power_law, rate_params=x, z_bins=runner.z_bins,
                                         z_centers=z_centers)
 
-    regression_chi = np.load(pathlib.Path(__file__).parent / "test_chi_output.npy")
+    regression_chi = 10.444929
+    measured_chi = chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law)
+    assert isinstance(measured_chi, float), "Measured chi is not a float."
+    np.testing.assert_allclose(measured_chi, regression_chi, atol=1e-7)
 
-    np.testing.assert_allclose(chi2_unsummed(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law),
-                               regression_chi, atol=1e-7)
-
-
+@pytest.mark.xfail(reason="This test is currently broken until new photoz runs")
 def test_regression_pz_5datasets_covariance():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
        This also uses 5 datasets rather than 1 to test that functionality.
@@ -322,7 +339,7 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 
@@ -395,7 +412,7 @@ def test_coverage_with_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 
