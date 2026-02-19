@@ -148,6 +148,7 @@ class sauron_runner():
             fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
             self.parse_survey_fit_options(fit_args_dict, survey)
             for i, file in enumerate(list(survey_dict.keys())):
+                logging.debug(f"Processing file key: {file} for survey: {survey}")
                 if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
                     continue  # Skip non-data files
 
@@ -188,6 +189,33 @@ class sauron_runner():
                     logging.info(f"Found {n_datasets} data sets for {survey}")
 
                 else:
+<<<<<<< SDSS
+                    dataframe = pd.DataFrame()
+                    logging.debug(f"paths for {survey}_{file}: {paths}")
+                    for path in paths:
+                        logging.debug(f"Loading file {path} for {survey}_{file}")
+                        if ".FITS" in path:
+                            dataframe = pd.concat([dataframe, pd.DataFrame(np.array(fits.open(path)[1].data))])
+                        elif ".csv" in path:
+                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#")])
+                        else:
+                            dataframe = pd.concat([dataframe, pd.read_csv(path, comment="#", sep=r"\s+")])
+                    datasets[survey+"_"+file] = SN_dataset(dataframe,
+                                                           sntype, data_name=survey+"_"+file, zcol=zcol)
+                    logging.debug(f"z bin counts for {survey}_{file}: {datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
+
+                    datasets[survey+"_"+file].true_z_col = survey_dict[file].get("TRUEZCOL", None)
+                    if datasets[survey+"_"+file].true_z_col is None:
+                        possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
+                        cols_in_df = [col for col in possible_true_z_cols if
+                                      col in datasets[survey+"_"+file].df.columns]
+                        if len(cols_in_df) > 1:
+                            raise ValueError(f"Multiple possible true z cols found for {survey}_{file}: {cols_in_df}. "
+                                             "Please specify TRUEZCOL in config file.")
+                        elif len(cols_in_df) == 1:
+                            datasets[survey+"_"+file].true_z_col = cols_in_df[0]
+                            logging.info(f"Auto-setting true z col for {survey}_{file} to {cols_in_df[0]}")
+=======
                     cuts = survey_dict.get("CUTS", None)
                     true_z_col = survey_dict[file].get("TRUEZCOL", None)
                     sntypecol = survey_dict[file].get("SNTYPECOL", None)
@@ -198,6 +226,7 @@ class sauron_runner():
                     #logging.debug(f"True z col for {survey}_{file}: {datasets[survey+'_'+file].true_z_col}")
                     logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
 
+>>>>>>> main
 
             if self.fit_args_dict["cc_are_sep"].get(survey) is None:
                 self.fit_args_dict["cc_are_sep"][survey] = True
@@ -241,6 +270,40 @@ class sauron_runner():
                     dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
                     dump_ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
                     sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
+<<<<<<< SDSS
+                    ia_vals_sim = survey_dict["SIM_ALL"]["IA_VALS"]
+                except KeyError:
+                    raise KeyError(f"Couldn't find SNTYPECOL or IA_VALS in config for {survey}. These are needed to "
+                                   "separate DUMP and SIM into IA and CC.")
+
+                dump_ia_df = dump_df[dump_df[dump_sn_col].isin(ia_vals)]
+                dump_cc_df = dump_df[~dump_df[dump_sn_col].isin(ia_vals)]
+                sim_ia_df = sim_df[sim_df[sim_sn_col].isin(ia_vals_sim)]
+                sim_cc_df = sim_df[~sim_df[sim_sn_col].isin(ia_vals_sim)]
+
+                datasets[f"{survey}_DUMP_IA"] = SN_dataset(dump_ia_df, "IA", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
+                                                           data_name=survey+"_DUMP_IA")
+                datasets[f"{survey}_DUMP_CC"] = SN_dataset(dump_cc_df, "CC", zcol=datasets[f"{survey}_DUMP_ALL"].z_col,
+                                                           data_name=survey+"_DUMP_CC")
+                datasets[f"{survey}_SIM_IA"] = SN_dataset(sim_ia_df, "IA", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
+                                                          data_name=survey+"_SIM_IA",
+                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                datasets[f"{survey}_SIM_CC"] = SN_dataset(sim_cc_df, "CC", zcol=datasets[f"{survey}_SIM_ALL"].z_col,
+                                                          data_name=survey+"_SIM_CC",
+                                                          true_z_col=datasets[f"{survey}_SIM_ALL"].true_z_col)
+                logging.debug(f"Splitting finished. New counts: ")
+                logging.debug(f"{survey}_DUMP_IA: {datasets[f'{survey}_DUMP_IA'].total_counts}, \n {survey}_DUMP_CC: {datasets[f'{survey}_DUMP_CC'].total_counts}, \n {survey}_SIM_IA: {datasets[f'{survey}_SIM_IA'].total_counts}, \n {survey}_SIM_CC: {datasets[f'{survey}_SIM_CC'].total_counts}")
+                if any([datasets[f"{survey}_DUMP_IA"].total_counts == 0,
+                        datasets[f"{survey}_DUMP_CC"].total_counts == 0,
+                        datasets[f"{survey}_SIM_IA"].total_counts == 0,
+                        datasets[f"{survey}_SIM_CC"].total_counts == 0]):
+                    logging.warning("One of the split datasets has zero total counts! "
+                                    "Check your SNTYPECOL and IA_VALS settings. ")
+                    logging.warning("Dump ALL has these unique types: ")
+                    logging.warning("" + ", ".join([str(t) for t in datasets[f"{survey}_DUMP_ALL"].df[dump_sn_col].unique()]))
+                    logging.warning("Sim ALL has these unique types: ")
+                    logging.warning("" + ", ".join([str(t) for t in datasets[f"{survey}_SIM_ALL"].df[sim_sn_col].unique()]))
+=======
                     sim_ia_vals = survey_dict["SIM_ALL"]["IA_VALS"]
                 except KeyError as exc:
                     raise KeyError(
@@ -254,6 +317,7 @@ class sauron_runner():
                     dump_sn_col, dump_ia_vals)
                 datasets[f"{survey}_SIM_IA"], datasets[f"{survey}_SIM_CC"] = sim_all_dataset.split_into_IA_and_CC(
                     sim_sn_col, sim_ia_vals)
+>>>>>>> main
 
             logging.debug(f"Datasets keys after unpacking: {list(datasets.keys())}")
             if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
@@ -639,8 +703,10 @@ class sauron_runner():
             elif method == "scone_cut":
                 logging.debug("Performing just a scone cut for decontamination.")
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                logging.debug(f"Calculated n_data using scone cut: {np.sum(n_data)}")
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
+                logging.debug(f"Calculated bias correction using scone cut: {bias_correction}")
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
                 logger.debug(f"Bias correction factor for scone cut: {1 / bias_correction}")
                 n_data /= bias_correction
@@ -769,6 +835,7 @@ class sauron_runner():
                          color='white', ms=10, label=f"Fit results {survey}")
             ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
             ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
+            ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt='o', ms=10, label="Dilday")
             ax2.set_xlabel("beta")
             ax2.set_ylabel("alpha")
             ax2.set_xlim(extent_chi[0], extent_chi[1])
