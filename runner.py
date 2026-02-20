@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 import pathlib
-from scipy.optimize import leastsq
+
 from scipy.optimize import minimize
 from scipy.sparse import block_diag
 from scipy import stats
@@ -73,12 +73,6 @@ def LaurenNicePlots():
     update_rcParams('axes.prop_cycle', mpl.cycler(color=cycle_colors) )
 
 
-# Configure the basic logging setup
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
-)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -1076,7 +1070,7 @@ class sauron_runner():
             LaurenNicePlots()
             logging.debug("Generating sanity check plots")
 
-            plt.clf()
+
             plt.figure(figsize=(8, 6))
             ax1 = plt.subplot(2, 1, 1)
             plt.tight_layout(pad=3.0)
@@ -1108,7 +1102,7 @@ class sauron_runner():
                 data = self.datasets[ds].df
                 zcol = self.datasets[ds].z_col
                 if "DATA" in ds:
-                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2, color = "black")
+                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2, color="black")
                 else:
                     plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2)
 
@@ -1129,7 +1123,7 @@ class sauron_runner():
         for key in self.datasets.keys():
             assert self.datasets[key].total_counts > 0, f"Dataset {key} has zero total counts!"
 
-        #The ratio between CC and IA should be reasonable
+        # The ratio between CC and IA should be reasonable
         sim_IA = self.datasets[f"{survey}_SIM_IA"].total_counts
         sim_CC = self.datasets[f"{survey}_SIM_CC"].total_counts
         ratio = sim_CC / sim_IA if sim_IA > 0 else np.inf
@@ -1142,7 +1136,7 @@ class sauron_runner():
         assert dump_ratio < 100, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
         assert dump_ratio > 0.01, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
 
-        #np.testing.assert_allclose(dump_ratio, ratio, atol=0.2, err_msg=f"CC to IA ratios in SIM and DUMP datasets differ significantly for survey {survey}: SIM ratio = {ratio}, DUMP ratio = {dump_ratio}")
+        # np.testing.assert_allclose(dump_ratio, ratio, atol=0.2, err_msg=f"CC to IA ratios in SIM and DUMP datasets differ significantly for survey {survey}: SIM ratio = {ratio}, DUMP ratio = {dump_ratio}")
 
     # def sanity_check_plot(self, survey, index):
     #     plt.clf()

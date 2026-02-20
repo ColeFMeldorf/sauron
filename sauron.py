@@ -30,7 +30,7 @@ def main():
     parser.add_argument("--prob_thresh", type=float, default=0.5,
                         help="Probability threshold for classifying SNe as Type IA.")
     parser.add_argument("--sanity-check", action=argparse.BooleanOptionalAction, help="Perform sanity checks"
-                        "that simulations look reasonable.", default=True)
+                        " that simulations look reasonable.", default=True)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -47,7 +47,8 @@ def main():
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
         runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
-        runner.perform_sanity_checks(survey) if args.sanity_check else None
+        if args.sanity_check:
+            runner.perform_sanity_checks(survey)
         if not args.skip_cuts:
             runner.apply_cuts(survey)
         runner.calculate_transfer_matrix(survey)
