@@ -6,12 +6,9 @@ import logging
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
-<<<<<<< HEAD
 import pathlib
 from scipy.optimize import leastsq
-=======
 from scipy.optimize import minimize
->>>>>>> main
 from scipy.sparse import block_diag
 from scipy import stats
 
@@ -66,7 +63,8 @@ def LaurenNicePlots():
     update_rcParams('lines.markeredgewidth', 1.0)
     update_rcParams('lines.markeredgecolor', 'auto')
 
-    cycle_colors = ['navy', 'maroon','darkorange', 'darkorchid', 'darkturquoise', 'darkmagenta', '6FADFA','7D7D7D','black']
+    #cycle_colors = ['navy', 'maroon','darkorange', 'darkorchid', 'darkturquoise', 'darkmagenta', '6FADFA','7D7D7D','black']
+    cycle_colors = ["348ABD", "A60628", "7A68A6", "467821", "D55E00", "CC79A7", "56B4E9", "009E73", "F0E442", "0072B2"]
     # cycle_colors = ['9F6CE6','FF984A','538050','6FADFA','7D7D7D','black']
     cycle_markers = ['o','^','*','s','X','d', '1','2', '3']
     # cycle_colors = ['darkorchid','darkorange','darkturquoise']
@@ -233,30 +231,12 @@ class sauron_runner():
 
                 if "DATA" in file:
                     for i, path in enumerate(paths):
-<<<<<<< HEAD
-                        if ".FITS" in path:
-                            dataframe = fits.open(path)[1].data
-                            dataframe = pd.DataFrame(np.array(dataframe))
-                        elif ".csv" in path:
-                            dataframe = pd.read_csv(path, comment="#")
-                        else:
-                            dataframe = pd.read_csv(path, comment="#", sep=r"\s+")
-                        logger.debug(f"Type of dataframe for {survey}_{file}_{i+1}: {type(dataframe)}")
-
-                        logger.debug(f"Reading {path} into {survey}_{file}_{i+1}")
-                        datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(dataframe,
-                                                                            sntype, data_name=survey+"_"+file,
-                                                                            zcol=zcol)
-                        logger.debug(f"z bin counts for {survey}_{file}_{i+1}: "
-                                        f"{datasets[survey+'_'+file+'_'+str(i+1)].z_counts(self.fit_args_dict['z_bins'][survey])}")
-=======
                         cuts = survey_dict.get("CUTS", None)
                         sntypecol = survey_dict[file].get("SNTYPECOL", None)
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(path,
                                                                             sntype, data_name=survey+"_"+file,
                                                                             zcol=zcol, cuts=cuts,
                                                                             sntypecol=sntypecol)
->>>>>>> main
                     n_datasets = len(paths)
                     self.fit_args_dict["n_datasets"][survey] = n_datasets
                     self.fit_args_dict["n_datasets"]["combined"] = 1  # This needs to be fixed later TODO
@@ -717,12 +697,8 @@ class sauron_runner():
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-<<<<<<< HEAD
-                #n_data /= bias_correction
-=======
                 logger.debug(f"Bias correction factor for scone cut: {1 / bias_correction}")
                 n_data /= bias_correction
->>>>>>> main
                 logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
 
         else:
@@ -1102,42 +1078,41 @@ class sauron_runner():
 
             plt.clf()
             plt.figure(figsize=(8, 6))
-            plt.subplot(2, 1, 1, sharex=True)
+            ax1 = plt.subplot(2, 1, 1)
             plt.tight_layout(pad=3.0)
             logging.debug("Starting dump bar 1")
             logging.debug(f"z counts {self.datasets[f'{survey}_DUMP_IA'].z_counts(self.fit_args_dict['z_bins'][survey])}")
-            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                    self.datasets[f"{survey}_DUMP_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Uncut Simulation IA', histtype = "step", lw = 3)
-            logging.debug("Starting sim bar 1")
-            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                    self.datasets[f"{survey}_SIM_IA"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Simulated Detected IA', histtype = "step", lw = 3)
-            plt.xlabel("Redshift")
-            plt.ylabel("Counts")
-            plt.legend()
 
-            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                    self.datasets[f"{survey}_DUMP_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Uncut Simulation CC', histtype = "step", lw = 3)
-            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                    self.datasets[f"{survey}_SIM_CC"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Simulated Detected CC', histtype = "step", lw = 3)
+
+            bins = np.linspace(np.min(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]),
+                               np.max(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]), 20)
+
+            labels = ["Uncut Simulation CC", "Uncut Simulation IA", "Simulated Detected IA", "Simulated Detected CC"]
+            for i, ds in enumerate([f"{survey}_DUMP_CC", f"{survey}_DUMP_IA", f"{survey}_SIM_IA", f"{survey}_SIM_CC"]):
+                data = self.datasets[ds].df
+                zcol = self.datasets[ds].z_col
+                plt.hist(data[zcol], bins=bins, alpha=1.0, label=labels[i], histtype='step', linewidth=2)
+
             plt.xlabel("Redshift")
             plt.ylabel("Counts")
             plt.yscale("log")
             plt.legend()
             logging.debug("Generating sanity check plots - part 2")
-            plt.subplot(2, 1, 2, sharex=True)
-            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                    self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Uncut Simulation IA+CC', histtype = "step", lw = 3)
-            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                    self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label='Simulated Detected IA+CC', histtype = "step", lw = 3)
-            plt.bar(self.fit_args_dict['z_bins'][survey][:-1],
-                    self.datasets[f"{survey}_DATA_ALL_1"].z_counts(self.fit_args_dict['z_bins'][survey]),
-                    width=np.diff(self.fit_args_dict['z_bins'][survey]), align='edge', alpha=1.0, label=f'{survey} Data', histtype = "step", lw = 3)
+            plt.subplot(2, 1, 2, sharex=ax1)
+
+            bins = np.linspace(np.min(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]),
+                               np.max(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]), 10)
+
+            labels = ["Uncut Simulation IA+CC", "Simulated Detected IA+CC", f"{survey} Data"]
+            for i, ds in enumerate([f"{survey}_DUMP_ALL", f"{survey}_SIM_ALL", f"{survey}_DATA_ALL_1"]):
+                data = self.datasets[ds].df
+                zcol = self.datasets[ds].z_col
+                if "DATA" in ds:
+                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2, color = "black")
+                else:
+                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2)
+
+
             plt.xlabel("Redshift")
             plt.yscale("log")
             plt.ylabel("Counts")
