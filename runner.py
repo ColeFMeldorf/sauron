@@ -39,7 +39,7 @@ func_name_dictionary = {
 }
 
 default_x0_dictionary = {
-    "power_law": (2.27e-5, 1.7),
+    "power_law": (2.3e-5, 1.75),
     "turnover_power_law": (1, 0, 1, -2),
     "dual_power_law": (1, 0, 1, -2)
 }
@@ -176,26 +176,18 @@ class sauron_runner():
 
                 if "DATA" in file:
                     for i, path in enumerate(paths):
-                        cuts = survey_dict.get("CUTS", None)
-                        sntypecol = survey_dict[file].get("SNTYPECOL", None)
+                        cuts = survey_dict.get("CUTS", {}) | survey_dict.get("SUBSET", {})
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(path,
                                                                             sntype, data_name=survey+"_"+file,
-                                                                            zcol=zcol, cuts=cuts,
-                                                                            sntypecol=sntypecol)
+                                                                            survey_dict=survey_dict)
                     n_datasets = len(paths)
                     self.fit_args_dict["n_datasets"][survey] = n_datasets
                     self.fit_args_dict["n_datasets"]["combined"] = 1  # This needs to be fixed later TODO
                     logging.info(f"Found {n_datasets} data sets for {survey}")
 
                 else:
-                    cuts = survey_dict.get("CUTS", None)
-                    true_z_col = survey_dict[file].get("TRUEZCOL", None)
-                    sntypecol = survey_dict[file].get("SNTYPECOL", None)
-                    datasets[survey+"_"+file] = SN_dataset(paths, sntype, data_name=survey+"_"+file, zcol=zcol,
-                                                           cuts=cuts, true_z_col=true_z_col, sntypecol=sntypecol)
-                    #logging.debug(f"z bin counts for {survey}_{file}: "
-                    #              f"{datasets[survey+'_'+file].z_counts(self.fit_args_dict['z_bins'][survey])}")
-                    #logging.debug(f"True z col for {survey}_{file}: {datasets[survey+'_'+file].true_z_col}")
+                    datasets[survey+"_"+file] = SN_dataset(paths, sntype, data_name=survey+"_"+file,
+                                                           survey_dict=survey_dict)
                     logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
 
 
@@ -924,7 +916,7 @@ class sauron_runner():
             "survey": survey_name
             }, index=np.array([0])))
 
-    def apply_cuts(self, survey):
+    def apply_cuts(self, survey, subset_version=False):
         """Apply any cuts specified in the config to the datasets for a given survey.
         The cuts are determined by the CUTS field for each survey in the config file,
         of the form:
@@ -941,6 +933,13 @@ class sauron_runner():
         ------
         survey : str
             Name of the survey.
+        subset_version : bool
+            Sometimes you only want to fit the rate to a portion of a dataset. E.g., the pilot survey for Roman,
+            or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the 
+            DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets, 
+            including DUMP datasets, and the cuts will be fetched from the SUBSET category in the config file
+            instead of the CUTS category. If False, cuts will only be applied to the SIM and DATA datsets only, and
+            the cuts will be fetched from the CUTS category in the config file.
         """
         datasets = self.datasets
         with open(self.args.config, 'r') as config_file:
@@ -949,7 +948,8 @@ class sauron_runner():
 
         # Something to think about: Should cuts be applied to ALL datasets, CC datasets and IA datasets,
         # or just IA datasets? For now, I am applying to all datasets.
-        cuts = files_input.get("CUTS", None)
+        key = "SUBSET" if subset_version else "CUTS"
+        cuts = files_input.get(key, None)
         if cuts is not None:
             for col in list(cuts.keys()):
                 raw_spec = cuts[col]
@@ -977,18 +977,30 @@ class sauron_runner():
                 logging.info(f"Applying cut on {col} for survey {survey}: min={min_val}, max={max_val}")
 
                 # Apply cuts to all datasets
-                if datasets.get(f"{survey}_SIM_ALL") is not None:
-                    logging.debug(f"Applying cuts to {survey}_SIM_ALL")
-                    datasets[f"{survey}_SIM_ALL"].apply_cut(col, min_val, max_val)
+                data_sim_types = ["SIM", "DUMP"] if subset_version else ["SIM"]
+                for data_SN_type in ["ALL", "IA", "CC"]:
+                    for data_type in data_sim_types:
+                        dataset_key = f"{survey}_{data_type}_{data_SN_type}"
+                        if datasets.get(dataset_key) is not None:
+                            logging.debug(f"Applying cuts to {dataset_key}")
+                            datasets[dataset_key].apply_cut(col, min_val, max_val)
+                        else:
+                            logging.debug(f"Dataset {dataset_key} not found, skipping cut application.")
 
-                if datasets.get(f"{survey}_SIM_IA") is not None:
-                    logging.debug(f"Applying cuts to {survey}_SIM_IA")
-                    datasets[f"{survey}_SIM_IA"].apply_cut(col, min_val, max_val)
 
 
-                if datasets.get(f"{survey}_SIM_CC") is not None:
-                    logging.debug(f"Applying cuts to {survey}_SIM_CC")
-                    datasets[f"{survey}_SIM_CC"].apply_cut(col, min_val, max_val)
+                # if datasets.get(f"{survey}_SIM_ALL") is not None:
+                #     logging.debug(f"Applying cuts to {survey}_SIM_ALL")
+                #     datasets[f"{survey}_SIM_ALL"].apply_cut(col, min_val, max_val)
+
+                # if datasets.get(f"{survey}_SIM_IA") is not None:
+                #     logging.debug(f"Applying cuts to {survey}_SIM_IA")
+                #     datasets[f"{survey}_SIM_IA"].apply_cut(col, min_val, max_val)
+
+
+                # if datasets.get(f"{survey}_SIM_CC") is not None:
+                #     logging.debug(f"Applying cuts to {survey}_SIM_CC")
+                #     datasets[f"{survey}_SIM_CC"].apply_cut(col, min_val, max_val)
 
                 for i in range(n_datasets):
                     if datasets.get(f"{survey}_DATA_ALL_{i+1}") is not None:
@@ -1003,4 +1015,5 @@ class sauron_runner():
                         logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
                         logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
+
 
