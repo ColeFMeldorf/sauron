@@ -738,7 +738,8 @@ class sauron_runner():
 
         if len(fit_args_dict['N_gen'][survey]) != len(z_centers):
             num_surveys = len(fit_args_dict['N_gen'][survey]) / len(z_centers)
-            assert (num_surveys % 1 == 0), "N_gen length is not a multiple of z_centers length!"
+            if num_surveys % 1 != 0:
+                raise ValueError("N_gen length is not a multiple of z_centers length!")
             z_centers = np.tile(z_centers, int(num_surveys))
             logging.debug("updated z_centers for chi2 map:", z_centers)
 
@@ -1083,7 +1084,6 @@ class sauron_runner():
             logging.debug("Starting dump bar 1")
             logging.debug(f"z counts {self.datasets[f'{survey}_DUMP_IA'].z_counts(self.fit_args_dict['z_bins'][survey])}")
 
-
             bins = np.linspace(np.min(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]),
                                np.max(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]), 20)
 
@@ -1120,61 +1120,29 @@ class sauron_runner():
             logging.debug(f"Saving sanity check plots to sanity_check_counts_{survey}.png ")
             plt.savefig(f"sanity_check_counts_{survey}.png")
 
-        assert self.datasets[f"{survey}_DUMP_ALL"].total_counts >= self.datasets[f"{survey}_SIM_ALL"].total_counts, \
-            f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset for survey {survey}!"
-        assert all(self.datasets[f'{survey}_DUMP_ALL'].z_counts(self.fit_args_dict['z_bins'][survey]) >=
-                     self.datasets[f'{survey}_SIM_ALL'].z_counts(self.fit_args_dict['z_bins'][survey])), \
-            f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!"
+        if any(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]) < self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey])):
+            raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
+
+        if not all(self.datasets[f'{survey}_DUMP_ALL'].z_counts(self.fit_args_dict['z_bins'][survey]) >=
+                     self.datasets[f'{survey}_SIM_ALL'].z_counts(self.fit_args_dict['z_bins'][survey])):
+            raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
         # No dataset should have zero total counts
         for key in self.datasets.keys():
-            assert self.datasets[key].total_counts > 0, f"Dataset {key} has zero total counts!"
+            if self.datasets[key].total_counts == 0:
+                raise ValueError(f"Dataset {key} has zero total counts, which is likely an error.")
 
-        #The ratio between CC and IA should be reasonable
+        # The ratio between CC and IA should be reasonable
         sim_IA = self.datasets[f"{survey}_SIM_IA"].total_counts
         sim_CC = self.datasets[f"{survey}_SIM_CC"].total_counts
         ratio = sim_CC / sim_IA if sim_IA > 0 else np.inf
-        assert ratio < 5, f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}"
-        assert ratio > 0.2, f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}"
-
+        # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
+        # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
+        # I set very wide bounds for the sanity check here.
+        if ratio > 3 or ratio < 0.5:
+            raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
         dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
         dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
         dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
-        assert dump_ratio < 100, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
-        assert dump_ratio > 0.01, f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}"
-
-        #np.testing.assert_allclose(dump_ratio, ratio, atol=0.2, err_msg=f"CC to IA ratios in SIM and DUMP datasets differ significantly for survey {survey}: SIM ratio = {ratio}, DUMP ratio = {dump_ratio}")
-
-    # def sanity_check_plot(self, survey, index):
-    #     plt.clf()
-    #     plt.subplot(1,2,1)
-
-    #     self.z_bins = self.fit_args_dict['z_bins'][survey]
-
-    #     plt.plot(self.datasets[f"{survey}_DUMP_IA"].z_counts(self.z_bins), label='Uncut simulation IA Counts')
-    #     plt.plot(self.datasets[f"{survey}_DUMP_CC"].z_counts(self.z_bins), label='Uncut simulation CC Counts')
-    #     plt.plot(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.z_bins), label='Uncut simulation All Counts')
-
-    #     plt.plot(self.datasets[f"{survey}_SIM_IA"].z_counts(self.z_bins), label='Simulated IA Counts')
-    #     plt.plot(self.datasets[f"{survey}_SIM_CC"].z_counts(self.z_bins), label='Simulated CC Counts')
-    #     plt.plot(self.datasets[f"{survey}_SIM_ALL"].z_counts(self.z_bins), label='Simulated All Counts')
-    #     # plt.plot(self.datasets[f"{survey}_SIM_IA"].z_counts(self.z_bins, prob_thresh=PROB_THRESH), ls="--",
-    #     #          label='Sim IA Counts Cut')
-    #     # plt.plot(self.datasets[f"{survey}_SIM_CC"].z_counts(self.z_bins, prob_thresh=PROB_THRESH), ls="--" ,
-    #     #          label='Sim CC Counts Cut')
-    #     # plt.plot(self.datasets[f"{survey}_SIM_ALL"].z_counts(self.z_bins, prob_thresh=PROB_THRESH), ls="--",
-    #     #          label='Sim All Counts Cut')
-    #     plt.yscale("log")
-    #     plt.legend()
-
-    #     #bias_cor = self.datasets[f"{survey}_SIM_IA"].z_counts(self.z_bins) / self.datasets[f"{survey}_SIM_ALL"].z_counts(self.z_bins, prob_thresh = 0.5)
-    #     #plt.subplot(1,2,2)
-    #     #plt.plot(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(self.z_bins), label='Data IA Counts')
-    #     #plt.plot(self.datasets[f"{survey}_DATA_CC_{index}"].z_counts(self.z_bins), label='Data CC Counts')
-    #     plt.plot(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(self.z_bins), label='Data All Counts')
-    #    # plt.plot(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(self.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data IA Counts Cut')
-    #    # plt.plot(self.datasets[f"{survey}_DATA_CC_{index}"].z_counts(self.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data CC Counts Cut')
-    #    # plt.plot(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(self.z_bins, prob_thresh = PROB_THRESH)*bias_cor, color = "k", lw= 3,ls = "--", label='Data All Counts Cut w/ BCor')
-    #     plt.yscale("log")
-    #     plt.legend()
-    #     #pulls.extend(list(pull))
-    #     plt.savefig(f"{survey}_dataset_{index}_sanity_check.png")
+        # What should these numbers be? Making them extremely wide for now.
+        if dump_ratio > 100 or dump_ratio < 0.01:
+            raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")

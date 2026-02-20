@@ -705,7 +705,6 @@ def test_cc_decontam_small():
     plt.ylabel('CC Counts')
     plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts_small.png")
 
-
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
 
 
