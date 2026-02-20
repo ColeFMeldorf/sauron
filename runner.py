@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 import pathlib
-from scipy.optimize import leastsq
+
 from scipy.optimize import minimize
 from scipy.sparse import block_diag
 from scipy import stats
@@ -73,12 +73,6 @@ def LaurenNicePlots():
     update_rcParams('axes.prop_cycle', mpl.cycler(color=cycle_colors) )
 
 
-# Configure the basic logging setup
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
-)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -1077,7 +1071,7 @@ class sauron_runner():
             LaurenNicePlots()
             logging.debug("Generating sanity check plots")
 
-            plt.clf()
+
             plt.figure(figsize=(8, 6))
             ax1 = plt.subplot(2, 1, 1)
             plt.tight_layout(pad=3.0)
@@ -1108,7 +1102,7 @@ class sauron_runner():
                 data = self.datasets[ds].df
                 zcol = self.datasets[ds].z_col
                 if "DATA" in ds:
-                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2, color = "black")
+                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2, color="black")
                 else:
                     plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2)
 

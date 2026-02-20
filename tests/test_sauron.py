@@ -707,11 +707,7 @@ def test_cc_decontam_small():
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
 
-
-
 # This test should be added in a different PR.
-
-
 # def test_cc_decontam_new():
 #     config_path = pathlib.Path(__file__).parent / "test_config_50pz.yml"
 #     args = SimpleNamespace()

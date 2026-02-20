@@ -225,4 +225,3 @@ def chi2_to_sigma(chi2_diff, dof):
     sigma = np.sqrt(2) * erfinv(1 - 2 * p_value)
     return sigma
 
-
