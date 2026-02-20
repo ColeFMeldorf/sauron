@@ -29,6 +29,8 @@ def main():
     parser.add_argument("--skip-cuts", action="store_true", help="Skip applying cuts to the data.", default=False)
     parser.add_argument("--prob_thresh", type=float, default=0.5,
                         help="Probability threshold for classifying SNe as Type IA.")
+    parser.add_argument("--sanity-check", action=argparse.BooleanOptionalAction, help="Perform sanity checks"
+                        " that simulations look reasonable.", default=True)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -45,6 +47,8 @@ def main():
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
         runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
+        if args.sanity_check:
+            runner.perform_sanity_checks(survey)
         if not args.skip_cuts:
             runner.apply_cuts(survey)
         runner.calculate_transfer_matrix(survey)
@@ -53,6 +57,7 @@ def main():
         for i in range(n_datasets):
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
+
 
             runner.fit_args_dict["n_data"][survey] = \
                 runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
