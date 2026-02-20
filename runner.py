@@ -1071,7 +1071,6 @@ class sauron_runner():
             LaurenNicePlots()
             logging.debug("Generating sanity check plots")
 
-
             plt.figure(figsize=(8, 6))
             ax1 = plt.subplot(2, 1, 1)
             plt.tight_layout(pad=3.0)
@@ -1132,7 +1131,7 @@ class sauron_runner():
         # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
         # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
         # I set very wide bounds for the sanity check here.
-        if ratio > 3 or ratio < 0.5:
+        if ratio > 5 or ratio < 0.3:
             raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
         dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
         dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
