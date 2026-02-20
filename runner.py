@@ -6,6 +6,8 @@ import logging
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
+import pathlib
+
 from scipy.optimize import minimize
 from scipy.sparse import block_diag
 from scipy import stats
@@ -26,7 +28,54 @@ matplotlib_logger = logging.getLogger('matplotlib')
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
+#logger = logging.getLogger(__name__)
+
+
+from matplotlib import rcParams
+import matplotlib as mpl
+def update_rcParams(key, val):
+    if key in rcParams:
+        rcParams[key] = val
+
+def LaurenNicePlots():
+    update_rcParams('font.size', 10)
+    update_rcParams('font.family', 'serif')
+    update_rcParams('xtick.major.size', 8)
+    update_rcParams('xtick.labelsize', 'large')
+    update_rcParams('xtick.direction', "in")
+    update_rcParams('xtick.minor.visible', True)
+    update_rcParams('xtick.top', True)
+    update_rcParams('ytick.major.size', 8)
+    update_rcParams('ytick.labelsize', 'large')
+    update_rcParams('ytick.direction', "in")
+    update_rcParams('ytick.minor.visible', True)
+    update_rcParams('ytick.right', True)
+    update_rcParams('xtick.minor.size', 4)
+    update_rcParams('ytick.minor.size', 4)
+    update_rcParams('xtick.major.pad', 10)
+    update_rcParams('ytick.major.pad', 10)
+    update_rcParams('legend.numpoints', 1)
+    update_rcParams('mathtext.fontset', 'cm')
+    update_rcParams('mathtext.rm', 'serif')
+    update_rcParams('axes.labelsize', 'x-large')
+    update_rcParams('lines.marker', 'None')
+    update_rcParams('lines.markersize', 1)
+    update_rcParams('lines.markeredgewidth', 1.0)
+    update_rcParams('lines.markeredgecolor', 'auto')
+
+    #cycle_colors = ['navy', 'maroon','darkorange', 'darkorchid', 'darkturquoise', 'darkmagenta', '6FADFA','7D7D7D','black']
+    cycle_colors = ["348ABD", "A60628", "7A68A6", "467821", "D55E00", "CC79A7", "56B4E9", "009E73", "F0E442", "0072B2"]
+    # cycle_colors = ['9F6CE6','FF984A','538050','6FADFA','7D7D7D','black']
+    cycle_markers = ['o','^','*','s','X','d', '1','2', '3']
+    # cycle_colors = ['darkorchid','darkorange','darkturquoise']
+    # cycle_markers = ['o','^','*']
+    #+ mpl.cycler(marker=cycle_markers)
+    update_rcParams('axes.prop_cycle', mpl.cycler(color=cycle_colors) )
+
+
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 # Cosmology parameters updated from Om0=0.3, Ode0=0.7 to Om0=0.315, Ode0=0.685 (Planck-like values)
@@ -675,7 +724,8 @@ class sauron_runner():
 
         if len(fit_args_dict['N_gen'][survey]) != len(z_centers):
             num_surveys = len(fit_args_dict['N_gen'][survey]) / len(z_centers)
-            assert (num_surveys % 1 == 0), "N_gen length is not a multiple of z_centers length!"
+            if num_surveys % 1 != 0:
+                raise ValueError("N_gen length is not a multiple of z_centers length!")
             z_centers = np.tile(z_centers, int(num_surveys))
             logging.debug("updated z_centers for chi2 map:", z_centers)
 
@@ -1004,16 +1054,94 @@ class sauron_runner():
 
                 for i in range(n_datasets):
                     if datasets.get(f"{survey}_DATA_ALL_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_ALL_{i+1}, from {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries")
+                        before = datasets[f"{survey}_DATA_ALL_{i+1}"].total_counts
                         datasets[f"{survey}_DATA_ALL_{i+1}"].apply_cut(col, min_val, max_val)
-                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_ALL_{i+1}'].total_counts} entries remain")
+                        after = datasets[f"{survey}_DATA_ALL_{i+1}"].total_counts
+                        logging.debug(f"Applied cut to {survey}_DATA_ALL_{i+1}: before={before}, after={after} fraction_kept={after/before if before > 0 else 0}")
                     if datasets.get(f"{survey}_DATA_IA_{i+1}") is not None:
-                        logging.debug(f"Applying cuts to {survey}_DATA_IA_{i+1}, from {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries")
+                        before = datasets[f"{survey}_DATA_IA_{i+1}"].total_counts
                         datasets[f"{survey}_DATA_IA_{i+1}"].apply_cut(col, min_val, max_val)
-                        logging.debug(f"After cut, {datasets[f'{survey}_DATA_IA_{i+1}'].total_counts} entries remain")
+                        after = datasets[f"{survey}_DATA_IA_{i+1}"].total_counts
+                        logging.debug(f"Applied cut to {survey}_DATA_IA_{i+1}: before={before}, after={after} fraction_kept={after/before if before > 0 else 0}")
                     if datasets.get(f"{survey}_DATA_CC_{i+1}") is not None:
                         logging.debug(f"Applying cuts to {survey}_DATA_CC_{i+1}, from {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries")
                         datasets[f"{survey}_DATA_CC_{i+1}"].apply_cut(col, min_val, max_val)
                         logging.debug(f"After cut, {datasets[f'{survey}_DATA_CC_{i+1}'].total_counts} entries remain")
 
+    def perform_sanity_checks(self, survey):
+        """Perform sanity checks on the datasets and fit arguments."""
+        logging.debug("Performing sanity checks on datasets")
+        # DUMP should be larger than SIM in all bins
 
+        if self.args.plot:
+            LaurenNicePlots()
+            logging.debug("Generating sanity check plots")
+
+            plt.figure(figsize=(8, 6))
+            ax1 = plt.subplot(2, 1, 1)
+            plt.tight_layout(pad=3.0)
+            logging.debug("Starting dump bar 1")
+            logging.debug(f"z counts {self.datasets[f'{survey}_DUMP_IA'].z_counts(self.fit_args_dict['z_bins'][survey])}")
+
+            bins = np.linspace(np.min(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]),
+                               np.max(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]), 20)
+
+            labels = ["Uncut Simulation CC", "Uncut Simulation IA", "Simulated Detected IA", "Simulated Detected CC"]
+            for i, ds in enumerate([f"{survey}_DUMP_CC", f"{survey}_DUMP_IA", f"{survey}_SIM_IA", f"{survey}_SIM_CC"]):
+                data = self.datasets[ds].df
+                zcol = self.datasets[ds].z_col
+                plt.hist(data[zcol], bins=bins, alpha=1.0, label=labels[i], histtype='step', linewidth=2)
+
+            plt.xlabel("Redshift")
+            plt.ylabel("Counts")
+            plt.yscale("log")
+            plt.legend()
+            logging.debug("Generating sanity check plots - part 2")
+            plt.subplot(2, 1, 2, sharex=ax1)
+
+            bins = np.linspace(np.min(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]),
+                               np.max(self.datasets[f"{survey}_DUMP_ALL"].df[self.datasets[f"{survey}_DUMP_ALL"].z_col]), 10)
+
+            labels = ["Uncut Simulation IA+CC", "Simulated Detected IA+CC", f"{survey} Data"]
+            for i, ds in enumerate([f"{survey}_DUMP_ALL", f"{survey}_SIM_ALL", f"{survey}_DATA_ALL_1"]):
+                data = self.datasets[ds].df
+                zcol = self.datasets[ds].z_col
+                if "DATA" in ds:
+                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2, color="black")
+                else:
+                    plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2)
+
+
+            plt.xlabel("Redshift")
+            plt.yscale("log")
+            plt.ylabel("Counts")
+            plt.legend()
+            logging.debug(f"Saving sanity check plots to sanity_check_counts_{survey}.png ")
+            plt.savefig(f"sanity_check_counts_{survey}.png")
+
+        if any(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]) < self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey])):
+            raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
+
+        if not all(self.datasets[f'{survey}_DUMP_ALL'].z_counts(self.fit_args_dict['z_bins'][survey]) >=
+                     self.datasets[f'{survey}_SIM_ALL'].z_counts(self.fit_args_dict['z_bins'][survey])):
+            raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
+        # No dataset should have zero total counts
+        for key in self.datasets.keys():
+            if self.datasets[key].total_counts == 0:
+                raise ValueError(f"Dataset {key} has zero total counts, which is likely an error.")
+
+        # The ratio between CC and IA should be reasonable
+        sim_IA = self.datasets[f"{survey}_SIM_IA"].total_counts
+        sim_CC = self.datasets[f"{survey}_SIM_CC"].total_counts
+        ratio = sim_CC / sim_IA if sim_IA > 0 else np.inf
+        # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
+        # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
+        # I set very wide bounds for the sanity check here.
+        if ratio > 5 or ratio < 0.3:
+            raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
+        dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
+        dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
+        dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
+        # What should these numbers be? Making them extremely wide for now.
+        if dump_ratio > 100 or dump_ratio < 0.01:
+            raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")
