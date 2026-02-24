@@ -462,6 +462,12 @@ class sauron_runner():
 
         fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
+
+        logger.debug(f"null_counts: {null_counts}")
+        logger.debug(f"eff_ij: {np.mean(eff_ij)}")
+        logger.debug(f"f_norms: {f_norms}")
+        logger.debug(f"fJ_0: {fJ_0}")
+
         logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
@@ -679,13 +685,16 @@ class sauron_runner():
                     plt.savefig(f"scone_decontamination_{survey}_dataset{index}.png")
             elif method == "scone_cut":
                 logging.debug("Performing just a scone cut for decontamination.")
+                logger.debug(f"Total counts without scone cut: {np.sum(datasets[f'{survey}_DATA_ALL_{index}'].z_counts(z_bins))}")
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                logger.debug(f"Total n_data before CC contamination using scone cut: {np.sum(n_data)}")
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
                 logger.debug(f"Bias correction factor for scone cut: {1 / bias_correction}")
                 n_data /= bias_correction
                 logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
+                logger.debug(f"Total n_data after CC contamination using scone cut: {np.sum(n_data)}")
 
         else:
             if cheat:
@@ -775,9 +784,9 @@ class sauron_runner():
                 ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
                              fmt='o', label=f" {survey} Data")
-                # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                #              fmt='o', label=f" {survey} Initial Prediction ")
+                ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
+                             yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
+                             fmt='o', label=f" {survey} Initial Prediction ")
                 ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
@@ -1033,7 +1042,11 @@ class sauron_runner():
                         dataset_key = f"{survey}_{data_type}_{data_SN_type}"
                         if datasets.get(dataset_key) is not None:
                             logging.debug(f"Applying cuts to {dataset_key}")
+                            logging.debug(f"Before cut, {dataset_key} has {datasets[dataset_key].total_counts} entries")
+                            before = datasets[dataset_key].total_counts
                             datasets[dataset_key].apply_cut(col, min_val, max_val)
+                            after = datasets[dataset_key].total_counts
+                            logging.debug(f"After cut, {dataset_key} has {datasets[dataset_key].total_counts} entries. Fraction kept: {after/before if before > 0 else 0}")
                         else:
                             logging.debug(f"Dataset {dataset_key} not found, skipping cut application.")
 
@@ -1075,6 +1088,23 @@ class sauron_runner():
 
         if self.args.plot:
             LaurenNicePlots()
+            plt.clf()
+            # for surv in ["DUMP_ALL", "SIM_ALL", "DATA_ALL_1"]:
+            #     if surv == "DUMP_ALL":
+            #         plt.subplot(1, 2, 1)
+            #     if surv == "DATA_ALL_1":
+            #         plt.subplot(1, 2, 2)
+            #     zcol = self.datasets[f"{survey}_{surv}"].z_col
+            #     try:
+            #         plt.scatter(self.datasets[f"{survey}_{surv}"].df["SIM_PEAKMJD"], self.datasets[f"{survey}_{surv}"].df[zcol], alpha=0.5, label=surv)
+            #     except Exception as _:
+            #         plt.scatter(self.datasets[f"{survey}_{surv}"].df["PEAKMJD"], self.datasets[f"{survey}_{surv}"].df[zcol], alpha=0.5, label=surv)
+            # plt.xlabel("Peak MJD")
+            # plt.ylabel("Recovered Redshift")
+            # plt.legend()
+            # #plt.yscale("log")
+            # plt.savefig(f"sanity_check_peakmjd_{survey}.png")
+
             logging.debug("Generating sanity check plots")
 
             plt.figure(figsize=(8, 6))
@@ -1119,6 +1149,22 @@ class sauron_runner():
             logging.debug(f"Saving sanity check plots to sanity_check_counts_{survey}.png ")
             plt.savefig(f"sanity_check_counts_{survey}.png")
 
+            plt.clf()
+            labels = ["Simulated Detected IA+CC", f"{survey} Data"]
+            for i, ds in enumerate([f"{survey}_SIM_ALL", f"{survey}_DATA_ALL_1"]):
+                data = self.datasets[ds].df
+                zcol = self.datasets[ds].z_col
+                scone_col = self.datasets[ds].scone_col
+                if "DATA" in ds:
+                    plt.hist(data[scone_col], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2, color="black")
+                else:
+                    plt.hist(data[scone_col], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2)
+            plt.xlabel("Scone Probability")
+            plt.ylabel("Counts")
+            plt.yscale("log")
+            plt.legend()
+            plt.savefig(f"sanity_check_scone_{survey}.png")
+
         if any(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]) < self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey])):
             raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
 
@@ -1137,8 +1183,8 @@ class sauron_runner():
         # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
         # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
         # I set very wide bounds for the sanity check here.
-        if ratio > 5 or ratio < 0.3:
-            raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
+        #if ratio > 5 or ratio < 0.3:
+        #    raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
         dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
         dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
         dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf

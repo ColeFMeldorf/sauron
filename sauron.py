@@ -46,8 +46,8 @@ def main():
 
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
-        runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
         runner.apply_cuts(survey, subset_version=True) # This takes a subset of the data if asked for.
+        runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
         if args.sanity_check:
             runner.perform_sanity_checks(survey)
         if not args.skip_cuts:

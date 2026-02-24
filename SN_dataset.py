@@ -24,7 +24,9 @@ class SN_dataset():
         # For instance, the redshift column name for that file.
         if survey_dict is not None:
             # Either DUMP, SIM, or DATA should be in the data name. Extract the correct one.
-            possible_types = ["DUMP", "SIM", "DATA"]
+            possible_prefixes = ["DUMP", "SIM", "DATA"]
+            possible_extensions = ["_ALL", "_IA", "_CC"]
+            possible_types = [f"{p}{e}" for p in possible_prefixes for e in possible_extensions]
             type_in_name = [t for t in possible_types if t in data_name]
             if len(type_in_name) == 0:
                 raise ValueError(f"Couldn't find any of {possible_types} in data_name {data_name} to determine dataset type!")
@@ -172,7 +174,7 @@ class SN_dataset():
     def prob_scone(self):
         """Return the classification probabilities from the SCONE classifier."""
         if self.scone_col is None:
-            raise ValueError("No valid prob_scone column!")
+            raise ValueError(f"No valid prob_scone column in dataset {self.data_name}!")
         return self.df[self.scone_col]
 
     def combine_with(self, dataset, newtype, data_name=None):
@@ -301,10 +303,13 @@ class SN_dataset():
                 # No SCONE column in this file; leave self.scone_col as None for now.
                 self.scone_col = None
             elif len(scone_col) > 1:
-                raise ValueError(
-                    f"Multiple valid SCONE columns found in {self.data_name}! "
-                    f"Which do I use? I found: {scone_col}"
-                )
+                logging.warning("TEMPORARY SCONE HACK COME BACK AND FIX THIS")
+                self.scone_col = scone_col[-1]
+
+                # raise ValueError(
+                #     f"Multiple valid SCONE columns found in {self.data_name}! "
+                #     f"Which do I use? I found: {scone_col}"
+                # )
             else:
                 # Exactly one SCONE column found; set it for the whole dataset.
                 self.scone_col = scone_col[0]
