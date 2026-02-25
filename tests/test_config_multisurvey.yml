@@ -1,6 +1,8 @@
 # Structure: outermost layer is survey (e.g., DES, LSST, ROMAN, etc.) Inner layer indicates data file type (e.g., DUMP, SIM, DATA).
 # The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
 
+FIT_OPTIONS:
+  RATE_FUNCTION: power_law
 
 DES:
   FIT_OPTIONS:

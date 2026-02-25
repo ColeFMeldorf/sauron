@@ -8,6 +8,7 @@ from scipy.stats import binned_statistic as binstat
 from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
+from scipy.integrate import quad
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,52 @@ def turnover_power_law(z, x):
                   alpha1 * (1 + z)**beta1,
                   alpha2 * (1 + z)**beta2)
     return fJ
+
+def turnover_power_law_forced_cty(z, x):
+    alpha1, beta1, beta2 = x
+    z_turn = 1
+    alpha2 = alpha1 * (1 + z_turn)**(beta1 - beta2) # Ensure continuity at z_turn
+    fJ = np.where(z < z_turn,
+                  alpha1 * (1 + z)**beta1,
+                  alpha2 * (1 + z)**beta2)
+    return fJ
+
+import astropy.cosmology as cosmo
+cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
+
+
+def cosmic_SFR(z,a,b,c,d):
+    H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
+    return (a + b * z) / (1 + (z / c)**d) * H0 / 100
+
+def cosmic_SFR_dt_dz(z, a, b, c, d):
+    H0 = cosmology.H0  # in km/s/Mpc
+    Om0 = cosmology.Om0
+    Ode0 = cosmology.Ode0
+    dt_dz = 1 / H0 / (1 + z) / np.sqrt(Ode0 + Om0 * (1 + z)**3)  # in Gyr per unit redshift
+    dt_dz = dt_dz.to("yr").value  # convert to years
+
+    return cosmic_SFR(z, a, b, c, d) * dt_dz
+
+
+def cosmic_SFR_integrated(z, a, b, c, d):
+    return quad(cosmic_SFR_dt_dz, 0, z, args=(a, b, c, d))[0]
+
+
+def AplusB_cosmicSFH(z, x):
+    """ A + B model with cosmic star formation history """
+    # Currently using values from Dilday 2008 but should be updated.
+    a = 0.0118
+    b = 0.08
+    c = 3.3
+    d = 5.2
+
+    A,B = x
+
+    rho_dot_evaluated = cosmic_SFR(z, a, b, c, d)
+    vec_rho_integrated = np.vectorize(cosmic_SFR_integrated)
+    rho_integrated_evaluated = vec_rho_integrated(z, a, b, c, d)
+    return A * rho_integrated_evaluated + B * rho_dot_evaluated
 
 
 def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None, rate_params=None,
