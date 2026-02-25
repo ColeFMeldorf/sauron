@@ -89,7 +89,7 @@ func_name_dictionary = {
 
 default_x0_dictionary = {
     "power_law": (2.3e-5, 1.75),
-    "turnover_power_law": (1, 0, 1, -2),
+    "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2)
 }
 
@@ -380,16 +380,21 @@ class sauron_runner():
 
         if self.args.debug:
             plt.clf()
-            plt.imshow(eff_ij, origin='lower', aspect='auto',
+            print(eff_ij.shape)
+            logging.debug(f"eff_ij: {eff_ij.shape}")
+            plt.imshow(eff_ij[1:-1, :], origin='lower', aspect='auto',
                        extent=[z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]],
-                       vmin=0, vmax=1)
+                       vmin=0, vmax=np.max(eff_ij))
             plt.colorbar(label="Efficiency")
             plt.title(f"Transfer Matrix for {survey}")
             plt.xlabel("Reconstructed Redshift")
             plt.ylabel("True Redshift")
             plt.savefig(f"transfer_matrix_{survey}.png")
 
+
+
         return eff_ij
+
 
     def fit_rate(self, survey):
         """Actually fit the rate parameters for a given survey.
@@ -460,7 +465,7 @@ class sauron_runner():
 
         logging.debug(f"x0: {self.x0}")
 
-        fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
+        fJ_0 = self.rate_function(z_centers, self.x0)
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
 
         logger.debug(f"null_counts: {null_counts}")
@@ -695,6 +700,22 @@ class sauron_runner():
                 n_data /= bias_correction
                 logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
                 logger.debug(f"Total n_data after CC contamination using scone cut: {np.sum(n_data)}")
+                if debug:
+                    plt.clf()
+                    data_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+                    plt.plot(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, PROB_THRESH)/data_norm, label="DATA ALL counts using JUST scone cut")
+                    plt.plot(n_data/data_norm, label="DATA ALL counts after scone cut decontamination")
+                    n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+                    plt.plot(n_all/data_norm, label="DATA counts before CC contamination")
+                    plt.axhline(0, color='k', linestyle='--', lw=1)
+                    n_sim = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)
+                    n_sim_scone_cut = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                    sim_norm = np.sum(n_sim)
+                    plt.plot(n_sim/sim_norm, label="SIM ALL counts before scone cut")
+                    plt.plot(n_sim_scone_cut/sim_norm, label="SIM ALL counts after scone cut")
+                    logging.debug(f"Calculated n_data after scone cut decontamination: {n_data}")
+                    plt.legend()
+                    plt.savefig(f"scone_cut_decontamination_{survey}_dataset{index}.png")
 
         else:
             if cheat:
@@ -770,6 +791,7 @@ class sauron_runner():
         fig, ax = plt.subplots(2, sides, figsize=(12, 6))
         ax = ax.flatten()
         surveys = list(surveys)
+        LaurenNicePlots()
         #if "combined" in surveys:
         #    surveys.remove("combined")
         for i, survey in enumerate(surveys):
@@ -780,13 +802,13 @@ class sauron_runner():
 
                 ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
                              yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                             label=f" {survey} Sauron Prediction ")
+                             label=f" {survey} Sauron Prediction ", ms=5)
                 ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
-                             fmt='o', label=f" {survey} Data")
+                             fmt='o', label=f" {survey} Data", ms=5)
                 ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                             fmt='o', label=f" {survey} Initial Prediction ")
+                             fmt='o', label=f" {survey} Initial Prediction ", ms=5)
                 ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
@@ -800,31 +822,32 @@ class sauron_runner():
             ax2 = ax[i+1]
             extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
                           df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
-            logger.debug(extent_chi)
-            chi2_map = self.generate_chi2_map(s, extent=extent_chi)
-            # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-            chi2_map -= np.min(chi2_map)
-            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
+            if self.rate_function == power_law:
+                logger.debug(extent_chi)
+                chi2_map = self.generate_chi2_map(s, extent=extent_chi)
+                # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
+                chi2_map -= np.min(chi2_map)
+                logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
 
-            #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-            sigma_map = chi2_map
+                #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
+                sigma_map = chi2_map
 
-            im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
-            #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-            # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-            ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
-            plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
-            #ax2.axhline(2.27e-5, color='black', linestyle='--')
-            #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-            ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
-                         color='white', ms=10, label=f"Fit results {survey}")
-            ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
-            ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
-            ax2.set_xlabel("beta")
-            ax2.set_ylabel("alpha")
-            ax2.set_xlim(extent_chi[0], extent_chi[1])
-            ax2.set_ylim(extent_chi[2], extent_chi[3])
-            ax2.legend()
+                im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
+                #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
+                # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
+                plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
+                #ax2.axhline(2.27e-5, color='black', linestyle='--')
+                #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
+                ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
+                            color='white', ms=10, label=f"Fit results {survey}")
+                ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
+                ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
+                ax2.set_xlabel("beta")
+                ax2.set_ylabel("alpha")
+                ax2.set_xlim(extent_chi[0], extent_chi[1])
+                ax2.set_ylim(extent_chi[2], extent_chi[3])
+                ax2.legend()
 
         fig.savefig("summary_plot.png")
 
@@ -1150,6 +1173,7 @@ class sauron_runner():
             plt.savefig(f"sanity_check_counts_{survey}.png")
 
             plt.clf()
+            bins = np.linspace(0, 1, 20)
             labels = ["Simulated Detected IA+CC", f"{survey} Data"]
             for i, ds in enumerate([f"{survey}_SIM_ALL", f"{survey}_DATA_ALL_1"]):
                 data = self.datasets[ds].df

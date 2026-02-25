@@ -118,6 +118,10 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
 
     # Method 1, stupid method, divide N_gen by true rate.
     if all(v is not None for v in [N_gen, true_rate_function, rate_params]):
+        from matplotlib import pyplot as plt
+        plt.clf()
+        plt.plot(N_gen, label = "N_gen")
+        plt.savefig("N_gen.png")
         fJ = true_rate_function(z_centers, rate_params)
         total_counts = N_gen / fJ
         return total_counts
