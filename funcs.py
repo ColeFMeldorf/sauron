@@ -104,7 +104,7 @@ def power_law(z, x):
     return alpha * (1 + z)**beta
 
 
-def turnover_power_law(z, x):
+def turnover_power_law_forced_cty(z, x):
     alpha1, beta1, beta2 = x
     z_turn = 1
     alpha2 = alpha1 * (1 + z_turn)**(beta1 - beta2) # Ensure continuity at z_turn
