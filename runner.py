@@ -89,16 +89,15 @@ func_name_dictionary = {
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7),
-    "turnover_power_law": (2.27e-5, 1.7, -1),
+    "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
     "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
-    #"AplusB_cosmicSFH": (1.2e-14, 8.1e-4)
 }
 
 default_parameter_name_dictionary = {
     "power_law": ["alpha", "beta"],
     "AplusB_cosmicSFH": ["A", "B"],
-    "turnover_power_law": ["alpha", "beta1", "beta2"]}
+    "turnover_power_law": ["alpha", "beta1", "alpha2", "beta2"]}
 
 default_bounds_dictionary = {
     "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
@@ -127,12 +126,10 @@ class sauron_runner():
 
     def parse_global_fit_options(self):
         """ Parse global fit options (I.e. those that apply to all surveys) from the config file."""
-        # with open(self.args.config, 'r') as f:
-        #     logging.debug(f"Reading {f.name}")
-        #     files_input = yaml.safe_load(f)
+        with open(self.args.config, 'r') as f:
+            logging.debug(f"Reading {f.name}")
+            files_input = yaml.safe_load(f)
 
-        files_input = yaml.safe_load(open(self.args.config, 'r'))
-        logging.debug(f"Full config file contents: {files_input}")
         fit_options = files_input.get("FIT_OPTIONS", {})
         logging.debug(f"Global fit options: {fit_options}")
         self.rate_function_name = fit_options.get("RATE_FUNCTION")
@@ -144,10 +141,8 @@ class sauron_runner():
         self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
 
         logging.debug(f"Using rate function: {self.rate_function}")
-        if self.rate_function is None:
-            logging.warning("No valid RATE_FUNCTION specified in FIT_OPTIONS. Defaulting to power_law.")
-            self.rate_function = power_law
         self.x0 = default_x0_dictionary.get(fit_options.get("RATE_FUNCTION"), (2.27e-5, 1.7))
+        # The above should probably be changed.
 
         if "X0" in fit_options:
             self.x0 = fit_options["X0"]
@@ -502,7 +497,6 @@ class sauron_runner():
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
-
         if fit_method == "leastsq":
 
             fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
@@ -607,9 +601,9 @@ class sauron_runner():
         logging.debug(f"Predicted Counts Ei: {Ei}")
 
         # Estimate errors on Ei
-        alpha_draws = np.random.normal(fit_params[0], np.sqrt(cov_x[0, 0]), size=1000)
-        beta_draws = np.random.normal(fit_params[1], np.sqrt(cov_x[1, 1]), size=1000)
-        fJ_draws = alpha_draws * (1 + z_centers)[:, np.newaxis]**beta_draws
+
+        samples = np.random.multivariate_normal(fit_params, cov_x, 1000)
+        fJ_draws = np.array([self.rate_function(z_centers, sample) for sample in samples]).T
         N_gen = N_gen[:, np.newaxis]  # for broadcasting
         eff_ij = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
         f_norms = np.atleast_1d(f_norms)
@@ -876,11 +870,14 @@ class sauron_runner():
             else:
                 df = self.results[s]
 
-
             # Need to update these names still.
             ax2 = ax[i+1]
-            extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
-                          df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
+            param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+            p_name_0 = param_names[0]
+            p_name_1 = param_names[1]
+
+            extent_chi = [df[f"{p_name_1}"][0] - 3 * df[f"{p_name_1}_error"][0], df[f"{p_name_1}"][0] + 3 * df[f"{p_name_1}_error"][0],
+                          df[f"{p_name_0}"][0] - 3 * df[f"{p_name_0}_error"][0], df[f"{p_name_0}"][0] + 3 * df[f"{p_name_0}_error"][0]]
             logger.debug(extent_chi)
             chi2_map = self.generate_chi2_map(s, extent=extent_chi)
             # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
