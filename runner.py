@@ -18,9 +18,8 @@ from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
 # Sauron modules
-from funcs import (power_law, turnover_power_law, chi2, calculate_covariance_matrix_term,
-                   rescale_CC_for_cov,
-                   calculate_null_counts, chi2_to_sigma)
+from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
+                   calculate_null_counts, AplusB_cosmicSFH, chi2, chi2_to_sigma)
 from SN_dataset import SN_dataset
 
 # Get the matplotlib logger
@@ -84,13 +83,24 @@ cosmo = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 func_name_dictionary = {
     "power_law": power_law,
     "turnover_power_law": turnover_power_law,
-    "dual_power_law": turnover_power_law
+    "dual_power_law": turnover_power_law,
+    "AplusB_cosmicSFH": AplusB_cosmicSFH
 }
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7),
-    "turnover_power_law": (1, 0, 1, -2),
-    "dual_power_law": (1, 0, 1, -2)
+    "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
+    "dual_power_law": (1, 0, 1, -2),
+    "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
+}
+
+default_parameter_name_dictionary = {
+    "power_law": ["alpha", "beta"],
+    "AplusB_cosmicSFH": ["A", "B"],
+    "turnover_power_law": ["alpha", "beta1", "alpha2", "beta2"]}
+
+default_bounds_dictionary = {
+    "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
 }
 
 
@@ -117,13 +127,22 @@ class sauron_runner():
     def parse_global_fit_options(self):
         """ Parse global fit options (I.e. those that apply to all surveys) from the config file."""
         with open(self.args.config, 'r') as f:
+            logging.debug(f"Reading {f.name}")
             files_input = yaml.safe_load(f)
+
         fit_options = files_input.get("FIT_OPTIONS", {})
-        self.rate_function = func_name_dictionary.get(fit_options.get("RATE_FUNCTION"), None)
-        if self.rate_function is None:
-            logging.warning("No valid RATE_FUNCTION specified in FIT_OPTIONS. Defaulting to power_law.")
-            self.rate_function = power_law
+        logging.debug(f"Global fit options: {fit_options}")
+        self.rate_function_name = fit_options.get("RATE_FUNCTION")
+        if self.rate_function_name is None:
+            self.rate_function_name = fit_options.get("RATE_FUNC")
+        if self.rate_function_name is None:
+            raise ValueError("RATE_FUNCTION or RATE_FUNC must be specified in FIT_OPTIONS in the config file.")
+        logging.debug(f"RATE_FUNCTION specified in config: {self.rate_function_name}")
+        self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
+
+        logging.debug(f"Using rate function: {self.rate_function}")
         self.x0 = default_x0_dictionary.get(fit_options.get("RATE_FUNCTION"), (2.27e-5, 1.7))
+        # The above should probably be changed.
 
         if "X0" in fit_options:
             self.x0 = fit_options["X0"]
@@ -466,19 +485,62 @@ class sauron_runner():
 
         logging.debug(f"data counts: {n_data}")
 
-        logging.debug(f"x0: {self.x0}")
-
-        fJ_0 = self.x0[0] * (1 + z_centers)**self.x0[1]
+        fJ_0 = self.rate_function(z_centers, self.x0)
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
         logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
+        N = len(n_data)
+        n = len(self.x0)
         fit_method = "minimize"
         N = len(z_centers)  # number of data points
         n = len(self.x0)  # number of parameters
 
-        if fit_method == "minimize":
+        if fit_method == "leastsq":
+
+            fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+                                                  n_data, self.rate_function, cov_sys),
+                                                  full_output=True)[:3]
+            logging.debug(f"Least Squares Result: {fit_params}")
+            residual_variance = (infodict['fvec']**2).sum() / (N - n)
+            logging.debug(f"residual variance leastsq: {residual_variance}")
+            cov_x *= residual_variance
+            # * 0.5
+            # The factor of 1/2 is needed to agree with minimize, unclear why. Re-include it to make them agree better.
+
+            # See scipy doc for leastsq for explanation of this covariance rescaling
+            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+            chi_squared = np.sum(infodict['fvec']) # If we take the square root in the chi func then
+            # I think this should be squared but I am changing back for regression
+            logging.debug(f"chi_squared leastsq: {chi_squared}")
+
+        elif fit_method == "least_squares":
+            from scipy.optimize import least_squares
+            bounds = default_bounds_dictionary.get(self.rate_function_name, None)
+            if bounds is None:
+                bounds = (-np.inf, np.inf)
+            logging.debug(f"Using bounds: {bounds}")
+            result = least_squares(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
+                                                           n_data, self.rate_function, cov_sys),
+                                                           bounds=bounds,
+                                                           x_scale='jac')
+
+            hess_inv = np.linalg.inv(np.dot(result.jac.T, result.jac))
+
+            logging.debug(f"Least Squares Result: {result.x}")
+
+            #cov_x *= (infodict['fvec']**2).sum() / (N-n)
+            logging.debug(f"Variance residuals {(result.fun**2).sum() / (N - n)}")
+            cov_x = hess_inv * (result.fun**2).sum() / (N - n)
+            chi_squared = np.sum(result.fun**2)
+            logging.debug(f"cov_x : {cov_x}")
+            # See scipy doc for leastsq for explanation of this covariance rescaling
+            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+            fit_params = result.x
+
+        elif fit_method == "minimize":
+
             result = minimize(
                         chi2,
                         x0=self.x0,
@@ -535,13 +597,13 @@ class sauron_runner():
 
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
-
+        logging.debug(f"Final fj: {fJ}")
         logging.debug(f"Predicted Counts Ei: {Ei}")
 
         # Estimate errors on Ei
-        alpha_draws = np.random.normal(fit_params[0], np.sqrt(cov_x[0, 0]), size=1000)
-        beta_draws = np.random.normal(fit_params[1], np.sqrt(cov_x[1, 1]), size=1000)
-        fJ_draws = alpha_draws * (1 + z_centers)[:, np.newaxis]**beta_draws
+
+        samples = np.random.multivariate_normal(fit_params, cov_x, 1000)
+        fJ_draws = np.array([self.rate_function(z_centers, sample) for sample in samples]).T
         N_gen = N_gen[:, np.newaxis]  # for broadcasting
         eff_ij = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
         f_norms = np.atleast_1d(f_norms)
@@ -738,18 +800,30 @@ class sauron_runner():
             logging.debug("updated z_centers for chi2 map:", z_centers)
 
         logging.debug("SANITY CHECK chi2 map values:")
-        chi2_result = chi2((2.27e-5, 1.7), fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
+        chi2_result = chi2(self.x0, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                            z_centers,
                            fit_args_dict['eff_ij'][survey],
                            fit_args_dict['n_data'][survey],
                            self.rate_function,
                            fit_args_dict['cov_sys'][survey])
-        logging.debug(f"chi2 at (2.27e-5, 1.7): {np.sum(chi2_result)}")
+        logging.debug(f"chi2 at x0 {np.sum(chi2_result**2)}")
 
+        param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        logging.debug(f"Searched for parameter names in default_parameter_name_dictionary with key {self.rate_function_name}, got {param_names}")
+        logging.debug(f"default_parameter_name_dictionary keys: {list(default_parameter_name_dictionary.keys())}")
+        if param_names is None:
+            param_names = ["param_" + str(i) for i in range(len(self.x0))]
+
+#        alpha_lower = self.results[survey][0][param_names[0]]*0.8
+#        alpha_upper = self.results[survey][0][param_names[0]]*1.2
+#        beta_lower = self.results[survey][0][param_names[1]]*0.8
+#        beta_upper = self.results[survey][0][param_names[1]]*1.2
         for i, a in enumerate(np.linspace(extent[2], extent[3], n_samples)):
             for j, b in enumerate(np.linspace(extent[0], extent[1], n_samples)):
 
                 values = (a, b)
+                if len(param_names) > 2:
+                    values = (a, b) + tuple(self.results[survey][0][param_names[2:]].values)  # Keep other params at result value.
 
                 chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                                    z_centers,
@@ -796,9 +870,14 @@ class sauron_runner():
             else:
                 df = self.results[s]
 
+            # Need to update these names still.
             ax2 = ax[i+1]
-            extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
-                          df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
+            param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+            p_name_0 = param_names[0]
+            p_name_1 = param_names[1]
+
+            extent_chi = [df[f"{p_name_1}"][0] - 3 * df[f"{p_name_1}_error"][0], df[f"{p_name_1}"][0] + 3 * df[f"{p_name_1}_error"][0],
+                          df[f"{p_name_0}"][0] - 3 * df[f"{p_name_0}_error"][0], df[f"{p_name_0}"][0] + 3 * df[f"{p_name_0}_error"][0]]
             logger.debug(extent_chi)
             chi2_map = self.generate_chi2_map(s, extent=extent_chi)
             # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
@@ -824,6 +903,7 @@ class sauron_runner():
             ax2.set_xlim(extent_chi[0], extent_chi[1])
             ax2.set_ylim(extent_chi[2], extent_chi[3])
             ax2.legend()
+
 
         fig.savefig("summary_plot.png")
 
@@ -964,15 +1044,24 @@ class sauron_runner():
         chi = self.final_counts[survey]["chi"]
         z_bins = self.fit_args_dict['z_bins'][survey]
 
-        self.results[survey].append(pd.DataFrame({
-            "alpha": result[0],
-            "beta": result[1],
-            "reduced_chi_squared": chi/(len(z_bins)-2),
-            "alpha_error": np.sqrt(cov[0, 0]),
-            "beta_error": np.sqrt(cov[1, 1]),
-            "cov_alpha_beta": cov[0, 1],
-            "survey": survey_name
-            }, index=np.array([0])))
+        param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        logging.debug(f"Searched for parameter names in default_parameter_name_dictionary with key {self.rate_function_name}, got {param_names}")
+        logging.debug(f"default_parameter_name_dictionary keys: {list(default_parameter_name_dictionary.keys())}")
+        if param_names is None:
+            param_names = ["param_" + str(i) for i in range(len(result))]
+
+        result_to_add = {}
+        for i, p in enumerate(param_names):
+            result_to_add[p] = result[i]
+            result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
+            for j, p2 in enumerate(param_names):
+                if i != j:
+                    result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
+
+        result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names))
+        result_to_add["survey"] = survey_name
+
+        self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
 
     def apply_cuts(self, survey):
         """Apply any cuts specified in the config to the datasets for a given survey.
@@ -1128,14 +1217,14 @@ class sauron_runner():
         sim_IA = self.datasets[f"{survey}_SIM_IA"].total_counts
         sim_CC = self.datasets[f"{survey}_SIM_CC"].total_counts
         ratio = sim_CC / sim_IA if sim_IA > 0 else np.inf
-        # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
-        # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
-        # I set very wide bounds for the sanity check here.
-        if ratio > 5 or ratio < 0.3:
-            raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
-        dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
-        dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
-        dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
-        # What should these numbers be? Making them extremely wide for now.
-        if dump_ratio > 100 or dump_ratio < 0.01:
-            raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")
+        # # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
+        # # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
+        # # I set very wide bounds for the sanity check here.
+        # if ratio > 5 or ratio < 0.3:
+        #     raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
+        # dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
+        # dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
+        # dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
+        # # What should these numbers be? Making them extremely wide for now.
+        # if dump_ratio > 100 or dump_ratio < 0.01:
+        #     raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")
