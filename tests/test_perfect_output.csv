@@ -1,2 +1,2 @@
-param_0,param_0_error,cov_param_0_param_1,param_1,param_1_error,cov_param_1_param_0,chi_squared,survey
-2.27e-05,7.37576995680139e-15,0.0,1.7,7.37576995680139e-15,0.0,-2.0,DES
+alpha,alpha_error,cov_alpha_beta,beta,beta_error,cov_beta_alpha,reduced_chi_squared,survey
+2.27e-05,7.37576995680139e-15,0.0,1.7,7.37576995680139e-15,0.0,4.83573177383591e-29,DES

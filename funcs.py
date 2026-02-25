@@ -104,6 +104,14 @@ def power_law(z, x):
     return alpha * (1 + z)**beta
 
 
+def turnover_power_law(z, x):
+    alpha1, beta1, alpha2, beta2 = x
+    z_turn = 1
+    fJ = np.where(z < z_turn,
+                  alpha1 * (1 + z)**beta1,
+                  alpha2 * (1 + z)**beta2)
+    return fJ
+
 def turnover_power_law_forced_cty(z, x):
     alpha1, beta1, beta2 = x
     z_turn = 1
@@ -113,7 +121,6 @@ def turnover_power_law_forced_cty(z, x):
                   alpha2 * (1 + z)**beta2)
     return fJ
 
-
 import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
@@ -121,7 +128,6 @@ cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 def cosmic_SFR(z,a,b,c,d):
     H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
     return (a + b * z) / (1 + (z / c)**d) * H0 / 100
-
 
 def cosmic_SFR_dt_dz(z, a, b, c, d):
     H0 = cosmology.H0  # in km/s/Mpc

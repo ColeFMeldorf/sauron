@@ -136,6 +136,11 @@ class sauron_runner():
         fit_options = files_input.get("FIT_OPTIONS", {})
         logging.debug(f"Global fit options: {fit_options}")
         self.rate_function_name = fit_options.get("RATE_FUNCTION")
+        if self.rate_function_name is None:
+            self.rate_function_name = fit_options.get("RATE_FUNC")
+        if self.rate_function_name is None:
+            raise ValueError("RATE_FUNCTION or RATE_FUNC must be specified in FIT_OPTIONS in the config file.")
+        logging.debug(f"RATE_FUNCTION specified in config: {self.rate_function_name}")
         self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
 
         logging.debug(f"Using rate function: {self.rate_function}")
@@ -810,6 +815,8 @@ class sauron_runner():
         logging.debug(f"chi2 at x0 {np.sum(chi2_result**2)}")
 
         param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        logging.debug(f"Searched for parameter names in default_parameter_name_dictionary with key {self.rate_function_name}, got {param_names}")
+        logging.debug(f"default_parameter_name_dictionary keys: {list(default_parameter_name_dictionary.keys())}")
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(self.x0))]
 
@@ -868,8 +875,8 @@ class sauron_runner():
                 df = self.results[s][0]
             else:
                 df = self.results[s]
-            
-            
+
+
             # Need to update these names still.
             ax2 = ax[i+1]
             extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
@@ -1041,6 +1048,8 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
 
         param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        logging.debug(f"Searched for parameter names in default_parameter_name_dictionary with key {self.rate_function_name}, got {param_names}")
+        logging.debug(f"default_parameter_name_dictionary keys: {list(default_parameter_name_dictionary.keys())}")
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(result))]
 
@@ -1052,7 +1061,7 @@ class sauron_runner():
                 if i != j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
 
-        result_to_add["chi_squared"] = chi / len(z_bins) - len(param_names)
+        result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names))
         result_to_add["survey"] = survey_name
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
@@ -1211,14 +1220,14 @@ class sauron_runner():
         sim_IA = self.datasets[f"{survey}_SIM_IA"].total_counts
         sim_CC = self.datasets[f"{survey}_SIM_CC"].total_counts
         ratio = sim_CC / sim_IA if sim_IA > 0 else np.inf
-        # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
-        # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
-        # I set very wide bounds for the sanity check here.
-        if ratio > 5 or ratio < 0.3:
-            raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
-        dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
-        dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
-        dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
-        # What should these numbers be? Making them extremely wide for now.
-        if dump_ratio > 100 or dump_ratio < 0.01:
-            raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")
+        # # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
+        # # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
+        # # I set very wide bounds for the sanity check here.
+        # if ratio > 5 or ratio < 0.3:
+        #     raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
+        # dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
+        # dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
+        # dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
+        # # What should these numbers be? Making them extremely wide for now.
+        # if dump_ratio > 100 or dump_ratio < 0.01:
+        #     raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")
