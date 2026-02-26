@@ -105,7 +105,10 @@ def power_law(z, x):
 
 
 def turnover_power_law(z, x):
-    alpha1, beta1, alpha2, beta2 = x
+    try:
+        alpha1, beta1, alpha2, beta2 = x
+    except ValueError:
+        raise ValueError("Expected 4 parameters for turnover_power_law: alpha1, beta1, alpha2, beta2, got {}".format(x))
     z_turn = 1
     fJ = np.where(z < z_turn,
                   alpha1 * (1 + z)**beta1,

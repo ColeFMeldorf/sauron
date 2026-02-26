@@ -141,13 +141,14 @@ class sauron_runner():
         self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
 
         logging.debug(f"Using rate function: {self.rate_function}")
-        self.x0 = default_x0_dictionary.get(fit_options.get("RATE_FUNCTION"), (2.27e-5, 1.7))
-        # The above should probably be changed.
-
-        if "X0" in fit_options:
-            self.x0 = fit_options["X0"]
+        potential_x0 = fit_options.get("X0", None)
+        if potential_x0 is None:
+            logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess for {self.rate_function_name}: {default_x0_dictionary.get(fit_options.get('RATE_FUNCTION'), (2.27e-5, 1.7))}")
+            self.x0 = default_x0_dictionary.get(fit_options.get("RATE_FUNCTION"), (2.27e-5, 1.7))
+             # The above should probably be changed.
         else:
-            logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess {self.x0}.")
+            self.x0 = [float(i) for i in potential_x0.split(",")]
+
 
     def parse_survey_fit_options(self, args_dict, survey):
         """ Parse survey-specific fit options from the config file.
@@ -845,7 +846,7 @@ class sauron_runner():
 
                 values = (a, b)
                 if len(param_names) > 2:
-                    values = (a, b) + tuple(self.results[survey][0][param_names[2:]].values)  # Keep other params at result value.
+                    values = (a, b) + tuple(self.results[survey][0][param_names[2:]].values[0])  # Keep other params at result value.
 
                 chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                                    z_centers,
@@ -910,22 +911,24 @@ class sauron_runner():
             #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
             sigma_map = chi2_map
 
-            im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
-            #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-            # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-            ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
-            plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
-            #ax2.axhline(2.27e-5, color='black', linestyle='--')
-            #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-            ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
-                         color='white', ms=10, label=f"Fit results {survey}")
-            ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
-            ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
-            ax2.set_xlabel("beta")
-            ax2.set_ylabel("alpha")
-            ax2.set_xlim(extent_chi[0], extent_chi[1])
-            ax2.set_ylim(extent_chi[2], extent_chi[3])
-            ax2.legend()
+            if False:
+
+                im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
+                #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
+                # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
+                plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
+                #ax2.axhline(2.27e-5, color='black', linestyle='--')
+                #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
+                ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
+                                color='white', ms=10, label=f"Fit results {survey}")
+                ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
+                ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
+                ax2.set_xlabel("beta")
+                ax2.set_ylabel("alpha")
+                ax2.set_xlim(extent_chi[0], extent_chi[1])
+                ax2.set_ylim(extent_chi[2], extent_chi[3])
+                ax2.legend()
 
 
         fig.savefig("summary_plot.png")
@@ -1078,7 +1081,7 @@ class sauron_runner():
             result_to_add[p] = result[i]
             result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
             for j, p2 in enumerate(param_names):
-                if i != j:
+                if i < j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
 
         result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names))
