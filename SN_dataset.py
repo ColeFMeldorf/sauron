@@ -56,7 +56,7 @@ class SN_dataset():
         if true_z_col is not None and dataset_dict is not None:
             raise ValueError("Cannot specify true_z_col both in config file and as a column in the dataset! Please choose one or the other.")
         elif dataset_dict is not None:
-            true_z_col = dataset_dict.get("TRUE_Z_COL", None)
+            true_z_col = dataset_dict.get("TRUEZCOL", None)
 
         if sntypecol is not None and dataset_dict is not None:
             raise ValueError("Cannot specify sntypecol both in config file and as a column in the dataset! Please choose one or the other.")
@@ -76,6 +76,7 @@ class SN_dataset():
         for path in paths:
             if path is None:
                 continue
+            logging.debug(f"Setting self._true_z_col to {true_z_col} in dataset {data_name}")
             self._true_z_col = true_z_col
             submitted_subset_cols = subsets.keys() if subsets is not None else None
             self.actual_subset_cols = self.determine_needed_columns(path, zcol, subset_cols=submitted_subset_cols)
@@ -336,6 +337,7 @@ class SN_dataset():
                     )
 
         if self.data_name is not None and "DATA" not in self.data_name:
+            # If it's not real data, it should  have a true z column. Try to find it if it isn't specified.
             if self._true_z_col is None:
                 possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
                 cols_in_df = [col for col in possible_true_z_cols if
