@@ -413,15 +413,13 @@ class sauron_runner():
 
         return eff_ij
 
-    def fit_rate(self, survey):
+    def fit_rate(self, survey, index, do_just_one=False):
         """Actually fit the rate parameters for a given survey.
         Inputs
         ------
         survey : str or list
             Name of the survey, or list of surveys to fit together.
         """
-        # How will this work when I am fitting a non-power law?
-        # How do I get the inherent rate in the simulation? Get away from tracking simulated efficiency.
         if not isinstance(survey, list):
             survey = [survey]
 
@@ -431,16 +429,27 @@ class sauron_runner():
         f_norms = []
         for s in survey:
             z_bins = self.fit_args_dict['z_bins'][s]
-            logging.debug(f"z_bins for survey {s}: {z_bins}")
             z_bins_list.extend(z_bins)
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
-            f_norm = self.fit_args_dict['f_norm'][s]
-            f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
 
         z_centers = np.array(z_centers)
-        f_norms = np.array(f_norms)
+
         # This needs to be done survey by survey because f_norm is per survey
-        n_data = np.concatenate([self.fit_args_dict['n_data'][s] for s in survey])
+        if len(survey) == 1:
+            n_data = np.concatenate([self.fit_args_dict['n_data'][s][index] for s in survey])
+            f_norm = self.fit_args_dict['f_norm'][s][index]
+            f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
+        else:
+            n_data = np.array([])
+            for s in survey:
+                logging.debug(f"len combined indices {len(self.fit_args_dict[f'{s}_combined_indices'])}")
+                survey_index = self.fit_args_dict[f"{s}_combined_indices"][index-1]
+                logging.debug(f"Loading dataset {survey_index} for survey {s} to combine for combined fit.")
+                n_data = np.concatenate([n_data, self.fit_args_dict['n_data'][s][survey_index]])
+                f_norm = self.fit_args_dict['f_norm'][s][survey_index]
+                f_norms.extend(np.repeat(f_norm, len(self.fit_args_dict['z_bins'][s])-1))
+
+        f_norms = np.array(f_norms)
         N_gen = np.concatenate([self.fit_args_dict['N_gen'][s] for s in survey])
         eff_ij_list = [self.fit_args_dict['eff_ij'][s] for s in survey]
         eff_ij = block_diag(eff_ij_list).toarray()
@@ -462,9 +471,8 @@ class sauron_runner():
             self.fit_args_dict['eff_ij'][survey] = eff_ij
             self.fit_args_dict['cov_sys'][survey] = cov_sys
             self.fit_args_dict['z_centers'][survey] = z_centers
-            self.fit_args_dict['n_datasets'][survey] = 1
             self.final_counts[survey] = {}
-            self.results[survey] = []
+            self.results[survey] = [] if self.results.get(survey) is None else self.results[survey]
 
         # The above are only really needed for debugging.
 
@@ -478,7 +486,6 @@ class sauron_runner():
                                             rate_params=self.fit_args_dict["rate_params"][survey])
         self.fit_args_dict['null_counts'][survey] = null_counts
 
-        logging.debug(f"data counts: {n_data}")
 
         fJ_0 = self.rate_function(z_centers, self.x0)
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
@@ -632,6 +639,7 @@ class sauron_runner():
         surveys = self.results.keys()
         for survey in surveys:
             results = self.results[survey]
+            logging.debug(f"Results for {survey}: {len(results)}")
             results = [results] if not isinstance(results, list) else results
             for i, result in enumerate(results):
                 output_df = pd.concat([output_df, result], ignore_index=True)
@@ -797,7 +805,7 @@ class sauron_runner():
 
         return n_data
 
-    def generate_chi2_map(self, survey, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
+    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -893,7 +901,8 @@ class sauron_runner():
 
             extent_chi = [df[f"{p_name_1}"][0] - 3 * df[f"{p_name_1}_error"][0], df[f"{p_name_1}"][0] + 3 * df[f"{p_name_1}_error"][0],
                           df[f"{p_name_0}"][0] - 3 * df[f"{p_name_0}_error"][0], df[f"{p_name_0}"][0] + 3 * df[f"{p_name_0}_error"][0]]
-            chi2_map = self.generate_chi2_map(s, extent=extent_chi)
+            logger.debug(extent_chi)
+            chi2_map = self.generate_chi2_map(s, extent=extent_chi, index=1)
             # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
             chi2_map -= np.min(chi2_map)
 
@@ -1016,15 +1025,21 @@ class sauron_runner():
             Dataset index.
         """
         z_bins = self.fit_args_dict['z_bins'][survey]
+
+        if self.fit_args_dict["f_norm"].get(survey, None) is None:
+            self.fit_args_dict["f_norm"][survey] = []
+            self.fit_args_dict["f_norm"][survey].append("placeholder")
+            # This is because the indexes are 1-indexed.
+
         if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None or self.args.cheat_cc:
             logging.debug("Calculating f_norm using DATA_IA dataset.")
             f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
-                    np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
 
         else:
 
             logging.debug("Couldn't find DATA_IA dataset for f_norm calculation so I am using inferred Ia counts.")
-            num_Ia = self.fit_args_dict["n_data"][survey]
+            num_Ia = self.fit_args_dict["n_data"][survey][index]
             f_norm = np.sum(num_Ia) / \
                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
 
@@ -1032,9 +1047,8 @@ class sauron_runner():
             # f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
             #      np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
 
-        #f_norm = 0.1
-        self.fit_args_dict['f_norm'][survey] = f_norm
-        logging.debug("HARDCORDING f_norm to 0.1 for testing purposes.")
+        logging.debug(self.fit_args_dict["f_norm"])
+        self.fit_args_dict['f_norm'][survey].append(f_norm)
         logging.debug(f"Calculated f_norm to be {f_norm}")
 
     def add_results(self, survey, index=None):
@@ -1047,11 +1061,14 @@ class sauron_runner():
             Dataset index.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
+        logging.debug(f"Adding results for survey {survey}, index {index}, n_datasets {n_datasets}")
         # This needs to be updated for more parameters later
         if n_datasets > 1:
             survey_name = survey + f"_dataset_{index}"
         else:
             survey_name = survey
+
+        logging.debug(f"Survey name for results: {survey_name}")
 
         result = self.final_counts[survey]["result"]
         cov = self.final_counts[survey]["covariance"]
@@ -1076,6 +1093,7 @@ class sauron_runner():
         result_to_add["survey"] = survey_name
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
+        logging.debug("Current length of results for survey %s: %d", survey, len(self.results[survey]))
 
     def apply_cuts(self, survey, subset_version=False):
         """Apply any cuts specified in the config to the datasets for a given survey.
@@ -1294,3 +1312,32 @@ class sauron_runner():
         # # What should these numbers be? Making them extremely wide for now.
         # if dump_ratio > 100 or dump_ratio < 0.01:
         #     raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")
+
+    def load_and_decontaminate_datasets(self, survey, PROB_THRESH):
+        """Load in the datasets for each survey into n_data."""
+
+        if not isinstance(survey, list):
+            self.fit_args_dict["n_data"][survey] = []
+            # Fill in the zeroth element because the index starts at 1 for the datasets.
+            self.fit_args_dict["n_data"][survey].append("placeholder")
+
+            for i in range(self.fit_args_dict["n_datasets"][survey]):
+                index = i + 1
+                self.fit_args_dict["n_data"][survey].append(
+                    self.calculate_CC_contamination(PROB_THRESH, index, survey, debug=self.args.debug)
+                )
+            logging.debug(f"Total length of n_data for {survey}: {len(self.fit_args_dict['n_data'][survey])}")
+        else:
+            # Load all of the possible combination datasets for each of the different surveys. Each
+            # survey may have a different number of datasets so we need to create an index meshgrid.
+            data_indices = {}
+            for s in survey:
+                data_indices[s] = np.arange(1, self.fit_args_dict["n_datasets"][s] + 1)
+                logging.debug(f"Data indices for survey {s}: {data_indices[s]}")
+
+            # Create a meshgrid of all possible combinations of dataset indexes across the surveys
+            mesh = np.meshgrid(*[data_indices[s] for s in survey], indexing='ij')
+            mesh = [m.flatten() for m in mesh]
+            for i,s in enumerate(survey):
+                self.fit_args_dict[f"{s}_combined_indices"] = mesh[i]
+                logging.debug(f"Combined indices for survey {s}: {self.fit_args_dict[f'{s}_combined_indices']}")
