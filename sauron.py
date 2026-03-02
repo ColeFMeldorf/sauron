@@ -4,6 +4,7 @@
 # Standard Library
 import argparse
 import logging
+import math
 
 # Sauron modules
 from runner import sauron_runner
@@ -31,6 +32,9 @@ def main():
                         help="Probability threshold for classifying SNe as Type IA.")
     parser.add_argument("--sanity-check", action=argparse.BooleanOptionalAction, help="Perform sanity checks"
                         " that simulations look reasonable.", default=True)
+    parser.add_argument("--fit-only-one-combined", action=argparse.BooleanOptionalAction, help="Only fit one combined dataset across all"
+                        " surveys, instead of fitting as many as there are datasets. I.e., if I have 5"
+                        "simulated datasets and 10 for another, I could do 5 combined datasets if this is set to False.", default=True)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -54,22 +58,34 @@ def main():
         runner.calculate_transfer_matrix(survey)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]
+        runner.load_and_decontaminate_datasets(survey, PROB_THRESH=PROB_THRESH)
+
         for i in range(n_datasets):
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
-
-
-            runner.fit_args_dict["n_data"][survey] = \
-                runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=args.debug)
             runner.calculate_f_norm(survey, index)
-            runner.fit_rate(survey)  # Should this have index?
+            runner.fit_rate(survey, index)
             runner.add_results(survey, index)
 
     # Fit all surveys together
 
+
     if len(surveys) > 1:
-        runner.fit_rate(surveys)
-        runner.add_results("combined")
+        logging.debug("Starting combo fit with surveys: " + ", ".join(surveys))
+        runner.load_and_decontaminate_datasets(surveys, PROB_THRESH=PROB_THRESH)  # index -1 is for combined datasets
+        if args.fit_only_one_combined:
+            logging.info("Fitting only one combined dataset across all surveys.")
+            indices = [0]
+        else:
+            total_possible_indexes = math.prod([runner.fit_args_dict["n_datasets"][s] for s in surveys])
+            indices = range(1, total_possible_indexes + 1)
+
+        runner.fit_args_dict["n_datasets"]["combined"] = len(indices)  # Update the number of datasets for the combined survey to reflect the number of combinations of datasets across surveys.
+
+        for index in indices:
+            logging.info(f"Fitting all possible combined dataset across all surveys, index {index} -----------------------")
+            runner.fit_rate(surveys, index=index)
+            runner.add_results("combined", index=index)
         surveys.extend(["combined"])
 
     if args.plot:
