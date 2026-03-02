@@ -436,24 +436,25 @@ class sauron_runner():
             z_bins = self.fit_args_dict['z_bins'][s]
             z_bins_list.extend(z_bins)
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
-            f_norm = self.fit_args_dict['f_norm'][s][index]
-            f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
 
         z_centers = np.array(z_centers)
-        f_norms = np.array(f_norms)
-        # This needs to be done survey by survey because f_norm is per survey
 
+        # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
             n_data = np.concatenate([self.fit_args_dict['n_data'][s][index] for s in survey])
+            f_norm = self.fit_args_dict['f_norm'][s][index]
+            f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
         else:
             n_data = np.array([])
             for s in survey:
-                survey_index = self.fit_args_dict[f"{s}_combined_indices"][index]
+                logging.debug(f"len combined indices {len(self.fit_args_dict[f'{s}_combined_indices'])}")
+                survey_index = self.fit_args_dict[f"{s}_combined_indices"][index-1]
                 logging.debug(f"Loading dataset {survey_index} for survey {s} to combine for combined fit.")
-                logging.debug(f" total length of n_data for {s}: {len(self.fit_args_dict['n_data'][s])}")
                 n_data = np.concatenate([n_data, self.fit_args_dict['n_data'][s][survey_index]])
+                f_norm = self.fit_args_dict['f_norm'][s][survey_index]
+                f_norms.extend(np.repeat(f_norm, len(self.fit_args_dict['z_bins'][s])-1))
 
-        n_data = np.concatenate([self.fit_args_dict['n_data'][s][index] for s in survey])
+        f_norms = np.array(f_norms)
         N_gen = np.concatenate([self.fit_args_dict['N_gen'][s] for s in survey])
         eff_ij_list = [self.fit_args_dict['eff_ij'][s] for s in survey]
         eff_ij = block_diag(eff_ij_list).toarray()
@@ -475,9 +476,8 @@ class sauron_runner():
             self.fit_args_dict['eff_ij'][survey] = eff_ij
             self.fit_args_dict['cov_sys'][survey] = cov_sys
             self.fit_args_dict['z_centers'][survey] = z_centers
-            self.fit_args_dict['n_datasets'][survey] = 1
             self.final_counts[survey] = {}
-            self.results[survey] = []
+            self.results[survey] = [] if self.results.get(survey) is None else self.results[survey]
 
         # The above are only really needed for debugging.
 
@@ -491,11 +491,9 @@ class sauron_runner():
                                             rate_params=self.fit_args_dict["rate_params"][survey])
         self.fit_args_dict['null_counts'][survey] = null_counts
 
-        logging.debug(f"data counts: {n_data}")
 
         fJ_0 = self.rate_function(z_centers, self.x0)
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
-        logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
@@ -605,8 +603,6 @@ class sauron_runner():
 
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
-        logging.debug(f"Final fj: {fJ}")
-        logging.debug(f"Predicted Counts Ei: {Ei}")
 
         # Estimate errors on Ei
 
@@ -641,6 +637,7 @@ class sauron_runner():
         surveys = self.results.keys()
         for survey in surveys:
             results = self.results[survey]
+            logging.debug(f"Results for {survey}: {len(results)}")
             results = [results] if not isinstance(results, list) else results
             for i, result in enumerate(results):
                 output_df = pd.concat([output_df, result], ignore_index=True)
@@ -787,7 +784,7 @@ class sauron_runner():
 
         return n_data
 
-    def generate_chi2_map(self, survey, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
+    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -808,10 +805,10 @@ class sauron_runner():
             logging.debug("updated z_centers for chi2 map:", z_centers)
 
         logging.debug("SANITY CHECK chi2 map values:")
-        chi2_result = chi2(self.x0, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
+        chi2_result = chi2(self.x0, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey][index],
                            z_centers,
                            fit_args_dict['eff_ij'][survey],
-                           fit_args_dict['n_data'][survey],
+                           fit_args_dict['n_data'][survey][index],
                            self.rate_function,
                            fit_args_dict['cov_sys'][survey])
         logging.debug(f"chi2 at x0 {np.sum(chi2_result**2)}")
@@ -887,7 +884,7 @@ class sauron_runner():
             extent_chi = [df[f"{p_name_1}"][0] - 3 * df[f"{p_name_1}_error"][0], df[f"{p_name_1}"][0] + 3 * df[f"{p_name_1}_error"][0],
                           df[f"{p_name_0}"][0] - 3 * df[f"{p_name_0}_error"][0], df[f"{p_name_0}"][0] + 3 * df[f"{p_name_0}_error"][0]]
             logger.debug(extent_chi)
-            chi2_map = self.generate_chi2_map(s, extent=extent_chi)
+            chi2_map = self.generate_chi2_map(s, extent=extent_chi, index=1)
             # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
             chi2_map -= np.min(chi2_map)
             logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
@@ -1018,11 +1015,10 @@ class sauron_runner():
             self.fit_args_dict["f_norm"][survey].append("placeholder")
             # This is because the indexes are 1-indexed.
 
-
         if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None or self.args.cheat_cc:
             logging.debug("Calculating f_norm using DATA_IA dataset.")
             f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
-                    np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
 
         else:
 
@@ -1049,11 +1045,14 @@ class sauron_runner():
             Dataset index.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
+        logging.debug(f"Adding results for survey {survey}, index {index}, n_datasets {n_datasets}")
         # This needs to be updated for more parameters later
         if n_datasets > 1:
             survey_name = survey + f"_dataset_{index}"
         else:
             survey_name = survey
+
+        logging.debug(f"Survey name for results: {survey_name}")
 
         result = self.final_counts[survey]["result"]
         cov = self.final_counts[survey]["covariance"]
@@ -1061,8 +1060,6 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
 
         param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
-        logging.debug(f"Searched for parameter names in default_parameter_name_dictionary with key {self.rate_function_name}, got {param_names}")
-        logging.debug(f"default_parameter_name_dictionary keys: {list(default_parameter_name_dictionary.keys())}")
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(result))]
 
@@ -1078,6 +1075,7 @@ class sauron_runner():
         result_to_add["survey"] = survey_name
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
+        logging.debug("Current length of results for survey %s: %d", survey, len(self.results[survey]))
 
     def apply_cuts(self, survey):
         """Apply any cuts specified in the config to the datasets for a given survey.
@@ -1248,7 +1246,7 @@ class sauron_runner():
     def load_and_decontaminate_datasets(self, survey, PROB_THRESH):
         """Load in the datasets for each survey into n_data."""
 
-        if not isinstance(survey, list) or len(survey) == 1:
+        if not isinstance(survey, list):
             self.fit_args_dict["n_data"][survey] = []
             # Fill in the zeroth element because the index starts at 1 for the datasets.
             self.fit_args_dict["n_data"][survey].append("placeholder")

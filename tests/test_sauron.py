@@ -707,6 +707,34 @@ def test_cc_decontam_small():
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
 
+
+def test_regression_multisurvey_all_possible_combos():
+    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
+    This time, we do DES, LOWZ and ROMAN together. Now, we fit every possible combo of 
+    """
+    outpath = pathlib.Path(__file__).parent / "test_regmultisurvey_more_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_config_multisurvey.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o",
+           str(outpath), "--no-sys_cov", "--no-sanity-check", "--no-fit-only-one-combined"]
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    results = pd.read_csv(outpath)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regmultisurvey_more_regression.csv")
+    # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
+    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
+        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+
+
+
 # This test should be added in a different PR.
 # def test_cc_decontam_new():
 #     config_path = pathlib.Path(__file__).parent / "test_config_50pz.yml"

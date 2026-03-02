@@ -4,6 +4,7 @@
 # Standard Library
 import argparse
 import logging
+import math
 
 # Sauron modules
 from runner import sauron_runner
@@ -31,7 +32,7 @@ def main():
                         help="Probability threshold for classifying SNe as Type IA.")
     parser.add_argument("--sanity-check", action=argparse.BooleanOptionalAction, help="Perform sanity checks"
                         " that simulations look reasonable.", default=True)
-    parser.add_argument("--fit-only-one-combined", action="store_true", help="Only fit one combined dataset across all"
+    parser.add_argument("--fit-only-one-combined", action=argparse.BooleanOptionalAction, help="Only fit one combined dataset across all"
                         " surveys, instead of fitting as many as there are datasets. I.e., if I have 5"
                         "simulated datasets and 10 for another, I could do 5 combined datasets if this is set to False.", default=True)
     args = parser.parse_args()
@@ -70,19 +71,22 @@ def main():
 
 
     if len(surveys) > 1:
+        logging.debug("Starting combo fit with surveys: " + ", ".join(surveys))
         runner.load_and_decontaminate_datasets(surveys, PROB_THRESH=PROB_THRESH)  # index -1 is for combined datasets
         if args.fit_only_one_combined:
             logging.info("Fitting only one combined dataset across all surveys.")
-            indices = [-1]
+            indices = [0]
         else:
-            indices = range(1, min([runner.fit_args_dict["n_datasets"][s] for s in surveys]) + 1)
+            total_possible_indexes = math.prod([runner.fit_args_dict["n_datasets"][s] for s in surveys])
+            indices = range(1, total_possible_indexes + 1)
+
+        runner.fit_args_dict["n_datasets"]["combined"] = len(indices)  # Update the number of datasets for the combined survey to reflect the number of combinations of datasets across surveys.
 
         for index in indices:
             logging.info(f"Fitting all possible combined dataset across all surveys, index {index} -----------------------")
             runner.fit_rate(surveys, index=index)
-            name = "combined" if args.fit_only_one_combined else "combined_" + str(index)
-            runner.add_results(name, index=index)
-            surveys.extend([name])
+            runner.add_results("combined", index=index)
+        surveys.extend(["combined"])
 
     if args.plot:
         runner.summary_plot()
