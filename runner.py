@@ -411,10 +411,7 @@ class sauron_runner():
             plt.ylabel("True Redshift")
             plt.savefig(f"transfer_matrix_{survey}.png")
 
-
-
         return eff_ij
-
 
     def fit_rate(self, survey):
         """Actually fit the rate parameters for a given survey.
@@ -485,13 +482,6 @@ class sauron_runner():
 
         fJ_0 = self.rate_function(z_centers, self.x0)
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
-
-        logger.debug(f"null_counts: {null_counts}")
-        logger.debug(f"eff_ij: {np.mean(eff_ij)}")
-        logger.debug(f"f_norms: {f_norms}")
-        logger.debug(f"fJ_0: {fJ_0}")
-
-        logging.debug(f"Initial predicted counts (x0): {x0_counts}")
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
@@ -583,12 +573,13 @@ class sauron_runner():
             logger.debug(f"Covariance Matrix Diag: {np.diag(cov)}")
 
             popt, pcov = curve_fit(
-                lambda z, a, b: np.sum(null_counts * eff_ij * f_norms *
-                                      self.rate_function(z, [a, b]), axis=0), sigma=cov,
+                lambda z, *x: np.sum(null_counts * eff_ij * f_norms *
+                                      self.rate_function(z, x), axis=0), sigma=cov,
                                       absolute_sigma=False,
                 xdata=z_centers,
                 ydata=n_data,
-                p0=self.x0
+                # provide x0 as a single parameter
+                p0=self.x0,
             )
 
             fit_params = popt
@@ -601,27 +592,31 @@ class sauron_runner():
 
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
-        logging.debug(f"Final fj: {fJ}")
-        logging.debug(f"Predicted Counts Ei: {Ei}")
 
         # Estimate errors on Ei
 
         samples = np.random.multivariate_normal(fit_params, cov_x, 1000)
         fJ_draws = np.array([self.rate_function(z_centers, sample) for sample in samples]).T
-        N_gen = N_gen[:, np.newaxis]  # for broadcasting
+        null_counts = null_counts[:, np.newaxis]  # for broadcasting
         eff_ij = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
         f_norms = np.atleast_1d(f_norms)
         f_norms = f_norms[:, np.newaxis]  # for broadcasting
 
         # I am not confident this is correct. Check later.
 
-        Ei_draws = np.sum(N_gen * eff_ij * f_norms * fJ_draws, axis=0)
+        Ei_draws = np.sum(null_counts * eff_ij * f_norms * fJ_draws, axis=0)
         Ei_err = np.std(Ei_draws, axis=1)
+
+        Ei_16, Ei_84 = np.percentile(Ei_draws, [16, 84], axis=1)
+        #Ei_16 = np.min(Ei_draws, axis=1)
+        #Ei_84 = np.max(Ei_draws, axis=1)
 
         self.final_counts[survey]["predicted_counts"] = Ei
         self.final_counts[survey]["x0_counts"] = x0_counts
         self.final_counts[survey]["observed_counts"] = n_data
         self.final_counts[survey]["predicted_counts_err"] = Ei_err
+        self.final_counts[survey]["predicted_counts_16"] = Ei_16
+        self.final_counts[survey]["predicted_counts_84"] = Ei_84
         self.n_data = n_data
 
         self.final_counts[survey]["result"] = fit_params
@@ -822,18 +817,7 @@ class sauron_runner():
             z_centers = np.tile(z_centers, int(num_surveys))
             logging.debug("updated z_centers for chi2 map:", z_centers)
 
-        logging.debug("SANITY CHECK chi2 map values:")
-        chi2_result = chi2(self.x0, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
-                           z_centers,
-                           fit_args_dict['eff_ij'][survey],
-                           fit_args_dict['n_data'][survey],
-                           self.rate_function,
-                           fit_args_dict['cov_sys'][survey])
-        logging.debug(f"chi2 at x0 {np.sum(chi2_result**2)}")
-
         param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
-        logging.debug(f"Searched for parameter names in default_parameter_name_dictionary with key {self.rate_function_name}, got {param_names}")
-        logging.debug(f"default_parameter_name_dictionary keys: {list(default_parameter_name_dictionary.keys())}")
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(self.x0))]
 
@@ -884,7 +868,14 @@ class sauron_runner():
                 ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
                              fmt='o', label=f" {survey} Initial Prediction ", ms=5)
-                ax1.legend()
+
+                ####
+                # Add 1 sigma confidence region
+                Ei_16 = self.final_counts[survey]["predicted_counts_16"]
+                Ei_84 = self.final_counts[survey]["predicted_counts_84"]
+                ax1.fill_between(z_centers, Ei_16, Ei_84, color='gray', alpha=0.5, label="1 sigma confidence region")
+
+                #ax1.legend()
                 ax1.set_xlabel("Redshift")
                 ax1.set_ylabel("Counts")
                 ax1.set_yscale("log")
@@ -902,34 +893,29 @@ class sauron_runner():
 
             extent_chi = [df[f"{p_name_1}"][0] - 3 * df[f"{p_name_1}_error"][0], df[f"{p_name_1}"][0] + 3 * df[f"{p_name_1}_error"][0],
                           df[f"{p_name_0}"][0] - 3 * df[f"{p_name_0}_error"][0], df[f"{p_name_0}"][0] + 3 * df[f"{p_name_0}_error"][0]]
-            logger.debug(extent_chi)
             chi2_map = self.generate_chi2_map(s, extent=extent_chi)
             # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
             chi2_map -= np.min(chi2_map)
-            logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")
 
             #sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
             sigma_map = chi2_map
 
-            if False:
+            if len(param_names) <= 2:
 
                 im = ax2.imshow(sigma_map, extent=extent_chi, origin='lower', aspect='auto', cmap="plasma")
-                #ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
                 # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
                 ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors='k', linewidths=1)
-                plt.colorbar(im, ax=ax2, label="Delta Chi Squared")
-                #ax2.axhline(2.27e-5, color='black', linestyle='--')
-                #ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-                ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt='o',
-                                color='white', ms=10, label=f"Fit results {survey}")
+                plt.colorbar(im, ax=ax2, label=r"$\Delta \chi^2$")
+                ax2.errorbar(df[p_name_1], df[p_name_0], xerr=df[f"{p_name_1}_error"], yerr=df[f"{p_name_0}_error"], fmt='o',
+                             color='white', ms=10, label=f"Fit results {survey}")
                 ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt='o', ms=10, label="Lasker")
                 ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color='cyan', fmt='o', ms=10, label="Fromhaier")
-                ax2.set_xlabel("beta")
-                ax2.set_ylabel("alpha")
+                ax2.set_xlabel(p_name_1)
+                ax2.set_ylabel(p_name_0)
                 ax2.set_xlim(extent_chi[0], extent_chi[1])
                 ax2.set_ylim(extent_chi[2], extent_chi[3])
-                ax2.legend()
 
+                ax2.legend()
 
         fig.savefig("summary_plot.png")
 
@@ -1046,7 +1032,9 @@ class sauron_runner():
             # f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
             #      np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
 
+        #f_norm = 0.1
         self.fit_args_dict['f_norm'][survey] = f_norm
+        logging.debug("HARDCORDING f_norm to 0.1 for testing purposes.")
         logging.debug(f"Calculated f_norm to be {f_norm}")
 
     def add_results(self, survey, index=None):
@@ -1071,15 +1059,15 @@ class sauron_runner():
         z_bins = self.fit_args_dict['z_bins'][survey]
 
         param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
-        logging.debug(f"Searched for parameter names in default_parameter_name_dictionary with key {self.rate_function_name}, got {param_names}")
-        logging.debug(f"default_parameter_name_dictionary keys: {list(default_parameter_name_dictionary.keys())}")
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(result))]
 
         result_to_add = {}
         for i, p in enumerate(param_names):
             result_to_add[p] = result[i]
+        for i, p in enumerate(param_names):
             result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
+        for i, p in enumerate(param_names):
             for j, p2 in enumerate(param_names):
                 if i < j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
