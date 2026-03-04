@@ -161,7 +161,21 @@ class sauron_runner():
             Name of the survey.
         """
 
-        self.fit_args_dict["f_norm"][survey] = args_dict.get("F_NORM", None)
+        raw_f_norm = args_dict.get("F_NORM", None)
+        if raw_f_norm is None:
+            self.fit_args_dict["f_norm"][survey] = None
+        else:
+            try:
+                f_norm = float(raw_f_norm)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float; got {raw_f_norm!r}."
+                )
+            if f_norm <= 0:
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float greater than zero; got {f_norm!r}."
+                )
+            self.fit_args_dict["f_norm"][survey] = f_norm
 
 
         self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
@@ -354,7 +368,7 @@ class sauron_runner():
             if self.fit_args_dict["f_norm"][survey] is None:
                 f_norm_guess = self.calculate_f_norm(survey, index=1)
                 logging.debug(f"The f_norm is probably close to this number {f_norm_guess}, "
-                "which is just the sum of the data counts divided by the sum of the null counts "
+                "which is just the sum of the DATA_* counts divided by the sum of the SIM_* counts "
                 "for the first dataset. Your f_norm is probably then nearest rational fraction to this number.")
                 raise ValueError(f"F_NORM must be specified in FIT_OPTIONS for {survey} in config file {self.args.config}.")
 
