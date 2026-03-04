@@ -32,7 +32,7 @@ def main():
                         help="Probability threshold for classifying SNe as Type IA.")
     parser.add_argument("--sanity-check", action=argparse.BooleanOptionalAction, help="Perform sanity checks"
                         " that simulations look reasonable.", default=True)
-    parser.add_argument("--fit-only-one-combined", action=argparse.BooleanOptionalAction, help="Only fit one combined dataset across all"
+    parser.add_argument("--fit-only-one-combined", "--fit1", action=argparse.BooleanOptionalAction, help="Only fit one combined dataset across all"
                         " surveys, instead of fitting as many as there are datasets. I.e., if I have 5"
                         "simulated datasets and 10 for another, I could do 5 combined datasets if this is set to False.", default=True)
     args = parser.parse_args()

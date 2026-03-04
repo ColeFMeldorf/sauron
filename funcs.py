@@ -124,6 +124,11 @@ def turnover_power_law_forced_cty(z, x):
                   alpha2 * (1 + z)**beta2)
     return fJ
 
+
+def non_parameteric_histogram(z, x):
+    return x
+
+
 import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 

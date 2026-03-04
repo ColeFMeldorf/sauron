@@ -328,6 +328,19 @@ def test_coverage_no_sys():
     b = np.median(df["beta_error"]**2)
     c = np.median(df["cov_alpha_beta"])
 
+    # product_2 = np.zeros(len(df))
+    # for i in range(50):
+    #     a = df["alpha_error"][i]**2
+    #     b = df["beta_error"][i]**2
+    #     c = df["cov_alpha_beta"][i]
+    #     cov = np.array([[a, c], [c, b]])
+    #     inv_cov = np.linalg.inv(cov)
+    #     d_alpha = df["alpha"][i] - 2.27e-5
+    #     d_beta = df["beta"][i] - 1.7
+    #     pos = np.array([d_alpha, d_beta])
+    #     chi = pos.T @ inv_cov @ pos
+    #     product_2[i] = chi
+
     mean_cov = np.array([[a, c], [c, b]])
 
     all_alpha = df["alpha"] - 2.27e-5
@@ -339,7 +352,7 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
-    plot = False
+    plot = True
     if plot:
         import matplotlib.pyplot as plt
 
@@ -351,6 +364,33 @@ def test_coverage_no_sys():
         plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
         plt.xlabel("Chi-squared statistic")
         plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_hist.png")
+        plt.clf()
+
+        plt.errorbar(df["alpha"], df["beta"], xerr=df["alpha_error"], yerr=df["beta_error"], fmt='o', alpha=0.7)
+        plt.scatter(2.27e-5, 1.7, color='red', label='Truth')
+        plt.xlabel("Alpha")
+        plt.ylabel("Beta")
+        # # x = np.linspace(2.27e-5 - 5e-5, 2.27e-5 + 5e-5, 100)
+        # # y = np.linspace(1.7 - 5, 1.7 + 5, 100)
+        # # X, Y = np.meshgrid(x, y)
+        # # X -= 2.27e-5
+        # # Y -= 1.7
+        # # pos = np.vstack([X.flatten(), Y.flatten()])
+        # # mean_cov_inv = np.linalg.inv(mean_cov)
+
+        # chi_product_1 = np.einsum('ij,jl->il', mean_cov_inv, pos)
+        # chi_product_2 = np.einsum("il,il->l", pos, chi_product_1)
+
+        x = np.linspace(5e-6, 4e-5, 100)
+        y = np.linspace(0.8, 3.0, 100)
+        X, Y = np.meshgrid(x, y)
+        pos = np.dstack((X, Y))
+        pos -= np.array([2.27e-5, 1.7])
+
+        chivals = np.einsum('...i,ij,...j->...', pos, np.linalg.inv(mean_cov), pos)
+
+        plt.contour(X, Y, chivals, levels=[2.3, 6], colors=['red', 'black'], linestyles=['dashed', 'dashed'])
+        plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_alpha_beta.png")
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")

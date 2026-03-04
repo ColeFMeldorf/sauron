@@ -335,7 +335,7 @@ class SN_dataset():
                         f"Inconsistent SCONE probability column across files for {self.data_name}: "
                         f"previous files used '{existing_scone_col}', but file {path} has '{current_scone_col}'."
                     )
-
+        logging.debug(f"Determined scone col for {self.data_name}: {self.scone_col}")
         if self.data_name is not None and "DATA" not in self.data_name:
             # If it's not real data, it should  have a true z column. Try to find it if it isn't specified.
             if self._true_z_col is None:
