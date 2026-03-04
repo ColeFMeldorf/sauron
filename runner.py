@@ -1030,28 +1030,21 @@ class sauron_runner():
 
         if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None or self.args.cheat_cc:
             logging.debug("Calculating f_norm using DATA_IA dataset.")
-            f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].total_counts) / \
-                np.sum(self.datasets[f"{survey}_SIM_IA"].total_counts)
+            f_norm = self.datasets[f"{survey}_DATA_IA_{index}"].total_counts / \
+                self.datasets[f"{survey}_SIM_IA"].total_counts
 
         elif self.datasets.get(f"{survey}_DATA_ALL_{index}") is not None:
             logging.debug("Calculating f_norm using DATA_ALL dataset.")
-            f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].total_counts) / \
-                np.sum(self.datasets[f"{survey}_SIM_ALL"].total_counts)
+            f_norm = self.datasets[f"{survey}_DATA_ALL_{index}"].total_counts / \
+                self.datasets[f"{survey}_SIM_ALL"].total_counts
 
         else:
 
             logging.debug("Couldn't find DATA_IA dataset for f_norm calculation so I am using inferred Ia counts.")
             num_Ia = self.fit_args_dict["n_data"][survey][index]
             f_norm = np.sum(num_Ia) / \
-                    np.sum(self.datasets[f"{survey}_SIM_IA"].total_counts)
+                    self.datasets[f"{survey}_SIM_IA"].total_counts
 
-            # logging.debug("Using all SNe for f_norm calculation.")
-            # f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
-            #      np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
-
-        #logging.debug(self.fit_args_dict["f_norm"])
-        #self.fit_args_dict['f_norm'][survey].append(f_norm)
-        logging.debug(f"Calculated f_norm to be {f_norm}")
         return f_norm
 
     def add_results(self, survey, index=None):
