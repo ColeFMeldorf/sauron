@@ -44,6 +44,7 @@ DES:
   FIT_OPTIONS:
     RATE_FUNC: power_law
     RATE_PARAMS: 2.27E-5, 1.7
+    F_NORM: 0.02
   CUTS:
     x1: -3, 3
     c: -0.3, 0.3

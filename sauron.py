@@ -63,7 +63,7 @@ def main():
         for i in range(n_datasets):
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
-            runner.calculate_f_norm(survey, index)
+            #runner.calculate_f_norm(survey, index)
             runner.fit_rate(survey, index)
             runner.add_results(survey, index)
 
