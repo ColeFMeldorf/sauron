@@ -11,6 +11,7 @@ DES:
     Z_BINS: 10
     MIN_Z: 0.0
     MAX_Z: 0.9
+    F_NORM: 1
 
 
 
