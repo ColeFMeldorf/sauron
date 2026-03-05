@@ -473,7 +473,7 @@ class sauron_runner():
 
         self.fit_args_dict['eff_ij'][survey] = eff_ij
 
-        if self.args.plot:
+        if getattr(self.args, "plot", False):
             LaurenNicePlots()
             plt.clf()
             logging.debug(f"eff_ij: {eff_ij.shape}")
@@ -518,7 +518,6 @@ class sauron_runner():
         else:
             n_data = np.array([])
             for s in survey:
-                logging.debug(f"len combined indices {len(self.fit_args_dict[f'{s}_combined_indices'])}")
                 survey_index = self.fit_args_dict[f"{s}_combined_indices"][index-1]
                 logging.debug(f"Loading dataset {survey_index} for survey {s} to combine for combined fit.")
                 n_data = np.concatenate([n_data, self.fit_args_dict['n_data'][s][survey_index]])
@@ -526,9 +525,8 @@ class sauron_runner():
                 f_norms.extend(np.repeat(f_norm, len(self.fit_args_dict['z_bins'][s])-1))
 
         f_norms = np.array(f_norms)
+        logging.debug(f"f_norms for combined fit: {f_norms}")
         N_gen = np.concatenate([self.fit_args_dict['N_gen'][s] for s in survey])
-        logging.debug(self.fit_args_dict)
-        logging.debug(self.fit_args_dict["eff_ij"])
         eff_ij_list = [self.fit_args_dict['eff_ij'][s] for s in survey]
         eff_ij = block_diag(eff_ij_list).toarray()
         cov_sys_list = [self.fit_args_dict['cov_sys'][s] for s in survey]
@@ -647,9 +645,9 @@ class sauron_runner():
             chi_squared = result.fun
             logging.debug(f"chi_squared minimize: {chi_squared}")
 
-            logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
-            test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
-            logging.debug(f"Test chi_squared: {test_chi} ")
+            # logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
+            # test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
+            # logging.debug(f"Test chi_squared: {test_chi} ")
 
 
         elif fit_method == "curve_fit":
@@ -977,7 +975,8 @@ class sauron_runner():
                 if len(param_names) > 2:
                     values = (a, b) + tuple(self.results[survey][0][param_names[2:]].values[0])  # Keep other params at result value.
 
-                chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
+                chi2_result = chi2(values, fit_args_dict['null_counts'][survey],
+                                   fit_args_dict['f_norm'][survey],
                                    z_centers,
                                    fit_args_dict['eff_ij'][survey],
                                    fit_args_dict['n_data'][survey][index],
@@ -1057,12 +1056,10 @@ class sauron_runner():
                 else:
                     label = survey
 
-
-                #ax2 = fig.add_subplot(1, 2, 2)
                 extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
-                            df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
+                             df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
                 logger.debug(extent_chi)
-                chi2_map = self.generate_chi2_map(s, extent=extent_chi)
+                chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1) # this needs to be fixed
                 # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
                 chi2_map -= np.min(chi2_map)
                 logging.debug(f"min chi2 for {survey}: {np.min(chi2_map)}")

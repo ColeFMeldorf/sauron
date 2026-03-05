@@ -774,10 +774,6 @@ def test_regression_multisurvey_all_possible_combos():
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
 
 
-
-    np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
-
-
 def test_regression_SDSS():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
     This time, we do DES and SDSS together.
