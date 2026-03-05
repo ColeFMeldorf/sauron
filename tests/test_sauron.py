@@ -775,7 +775,6 @@ def test_regression_multisurvey_all_possible_combos():
 
 
 
-<<<<<<< HEAD
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
 
 
@@ -801,7 +800,6 @@ def test_regression_SDSS():
     regression = pd.read_csv(pathlib.Path(__file__).parent / "SDSS_multi_regression.csv")
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
-=======
 # This test should be added in a different PR.
 # def test_cc_decontam_new():
 #     config_path = pathlib.Path(__file__).parent / "test_config_50pz.yml"
@@ -908,4 +906,3 @@ def test_regression_SDSS():
 
 #     logger.debug(f"Tolerance on means: {1/np.sqrt(n_trials)}")
 #     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
->>>>>>> main
