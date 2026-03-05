@@ -13,7 +13,7 @@ from scipy.integrate import quad
 logger = logging.getLogger(__name__)
 
 
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
@@ -33,6 +33,16 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
 
     # This is the X^2 contribution for each z bin. It has ALREADY been squared.
     # This is what scipy.optimize.minimize needs.
+
+    if debug:
+        logger.debug(f"Ei: {Ei}")
+        logger.debug(f"var_Ei: {var_Ei}")
+        logger.debug(f"var_Si: {var_Si}")
+        logger.debug(f"resid_vector: {resid_vector}")
+        logger.debug(f"cov_stat: {cov_stat}")
+        logger.debug(f"cov_sys: {cov_sys}")
+        logger.debug(f"cov: {cov}")
+        logger.debug(f"Chi-squared: {chi_squared}")
 
     return chi_squared
 
@@ -125,7 +135,7 @@ def turnover_power_law_forced_cty(z, x):
     return fJ
 
 
-def non_parameteric_histogram(z, x):
+def non_parametric_histogram(z, x):
     return x
 
 

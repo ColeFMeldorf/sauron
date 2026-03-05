@@ -13,6 +13,7 @@ HOURGLASS:
     MIN_Z: 0.4 # 0.4
     MAX_Z: 1.8 # 2.0
     CC_ARE_SEPARATE: false
+    F_NORM: 0.1
 
 
   CUTS:

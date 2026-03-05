@@ -20,7 +20,7 @@ from astropy.io import fits
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, AplusB_cosmicSFH, chi2, chi2_to_sigma, turnover_power_law_forced_cty,
-                   non_parameteric_histogram)
+                   non_parametric_histogram)
 from SN_dataset import SN_dataset
 
 # Get the matplotlib logger
@@ -87,7 +87,7 @@ func_name_dictionary = {
     "dual_power_law": turnover_power_law,
     "AplusB_cosmicSFH": AplusB_cosmicSFH,
     "turnover_power_law_forced_cty": turnover_power_law_forced_cty,
-    "non_parameteric_histogram": non_parameteric_histogram
+    "non_parametric_histogram": non_parametric_histogram
 }
 
 
@@ -147,8 +147,8 @@ class sauron_runner():
         logging.debug(f"Using rate function: {self.rate_function}")
         potential_x0 = fit_options.get("X0", None)
         if potential_x0 is None:
-            if "non_parameteric" in fit_options.get("RATE_FUNCTION"):
-                self.x0 = (1e-4) * len(self.fit_args_dict["z_centers"][survey]) # Arbitrary starting guess
+            if "non_parametric" in fit_options.get("RATE_FUNCTION"):
+                self.x0 = "non_param_x0_placeholder"
             else:
                 logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess for {self.rate_function_name}: {default_x0_dictionary.get(fit_options.get('RATE_FUNCTION'), (2.27e-5, 1.7))}")
                 self.x0 = default_x0_dictionary.get(fit_options.get("RATE_FUNCTION"), (2.27e-5, 1.7))
@@ -524,6 +524,14 @@ class sauron_runner():
 
         logging.warning("This doesn't work for multiple surveys yet!")
 
+
+        if "non_parametric" in self.rate_function_name:
+            self.x0 = np.zeros_like(z_centers) + 1e-8
+            #self.x0[np.where(z_centers < 1)] = 2.27e-5 * (1 + z_centers[np.where(z_centers < 1)])**1.7
+            #self.x0[np.where(z_centers >= 1)] = 7.5e-5 * (1 + z_centers[np.where(z_centers >= 1)])**(-0.1)
+            # Start at Fromhaier / Strolger Rate for non-parametric fit, but this should be changed to be more flexible.
+            #  This is just to make sure it starts at a reasonable place and doesn't diverge immediately.
+
         fJ_0 = self.rate_function(z_centers, self.x0)
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
 
@@ -587,15 +595,19 @@ class sauron_runner():
                         method=None
                     )
             fit_params = result.x
-
+            logging.debug(f"Minimize optimization success: {result.success}")
+            logging.debug(f"Result message {result.message}")
             logging.debug(f"Minimize Result: {fit_params}")
 
             # This calculation of cov matrix is only valid if minimizing chi2
             cov_x = result.hess_inv * 2
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
             chi_squared = result.fun
-            logging.debug(f"residual variance minimize: {residual_variance}")
             logging.debug(f"chi_squared minimize: {chi_squared}")
+
+            logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
+            test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
+            logging.debug(f"Test chi_squared: {test_chi} ")
 
 
         elif fit_method == "curve_fit":
