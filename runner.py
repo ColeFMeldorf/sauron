@@ -147,11 +147,12 @@ class sauron_runner():
         logging.debug(f"Using rate function: {self.rate_function}")
         potential_x0 = fit_options.get("X0", None)
         if potential_x0 is None:
-            if "non_parametric" in fit_options.get("RATE_FUNCTION"):
+            if "non_parametric" in self.rate_function_name:
                 self.x0 = "non_param_x0_placeholder"
             else:
-                logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess for {self.rate_function_name}: {default_x0_dictionary.get(fit_options.get('RATE_FUNCTION'), (2.27e-5, 1.7))}")
-                self.x0 = default_x0_dictionary.get(fit_options.get("RATE_FUNCTION"), (2.27e-5, 1.7))
+                logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess "
+                f"for {self.rate_function_name}: {default_x0_dictionary.get(self.rate_function_name, (2.27e-5, 1.7))}")
+                self.x0 = default_x0_dictionary.get(self.rate_function_name, (2.27e-5, 1.7))
              # The above should probably be changed.
         else:
             self.x0 = [float(i) for i in potential_x0.split(",")]
@@ -270,7 +271,6 @@ class sauron_runner():
 
                 if "DATA" in file:
                     for i, path in enumerate(paths):
-                        cuts = survey_dict.get("CUTS", {}) | survey_dict.get("SUBSET", {})
                         datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(path,
                                                                             sntype, data_name=survey+"_"+file,
                                                                             survey_dict=survey_dict)
@@ -433,7 +433,6 @@ class sauron_runner():
 
         if self.args.debug:
             plt.clf()
-            print(eff_ij.shape)
             logging.debug(f"eff_ij: {eff_ij.shape}")
             plt.imshow(eff_ij[1:-1, :], origin='lower', aspect='auto',
                        extent=[z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]],
@@ -595,8 +594,6 @@ class sauron_runner():
                         method=None
                     )
             fit_params = result.x
-            logging.debug(f"Minimize optimization success: {result.success}")
-            logging.debug(f"Result message {result.message}")
             logging.debug(f"Minimize Result: {fit_params}")
 
             # This calculation of cov matrix is only valid if minimizing chi2
@@ -699,23 +696,23 @@ class sauron_runner():
         Ei_16, Ei_84 = np.percentile(Ei_draws, [16, 84], axis=1)
         Ei_50 = np.percentile(Ei_draws, 50, axis=1)
 
-        plt.figure(figsize=(8, 6))
-        plt.plot(z_centers, n_data, 'o', label='Data', ms=5)
-        plt.plot(z_centers, Ei, label='Best Fit', ms=5)
-        plt.plot(z_centers, Ei_16, label='16th Percentile', linestyle='--', color='orange')
-        plt.plot(z_centers, Ei_84, label='84th Percentile', linestyle='--', color='orange')
-        plt.plot(z_centers, Ei_50, label='Median', linestyle='-.', color='green')
-        for i in range(1000):
-            plt.plot(z_centers, Ei_draws[:, i], color='gray', alpha=0.03)
+        # plt.figure(figsize=(8, 6))
+        # plt.plot(z_centers, n_data, 'o', label='Data', ms=5)
+        # plt.plot(z_centers, Ei, label='Best Fit', ms=5)
+        # plt.plot(z_centers, Ei_16, label='16th Percentile', linestyle='--', color='orange')
+        # plt.plot(z_centers, Ei_84, label='84th Percentile', linestyle='--', color='orange')
+        # plt.plot(z_centers, Ei_50, label='Median', linestyle='-.', color='green')
+        # for i in range(1000):
+        #     plt.plot(z_centers, Ei_draws[:, i], color='gray', alpha=0.03)
 
-        #plt.plot(z_centers, Ei_high, label='High Parameters Fit', color='red')
-        #plt.plot(z_centers, Ei_low, label='Low Parameters Fit', color='blue')
+        # #plt.plot(z_centers, Ei_high, label='High Parameters Fit', color='red')
+        # #plt.plot(z_centers, Ei_low, label='Low Parameters Fit', color='blue')
 
-        plt.xlabel("Redshift")
-        plt.ylabel("Counts")
-        plt.title(f"Fit and Parameter Draws for {survey}")
-        plt.legend()
-        plt.savefig(f"fit_and_draws_{survey}.png")
+        # plt.xlabel("Redshift")
+        # plt.ylabel("Counts")
+        # plt.title(f"Fit and Parameter Draws for {survey}")
+        # plt.legend()
+        # plt.savefig(f"fit_and_draws_{survey}.png")
 
         self.final_counts[survey]["predicted_counts"] = Ei
         self.final_counts[survey]["x0_counts"] = x0_counts
@@ -927,10 +924,6 @@ class sauron_runner():
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(self.x0))]
 
-#        alpha_lower = self.results[survey][0][param_names[0]]*0.8
-#        alpha_upper = self.results[survey][0][param_names[0]]*1.2
-#        beta_lower = self.results[survey][0][param_names[1]]*0.8
-#        beta_upper = self.results[survey][0][param_names[1]]*1.2
         for i, a in enumerate(np.linspace(extent[2], extent[3], n_samples)):
             for j, b in enumerate(np.linspace(extent[0], extent[1], n_samples)):
 
@@ -938,10 +931,10 @@ class sauron_runner():
                 if len(param_names) > 2:
                     values = (a, b) + tuple(self.results[survey][0][param_names[2:]].values[0])  # Keep other params at result value.
 
-                chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey][-1],
+                chi2_result = chi2(values, fit_args_dict['null_counts'][survey], fit_args_dict['f_norm'][survey],
                                    z_centers,
                                    fit_args_dict['eff_ij'][survey],
-                                   fit_args_dict['n_data'][survey][-1],
+                                   fit_args_dict['n_data'][survey][index],
                                    self.rate_function,
                                    fit_args_dict['cov_sys'][survey])
                 # Note this is now unsquared
@@ -1210,7 +1203,7 @@ class sauron_runner():
             or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the 
             DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets, 
             including DUMP datasets, and the cuts will be fetched from the SUBSET category in the config file
-            instead of the CUTS category. If False, cuts will only be applied to the SIM and DATA datsets only, and
+            instead of the CUTS category. If False, cuts will only be applied to the SIM and DATA datasets only, and
             the cuts will be fetched from the CUTS category in the config file.
         """
         datasets = self.datasets

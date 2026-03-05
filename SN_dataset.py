@@ -304,13 +304,11 @@ class SN_dataset():
                 # No SCONE column in this file; leave self.scone_col as None for now.
                 self.scone_col = None
             elif len(scone_col) > 1:
-                logging.warning("TEMPORARY SCONE HACK COME BACK AND FIX THIS")
-                self.scone_col = scone_col[-1]
 
-                # raise ValueError(
-                #     f"Multiple valid SCONE columns found in {self.data_name}! "
-                #     f"Which do I use? I found: {scone_col}"
-                # )
+                raise ValueError(
+                    f"Multiple valid SCONE columns found in {self.data_name}! "
+                    f"Which do I use? I found: {scone_col}"
+                )
             else:
                 # Exactly one SCONE column found; set it for the whole dataset.
                 self.scone_col = scone_col[0]
