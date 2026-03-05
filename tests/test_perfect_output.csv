@@ -1,2 +1,2 @@
-alpha,beta,reduced_chi_squared,alpha_error,beta_error,cov_alpha_beta,survey
-2.27e-05,1.7,4.83573177383591e-29,7.37576995680139e-15,7.37576995680139e-15,0.0,DES
+alpha,beta,alpha_error,beta_error,cov_alpha_beta,reduced_chi_squared,survey
+2.27e-05,1.7,1.4142135623730951,1.4142135623730951,0,4.83573177383591e-29,DES

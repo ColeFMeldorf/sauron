@@ -8,11 +8,12 @@ from scipy.stats import binned_statistic as binstat
 from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
+from scipy.integrate import quad
 
 logger = logging.getLogger(__name__)
 
 
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
@@ -32,6 +33,16 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
 
     # This is the X^2 contribution for each z bin. It has ALREADY been squared.
     # This is what scipy.optimize.minimize needs.
+
+    if debug:
+        logger.debug(f"Ei: {Ei}")
+        logger.debug(f"var_Ei: {var_Ei}")
+        logger.debug(f"var_Si: {var_Si}")
+        logger.debug(f"resid_vector: {resid_vector}")
+        logger.debug(f"cov_stat: {cov_stat}")
+        logger.debug(f"cov_sys: {cov_sys}")
+        logger.debug(f"cov: {cov}")
+        logger.debug(f"Chi-squared: {chi_squared}")
 
     return chi_squared
 
@@ -104,12 +115,66 @@ def power_law(z, x):
 
 
 def turnover_power_law(z, x):
-    alpha1, beta1, alpha2, beta2 = x
+    try:
+        alpha1, beta1, alpha2, beta2 = x
+    except ValueError:
+        raise ValueError("Expected 4 parameters for turnover_power_law: alpha1, beta1, alpha2, beta2, got {}".format(x))
     z_turn = 1
     fJ = np.where(z < z_turn,
                   alpha1 * (1 + z)**beta1,
                   alpha2 * (1 + z)**beta2)
     return fJ
+
+def turnover_power_law_forced_cty(z, x):
+    alpha1, beta1, beta2 = x
+    z_turn = 1
+    alpha2 = alpha1 * (1 + z_turn)**(beta1 - beta2) # Ensure continuity at z_turn
+    fJ = np.where(z < z_turn,
+                  alpha1 * (1 + z)**beta1,
+                  alpha2 * (1 + z)**beta2)
+    return fJ
+
+
+def non_parametric_histogram(z, x):
+    return x
+
+
+import astropy.cosmology as cosmo
+cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
+
+
+def cosmic_SFR(z,a,b,c,d):
+    H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
+    return (a + b * z) / (1 + (z / c)**d) * H0 / 100
+
+def cosmic_SFR_dt_dz(z, a, b, c, d):
+    H0 = cosmology.H0  # in km/s/Mpc
+    Om0 = cosmology.Om0
+    Ode0 = cosmology.Ode0
+    dt_dz = 1 / H0 / (1 + z) / np.sqrt(Ode0 + Om0 * (1 + z)**3)  # in Gyr per unit redshift
+    dt_dz = dt_dz.to("yr").value  # convert to years
+
+    return cosmic_SFR(z, a, b, c, d) * dt_dz
+
+
+def cosmic_SFR_integrated(z, a, b, c, d):
+    return quad(cosmic_SFR_dt_dz, 0, z, args=(a, b, c, d))[0]
+
+
+def AplusB_cosmicSFH(z, x):
+    """ A + B model with cosmic star formation history """
+    # Currently using values from Dilday 2008 but should be updated.
+    a = 0.0118
+    b = 0.08
+    c = 3.3
+    d = 5.2
+
+    A,B = x
+
+    rho_dot_evaluated = cosmic_SFR(z, a, b, c, d)
+    vec_rho_integrated = np.vectorize(cosmic_SFR_integrated)
+    rho_integrated_evaluated = vec_rho_integrated(z, a, b, c, d)
+    return A * rho_integrated_evaluated + B * rho_dot_evaluated
 
 
 def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None, rate_params=None,
@@ -224,3 +289,4 @@ def chi2_to_sigma(chi2_diff, dof):
 
     sigma = np.sqrt(2) * erfinv(1 - 2 * p_value)
     return sigma
+
