@@ -13,11 +13,58 @@ cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 class SN_dataset():
     """A class to hold a dataset of supernovae for one survey and type."""
-    def __init__(self, paths, sntype, data_name, zcol=None, true_z_col=None, cuts=None, sntypecol=None):
+    def __init__(self, paths, sntype, data_name, zcol=None, true_z_col=None, sntypecol=None, survey_dict=None):
         self.data_name = data_name
         logging.debug(f"Initializing SN_dataset for {data_name} with paths: {paths}")
         if not isinstance(paths, list):
             paths = [paths]
+
+        #Survey dict represents all the information valid for 1 survey. Z_bins, cuts, etc.
+        #Dataset dict represents all the information valid for 1 of the datasets within that survey.
+        # For instance, the redshift column name for that file.
+        if survey_dict is not None:
+            # Either DUMP, SIM, or DATA should be in the data name. Extract the correct one.
+            possible_prefixes = ["DUMP", "SIM", "DATA"]
+            possible_extensions = ["_ALL", "_IA", "_CC"]
+            possible_types = [f"{p}{e}" for p in possible_prefixes for e in possible_extensions]
+            type_in_name = [t for t in possible_types if t in data_name]
+            if len(type_in_name) == 0:
+                raise ValueError(f"Couldn't find any of {possible_types} in data_name {data_name} to determine dataset type!")
+            elif len(type_in_name) > 1:
+                raise ValueError(f"Found multiple of {possible_types} in data_name {data_name}! Can't determine dataset type. Found: {type_in_name}")
+            else:
+                type_in_name = type_in_name[0]
+
+            # Now that we have the type, determine the corresponding dataset dict.
+            corresponding_key = [k for k in survey_dict.keys() if type_in_name in k]
+            if len(corresponding_key) == 0:
+                raise ValueError(f"Couldn't find a key in survey_dict with {type_in_name} in it for data_name {data_name}! Survey dict keys: {survey_dict.keys()}")
+            elif len(corresponding_key) > 1:
+                raise ValueError(f"Found multiple keys in survey_dict with {type_in_name} in it for data_name {data_name}! Can't determine which to use. Found: {corresponding_key}")
+            else:
+                corresponding_key = corresponding_key[0]
+
+            dataset_dict = survey_dict[corresponding_key]
+        else:
+            dataset_dict = None
+
+        if zcol is not None and dataset_dict is not None:
+            raise ValueError("Cannot specify zcol both in config file and as a column in the dataset! Please choose one or the other.")
+        elif dataset_dict is not None:
+            zcol = dataset_dict.get("ZCOL", None)
+
+        if true_z_col is not None and dataset_dict is not None:
+            raise ValueError("Cannot specify true_z_col both in config file and as a column in the dataset! Please choose one or the other.")
+        elif dataset_dict is not None:
+            true_z_col = dataset_dict.get("TRUEZCOL", None)
+
+        if sntypecol is not None and dataset_dict is not None:
+            raise ValueError("Cannot specify sntypecol both in config file and as a column in the dataset! Please choose one or the other.")
+        elif dataset_dict is not None:
+            sntypecol = dataset_dict.get("SNTYPECOL", None)
+
+        cuts = survey_dict.get("CUTS", None) if survey_dict is not None else None
+        subsets = survey_dict.get("SUBSET", None) if survey_dict is not None else None
 
         # Initialize these here so they exist. If z_col fails because it is None, it is likely due to this
         # never being set.
@@ -29,9 +76,16 @@ class SN_dataset():
         for path in paths:
             if path is None:
                 continue
+            logging.debug(f"Setting self._true_z_col to {true_z_col} in dataset {data_name}")
             self._true_z_col = true_z_col
-            self.determine_needed_columns(path, zcol)
-            potential_cols = [self.z_col, self.scone_col, self._true_z_col] # Include redshift and scone columns
+            submitted_subset_cols = subsets.keys() if subsets is not None else None
+            self.actual_subset_cols = self.determine_needed_columns(path, zcol, subset_cols=submitted_subset_cols)
+            # This is the actual subset cols determined for this file. It may be different from the requested subset
+            # cols if the names don't match.
+            potential_cols = self.actual_subset_cols.copy() if self.actual_subset_cols is not None else []
+             # Start with the subset cols, since those are definitely needed if they exist.
+            potential_cols.extend([self.z_col, self.scone_col, self._true_z_col]) # Include redshift and scone columns
+
             if "DUMP" not in data_name: # If this is a dump dataset, cuts aren't applied.
                 potential_cols.extend(list(cuts.keys()) if cuts is not None else []) # Need to get the cols being cut on
 
@@ -52,6 +106,12 @@ class SN_dataset():
             df = self.open_dataset(path, usecols=cols)
             if "SIM" in data_name and sntype == "CC" and sntypecol != "TYPE":
                 df["TYPE"] = df[sntypecol]
+
+            # This way the later code doesn't need to worry about what the actual column names were, it can
+            # just use the user submitted names.
+            if submitted_subset_cols is not None:
+                for col_sub, col_actual in zip(submitted_subset_cols, self.actual_subset_cols):
+                    df = df.rename(columns={col_actual: col_sub})
 
             self.sntype = sntype
             if self.sntype not in ["IA", "CC", "all"]:
@@ -115,7 +175,7 @@ class SN_dataset():
     def prob_scone(self):
         """Return the classification probabilities from the SCONE classifier."""
         if self.scone_col is None:
-            raise ValueError("No valid prob_scone column!")
+            raise ValueError(f"No valid prob_scone column in dataset {self.data_name}!")
         return self.df[self.scone_col]
 
     def combine_with(self, dataset, newtype, data_name=None):
@@ -195,7 +255,7 @@ class SN_dataset():
 
         return dataframe
 
-    def determine_needed_columns(self, path, zcol):
+    def determine_needed_columns(self, path, zcol, subset_cols = None):
         logger.debug(f"Determining needed columns for {self.data_name} using file {path}")
         logger.debug(f"Specified zcol: {zcol}")
         # Only load the columns needed. This is important for memory management, especially for large datasets.
@@ -244,6 +304,7 @@ class SN_dataset():
                 # No SCONE column in this file; leave self.scone_col as None for now.
                 self.scone_col = None
             elif len(scone_col) > 1:
+
                 raise ValueError(
                     f"Multiple valid SCONE columns found in {self.data_name}! "
                     f"Which do I use? I found: {scone_col}"
@@ -272,8 +333,9 @@ class SN_dataset():
                         f"Inconsistent SCONE probability column across files for {self.data_name}: "
                         f"previous files used '{existing_scone_col}', but file {path} has '{current_scone_col}'."
                     )
-
+        logging.debug(f"Determined scone col for {self.data_name}: {self.scone_col}")
         if self.data_name is not None and "DATA" not in self.data_name:
+            # If it's not real data, it should  have a true z column. Try to find it if it isn't specified.
             if self._true_z_col is None:
                 possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
                 cols_in_df = [col for col in possible_true_z_cols if
@@ -284,6 +346,23 @@ class SN_dataset():
                 elif len(cols_in_df) == 1:
                     self._true_z_col = cols_in_df[0]
                     logging.info(f"Auto-setting true z col for {self.data_name} to {cols_in_df[0]}")
+
+        # Sometimes the columns used for subsetting have different names in different datasets. Like PKMJD and
+        # SIM_PKMJD. This checks for close matches.
+        all_good_subset_cols = []
+        if subset_cols is not None:
+            for scol in subset_cols:
+                potential_cols = [col for col in all_cols if scol in col]
+                if len(potential_cols) == 0:
+                    raise ValueError(f"Couldn't find any column with {scol} in it for subsetting in {self.data_name}! Available columns: {all_cols}")
+                elif len(potential_cols) > 1:
+                    raise ValueError(f"Found multiple columns with {scol} in it for subsetting in {self.data_name}! Which do I use? Found: {potential_cols}")
+                else:
+                    all_good_subset_cols.append(potential_cols[0])
+            logging.debug(f"Determined subset columns for {self.data_name}: {all_good_subset_cols}")
+            return all_good_subset_cols
+        else:
+            return []
 
     def split_into_IA_and_CC(self, sntype_col, ia_vals):
         """ Split the Dataset in two, returning two new SN_datasets. Only works for datasets with a valid sntypecol."""

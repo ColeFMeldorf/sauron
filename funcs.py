@@ -13,7 +13,7 @@ from scipy.integrate import quad
 logger = logging.getLogger(__name__)
 
 
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0):
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
@@ -33,6 +33,16 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
 
     # This is the X^2 contribution for each z bin. It has ALREADY been squared.
     # This is what scipy.optimize.minimize needs.
+
+    if debug:
+        logger.debug(f"Ei: {Ei}")
+        logger.debug(f"var_Ei: {var_Ei}")
+        logger.debug(f"var_Si: {var_Si}")
+        logger.debug(f"resid_vector: {resid_vector}")
+        logger.debug(f"cov_stat: {cov_stat}")
+        logger.debug(f"cov_sys: {cov_sys}")
+        logger.debug(f"cov: {cov}")
+        logger.debug(f"Chi-squared: {chi_squared}")
 
     return chi_squared
 
@@ -105,7 +115,10 @@ def power_law(z, x):
 
 
 def turnover_power_law(z, x):
-    alpha1, beta1, alpha2, beta2 = x
+    try:
+        alpha1, beta1, alpha2, beta2 = x
+    except ValueError:
+        raise ValueError("Expected 4 parameters for turnover_power_law: alpha1, beta1, alpha2, beta2, got {}".format(x))
     z_turn = 1
     fJ = np.where(z < z_turn,
                   alpha1 * (1 + z)**beta1,
@@ -120,6 +133,11 @@ def turnover_power_law_forced_cty(z, x):
                   alpha1 * (1 + z)**beta1,
                   alpha2 * (1 + z)**beta2)
     return fJ
+
+
+def non_parametric_histogram(z, x):
+    return x
+
 
 import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
