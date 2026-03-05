@@ -168,6 +168,24 @@ class sauron_runner():
         survey : str
             Name of the survey.
         """
+
+        raw_f_norm = args_dict.get("F_NORM", None)
+        if raw_f_norm is None:
+            self.fit_args_dict["f_norm"][survey] = None
+        else:
+            try:
+                f_norm = float(raw_f_norm)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float; got {raw_f_norm!r}."
+                )
+            if f_norm <= 0:
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float greater than zero; got {f_norm!r}."
+                )
+            self.fit_args_dict["f_norm"][survey] = f_norm
+
+
         self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
         logging.debug(f"Setting CC_ARE_SEPARATE for {survey} to {args_dict.get('CC_ARE_SEPARATE', None)}")
         self.fit_args_dict["z_bins"][survey] = np.arange(0.0, 1.4, 0.1)
@@ -266,12 +284,10 @@ class sauron_runner():
                                                            survey_dict=survey_dict)
                     logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
 
-
             if self.fit_args_dict["cc_are_sep"].get(survey) is None:
                 self.fit_args_dict["cc_are_sep"][survey] = True
                 logging.warning("CC_ARE_SEPARATE not specified in config file for "f"{survey}. Defaulting to True.")
             # Combine IA and CC files if they are separate
-
 
             if self.fit_args_dict["cc_are_sep"][survey]:
 
@@ -343,8 +359,18 @@ class sauron_runner():
                                   f"{datasets[f'{survey}_DATA_IA_'+str(i+1)].z_counts(
                                     self.fit_args_dict['z_bins'][survey])}")
 
+
         self.datasets = datasets
         self.surveys = surveys
+
+        for survey in surveys:
+            logging.debug(f"After unpacking, the f_norm for {survey}: {self.fit_args_dict['f_norm'][survey]}")
+            if self.fit_args_dict["f_norm"][survey] is None:
+                f_norm_guess = self.calculate_f_norm(survey, index=1)
+                logging.debug(f"The f_norm is probably close to this number {f_norm_guess}, "
+                "which is just the sum of the DATA_* counts divided by the sum of the SIM_* counts "
+                "for the first dataset. Your f_norm is probably then nearest rational fraction to this number.")
+                raise ValueError(f"F_NORM must be specified in FIT_OPTIONS for {survey} in config file {self.args.config}.")
 
         # for d in datasets:
         #     counts = datasets[d].z_counts(self.fit_args_dict['z_bins'][survey])
@@ -444,7 +470,8 @@ class sauron_runner():
         # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
             n_data = np.concatenate([self.fit_args_dict['n_data'][s][index] for s in survey])
-            f_norm = self.fit_args_dict['f_norm'][s][index]
+            f_norm = self.fit_args_dict['f_norm'][s]
+            logging.debug(f"Using f_norm {f_norm} for survey {s}")
             f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
         else:
             n_data = np.array([])
@@ -453,7 +480,7 @@ class sauron_runner():
                 survey_index = self.fit_args_dict[f"{s}_combined_indices"][index-1]
                 logging.debug(f"Loading dataset {survey_index} for survey {s} to combine for combined fit.")
                 n_data = np.concatenate([n_data, self.fit_args_dict['n_data'][s][survey_index]])
-                f_norm = self.fit_args_dict['f_norm'][s][survey_index]
+                f_norm = self.fit_args_dict['f_norm'][s]
                 f_norms.extend(np.repeat(f_norm, len(self.fit_args_dict['z_bins'][s])-1))
 
         f_norms = np.array(f_norms)
@@ -561,20 +588,11 @@ class sauron_runner():
                     )
             fit_params = result.x
 
-            logging.debug(f"Least Squares Result: {fit_params}")
+            logging.debug(f"Minimize Result: {fit_params}")
 
-            # This calculation of residual variance is only valid if minimizing sum of squares
-
-            #def errFit(hess_inv, resVariance):
-            #    return np.sqrt(np.diag(hess_inv * resVariance))
-
-            residual_variance = result.fun / (N - n)
-            #dFit = errFit(result.hess_inv, residual_variance)
-
-            cov_x = 2 * result.hess_inv  # the factor of 2 and residual variance removal is new.
-            logging.debug(f"Standard errors Stack Overflow: {np.sqrt(np.diag(cov_x))}")
-            # * 2
-            #* residual_variance
+            # This calculation of cov matrix is only valid if minimizing chi2
+            cov_x = result.hess_inv * 2
+            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
             chi_squared = result.fun
             logging.debug(f"residual variance minimize: {residual_variance}")
             logging.debug(f"chi_squared minimize: {chi_squared}")
@@ -708,7 +726,6 @@ class sauron_runner():
         surveys = self.results.keys()
         for survey in surveys:
             results = self.results[survey]
-            logging.debug(f"Results for {survey}: {len(results)}")
             results = [results] if not isinstance(results, list) else results
             for i, result in enumerate(results):
                 output_df = pd.concat([output_df, result], ignore_index=True)
@@ -1096,33 +1113,25 @@ class sauron_runner():
         index : int
             Dataset index.
         """
-        z_bins = self.fit_args_dict['z_bins'][survey]
-
-        if self.fit_args_dict["f_norm"].get(survey, None) is None:
-            self.fit_args_dict["f_norm"][survey] = []
-            self.fit_args_dict["f_norm"][survey].append("placeholder")
-            # This is because the indexes are 1-indexed.
 
         if self.datasets.get(f"{survey}_DATA_IA_{index}") is not None or self.args.cheat_cc:
             logging.debug("Calculating f_norm using DATA_IA dataset.")
-            f_norm = np.sum(self.datasets[f"{survey}_DATA_IA_{index}"].z_counts(z_bins)) / \
-                     np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+            f_norm = self.datasets[f"{survey}_DATA_IA_{index}"].total_counts / \
+                self.datasets[f"{survey}_SIM_IA"].total_counts
+
+        elif self.datasets.get(f"{survey}_DATA_ALL_{index}") is not None:
+            logging.debug("Calculating f_norm using DATA_ALL dataset.")
+            f_norm = self.datasets[f"{survey}_DATA_ALL_{index}"].total_counts / \
+                self.datasets[f"{survey}_SIM_ALL"].total_counts
 
         else:
 
             logging.debug("Couldn't find DATA_IA dataset for f_norm calculation so I am using inferred Ia counts.")
             num_Ia = self.fit_args_dict["n_data"][survey][index]
             f_norm = np.sum(num_Ia) / \
-                    np.sum(self.datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
+                    self.datasets[f"{survey}_SIM_IA"].total_counts
 
-            # logging.debug("Using all SNe for f_norm calculation.")
-            # f_norm = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)) / \
-            #      np.sum(self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins))
-
-        f_norm = 0.02
-        #logging.debug(f"Calculated f_norm to be {f_norm}, but I am hardcoding it to 0.1 for now.")
-        self.fit_args_dict['f_norm'][survey].append(f_norm)
-        logging.debug(f"Calculated f_norm to be {f_norm}")
+        return f_norm
 
     def add_results(self, survey, index=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
@@ -1134,7 +1143,6 @@ class sauron_runner():
             Dataset index.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
-        logging.debug(f"Adding results for survey {survey}, index {index}, n_datasets {n_datasets}")
         # This needs to be updated for more parameters later
         if n_datasets > 1:
             survey_name = survey + f"_dataset_{index}"
