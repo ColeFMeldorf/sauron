@@ -96,6 +96,7 @@ default_x0_dictionary = {
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
     "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
+
 }
 
 default_parameter_name_dictionary = {
@@ -105,6 +106,7 @@ default_parameter_name_dictionary = {
 
 default_bounds_dictionary = {
     "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
+    "non_parameteric_histogram": (0, np.inf),  # each bin rate ≥ 0
 }
 
 
@@ -505,6 +507,7 @@ class sauron_runner():
         else:
             null_counts = np.concatenate([self.fit_args_dict['null_counts'][s] for s in survey])
             survey = "combined"
+        logging.debug(f"NULL COUNTS FOR {survey}: {null_counts}")
         self.fit_args_dict['null_counts'][survey] = null_counts
 
         # Note this only allows for individual surveys or all, no subsets. Fix this later.
@@ -525,7 +528,7 @@ class sauron_runner():
 
 
         if "non_parametric" in self.rate_function_name:
-            self.x0 = np.zeros_like(z_centers) + 1e-8
+            self.x0 = np.ones_like(z_centers) * 5e-5
             #self.x0[np.where(z_centers < 1)] = 2.27e-5 * (1 + z_centers[np.where(z_centers < 1)])**1.7
             #self.x0[np.where(z_centers >= 1)] = 7.5e-5 * (1 + z_centers[np.where(z_centers >= 1)])**(-0.1)
             # Start at Fromhaier / Strolger Rate for non-parametric fit, but this should be changed to be more flexible.
@@ -602,9 +605,9 @@ class sauron_runner():
             chi_squared = result.fun
             logging.debug(f"chi_squared minimize: {chi_squared}")
 
-            logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
-            test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
-            logging.debug(f"Test chi_squared: {test_chi} ")
+            # logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
+            # test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
+            # logging.debug(f"Test chi_squared: {test_chi} ")
 
 
         elif fit_method == "curve_fit":
@@ -967,9 +970,9 @@ class sauron_runner():
                 ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
                              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
                              fmt='o', label=f" {survey} Data", ms=5)
-                # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                #              fmt='o', label=f" {survey} Initial Prediction ", ms=5)
+                ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
+                             yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
+                             fmt='o', label=f" {survey} Initial Prediction ", ms=5)
 
                 ####
                 # Add 1 sigma confidence region
@@ -1124,15 +1127,16 @@ class sauron_runner():
             f_norm = self.datasets[f"{survey}_DATA_IA_{index}"].total_counts / \
                 self.datasets[f"{survey}_SIM_IA"].total_counts
 
-        elif self.datasets.get(f"{survey}_DATA_ALL_{index}") is not None:
-            logging.debug("Calculating f_norm using DATA_ALL dataset.")
-            f_norm = self.datasets[f"{survey}_DATA_ALL_{index}"].total_counts / \
-                self.datasets[f"{survey}_SIM_ALL"].total_counts
+        # elif self.datasets.get(f"{survey}_DATA_ALL_{index}") is not None:
+        #     logging.debug("Calculating f_norm using DATA_ALL dataset.")
+        #     f_norm = self.datasets[f"{survey}_DATA_ALL_{index}"].total_counts / \
+        #         self.datasets[f"{survey}_SIM_ALL"].total_counts
 
         else:
 
             logging.debug("Couldn't find DATA_IA dataset for f_norm calculation so I am using inferred Ia counts.")
-            num_Ia = self.fit_args_dict["n_data"][survey][index]
+            #num_Ia = self.fit_args_dict["n_data"][survey][index]
+            num_Ia = np.sum(self.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(self.fit_args_dict['z_bins'][survey], prob_thresh=0.5))
             f_norm = np.sum(num_Ia) / \
                     self.datasets[f"{survey}_SIM_IA"].total_counts
 

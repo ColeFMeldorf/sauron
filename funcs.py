@@ -119,13 +119,14 @@ def turnover_power_law(z, x):
         alpha1, beta1, alpha2, beta2 = x
     except ValueError:
         raise ValueError("Expected 4 parameters for turnover_power_law: alpha1, beta1, alpha2, beta2, got {}".format(x))
-    z_turn = 1
+    z_turn = 1.0
     fJ = np.where(z < z_turn,
                   alpha1 * (1 + z)**beta1,
                   alpha2 * (1 + z)**beta2)
     return fJ
 
 def turnover_power_law_forced_cty(z, x):
+    raise NotImplementedError("This function is not currently implemented. It should be similar to turnover_power_law but with alpha2 defined in terms of alpha1, beta1, and beta2 to ensure continuity at z_turn.")
     alpha1, beta1, beta2 = x
     z_turn = 1
     alpha2 = alpha1 * (1 + z_turn)**(beta1 - beta2) # Ensure continuity at z_turn
@@ -184,6 +185,8 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
     # Method 1, stupid method, divide N_gen by true rate.
     if all(v is not None for v in [N_gen, true_rate_function, rate_params]):
         fJ = true_rate_function(z_centers, rate_params)
+        logging.debug(f"Ngen in calc null counts {N_gen}")
+        logging.debug(f"fJ in calc null counts {fJ}")
         total_counts = N_gen / fJ
         return total_counts
 
