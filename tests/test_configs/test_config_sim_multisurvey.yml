@@ -75,11 +75,11 @@ ROMAN:
     SNTYPECOL: SNTYPE
     IA_VALS:
       - 10
-    PATH: /home/colefmeldorf/sauron/CFM_ROTAC_PZ_new.csv
+    PATH: /home/colefmeldorf/sauron/misc_datafiles/CFM_ROTAC_PZ_new.csv
     ZCOL: REDSHIFT_FINAL
     TRUEZCOL: SIM_REDSHIFT_CMB
   DATA_ALL:
-    PATH: /home/colefmeldorf/sauron/CFM_ROTAC_PZ_new.csv
+    PATH: /home/colefmeldorf/sauron/misc_datafiles/CFM_ROTAC_PZ_new.csv
     ZCOL: REDSHIFT_FINAL
     SNTYPECOL: SNTYPE
     IA_VALS:

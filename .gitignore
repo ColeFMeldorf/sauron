@@ -211,3 +211,5 @@ __marimo__/
 *output*
 *ipynb
 *old*
+sauron_out/
+misc_datafiles/
