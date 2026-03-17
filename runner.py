@@ -301,7 +301,7 @@ class sauron_runner():
                     paths = [paths] if not isinstance(paths, list) else paths  # Make it a list for later
                     paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
                     if len(paths) == 0:
-                        raise FileNotFoundError(f"No files found for {survey} {file} with path {survey_dict[file]['PATH']}")
+                        raise FileNotFoundError(f"No files found for {survey} {file} with path {survey_dict[file]['PATH']} using config file {self.args.config}.")
                 elif survey_dict[file].get('DIR') is not None:
                     paths = []
                     for dir in survey_dict[file]['DIR']:
