@@ -114,11 +114,11 @@ ROMAN:
     IA_VALS:
       - 10
     #PATH: /home/colefmeldorf/sauron/cfm_roman_data_IA_ONLY.csv
-    PATH: /home/colefmeldorf/sauron/CFM_ROTAC_BCOR_RERUN.csv
+    PATH: /home/colefmeldorf/sauron/misc_datafiles/CFM_ROTAC_BCOR_RERUN.csv
     ZCOL: REDSHIFT_FINAL
     TRUEZCOL: SIM_REDSHIFT_CMB
   DATA_ALL:
     #PATH: /home/colefmeldorf/sauron/cfm_roman_data_IA_ONLY.csv
-    PATH: /home/colefmeldorf/sauron/cfm_roman_data.csv
+    PATH: /home/colefmeldorf/sauron/misc_datafiles/cfm_roman_data.csv
     ZCOL: REDSHIFT_FINAL
 

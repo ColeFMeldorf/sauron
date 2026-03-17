@@ -1,0 +1,48 @@
+## Structure: outermost layer is survey (e.g., DES, LSST, ROMAN, etc.) Inner layer indicates data file type (e.g., DUMP, SIM, DATA).
+# The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
+
+FIT_OPTIONS:
+  RATE_FUNCTION: non_parametric_histogram
+  #X0: 2.8e-5, 1.01, 4e-4, -2.12
+
+HOURGLASS:
+  FIT_OPTIONS:
+    RATE_FUNC: turnover_power_law
+    RATE_PARAMS: 2.27E-5, 1.7, 7.5E-5, -0.1
+    Z_BINS: 7 # 10
+    MIN_Z: 0.4 # 0.4
+    MAX_Z: 1.8 # 2.0
+    CC_ARE_SEPARATE: false
+    F_NORM: 0.1
+
+
+  CUTS:
+    x1: -3, 3
+    c: -0.3, 0.3
+    FITPROB: 0.001, 1000
+
+
+  SUBSET:
+  #   #PEAKMJD: 0, 62250  #61650 # 61867
+  #   #PEAKMJD: 62100, 62500
+    PEAKMJD: 0,  62250 #61867 # #
+
+  DUMP_ALL:
+    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM_HOURGLASS2/1_SIM/DENOMINATOR_SIM/PIP_CFM_HOURGLASS2_DENOMINATOR_SIM/PIP_CFM_HOURGLASS2_DENOMINATOR_SIM.DUMP.gz
+    ZCOL: ZCMB
+    SNTYPECOL: GENTYPE
+    IA_VALS:
+      - 10
+    # Rick said to always use zHD
+  SIM_ALL:
+    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM_HOURGLASS2/5_MERGE/MERGE_FIT_DENOM_DENOMINATOR_SIM/output/PIP_CFM_HOURGLASS2_DENOMINATOR_SIM/FITOPT000.FITRES.gz
+    ZCOL: zPHOT
+    SNTYPECOL: SIM_GENTYPE
+    IA_VALS:
+      - 10
+  DATA_ALL:
+    PATH: /scratch/midway2/rkessler/PIPPIN_OUTPUT/CFM_HRGLASS_RICKLOW/5_MERGE/MERGE_FIT_TRANSIENTS_DBLPWRLAW_TRANSIENTS_DBLPWRLAW/output/PIP_CFM_HRGLASS_RICKLOW_TRANSIENTS_DBLPWRLAW-00*/FITOPT000.FITRES.gz
+    ZCOL: zPHOT
+    SNTYPECOL: SIM_GENTYPE
+    IA_VALS:
+      - 10

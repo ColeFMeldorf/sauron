@@ -38,11 +38,11 @@ logger.setLevel(logging.DEBUG)
 def test_regression_specz():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
     """
-    outpath = pathlib.Path(__file__).parent / "test_regnopz_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_regnopz_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -53,7 +53,7 @@ def test_regression_specz():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regnopz_regression.csv")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regnopz_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
@@ -63,11 +63,11 @@ def test_regression_pz_5datasets():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
        This also uses 5 datasets rather than 1 to test that functionality.
     """
-    outpath = pathlib.Path(__file__).parent / "test_regpz_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_regpz_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_5pz.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -78,7 +78,7 @@ def test_regression_pz_5datasets():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_regression.csv")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regpz_regression.csv")
     for i, col in enumerate(regression.columns):
         if isinstance(regression[col][0], str):
             continue
@@ -90,11 +90,11 @@ def test_perfect_recovery():
     """In this test, we use the simulation as data (eliminating shot noise) and skip CC decontam.
     Therefore, we should get perfect recovery, i.e. (1, 0) with a chi squared of 0.
     """
-    outpath = pathlib.Path(__file__).parent / "test_perfect_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_perfect_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_sim.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_sim.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov",
            "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
@@ -115,11 +115,11 @@ def test_perfect_recovery_pz():
     """In this test, we use the simulation as data (eliminating shot noise) and skip CC decontam.
     Therefore, we should get perfect recovery, i.e. (1, 0) with a chi squared of 0. This test includes photo_zs.
     """
-    outpath = pathlib.Path(__file__).parent / "test_perfect_output_pz.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_perfect_output_pz.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_pz.yml"
     cmd = ["python", str(sauron_path), str(config_path), "--cheat_cc", "-o", str(outpath), "--no-sys_cov",
            "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
@@ -139,7 +139,7 @@ def test_perfect_recovery_pz():
 # Currently broken, pending fix
 def test_calc_cov_term():
     args = SimpleNamespace()
-    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_5pz.yml"
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
@@ -149,7 +149,7 @@ def test_calc_cov_term():
     cov_mat = calculate_covariance_matrix_term(runner.calculate_CC_contamination, [0.45, 0.5, 0.55], runner.z_bins, 1,
                                                survey)
 
-    regression_cov = np.load(pathlib.Path(__file__).parent / "test_cov_term.npy")
+    regression_cov = np.load(pathlib.Path(__file__).parent / "test_regression/test_cov_term.npy")
 
     plot = False
     if plot:
@@ -160,7 +160,7 @@ def test_calc_cov_term():
         plt.subplot(1, 2, 2)
         plt.imshow(regression_cov, origin='lower')
         plt.colorbar()
-        plt.savefig(pathlib.Path(__file__).parent / "check_test_cov_term.png")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/check_test_cov_term.png")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
 
 
@@ -193,7 +193,7 @@ def test_rescale_CC_for_cov():
                                                      runner.z_bins, PROB_THRESH,
                                                      1, survey, runner.datasets,
                                                      runner.z_bins, False)
-    regression_cov = np.load(pathlib.Path(__file__).parent / "test_rescale_cov_term.npy")
+    regression_cov = np.load(pathlib.Path(__file__).parent / "test_regression/test_rescale_cov_term.npy")
 
     logger.debug(cov_rate_norm)
     plot = False
@@ -205,13 +205,13 @@ def test_rescale_CC_for_cov():
         plt.subplot(1, 2, 2)
         plt.imshow(regression_cov, origin='lower')
         plt.colorbar()
-        plt.savefig(pathlib.Path(__file__).parent / "test_rescale_cov_term.png")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_rescale_cov_term.png")
     np.testing.assert_allclose(cov_rate_norm, regression_cov, atol=1e-7)
 
 
 def test_calc_effij():
     args = SimpleNamespace()
-    config_path = pathlib.Path(__file__).parent / "test_config.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config.yml"
     args.config = config_path
     args.cheat_cc = False
     args.debug = False
@@ -234,20 +234,20 @@ def test_calc_effij():
             if i != j:
                 np.testing.assert_allclose(eff_ij[i, j], 0.0, atol=1e-2)
 
-    config_path = pathlib.Path(__file__).parent / "test_config_pz.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_pz.yml"
     args.config = config_path
     runner = sauron_runner(args)
     runner.unpack_dataframes()
     survey = "DES"
     eff_ij = runner.calculate_transfer_matrix(survey)
     eff_ij = eff_ij[1:-1, :]
-    regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_effij_regression.npy")
+    regression_eff_ij = np.load(pathlib.Path(__file__).parent / "test_regression/test_effij_regression.npy")
     np.testing.assert_allclose(eff_ij, regression_eff_ij, atol=1e-7)
 
 
 def test_chi():
     args = SimpleNamespace()
-    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_5pz.yml"
     args.config = config_path
     args.cheat_cc = False
     args.debug = False
@@ -277,11 +277,11 @@ def test_regression_pz_5datasets_covariance():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
        This also uses 5 datasets rather than 1 to test that functionality.
     """
-    outpath = pathlib.Path(__file__).parent / "test_regpz_sys_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_regpz_sys_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_5pz.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -292,7 +292,7 @@ def test_regression_pz_5datasets_covariance():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regpz_sys_regression.csv")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regpz_sys_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-3 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], atol=3e-4)
@@ -304,11 +304,11 @@ def test_coverage_no_sys():
     """In this test we check the coverage properties of SAURON when there are no systematics.
         We should recover the truth (1, 0) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
     """
-    outpath = pathlib.Path(__file__).parent / "test_coverage_nosys_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_coverage_nosys_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov', "--prob_thresh", "0.5"]
     # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
@@ -363,7 +363,7 @@ def test_coverage_no_sys():
         plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
         plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
         plt.xlabel("Chi-squared statistic")
-        plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_hist.png")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_nosys_hist.png")
         plt.clf()
 
         plt.errorbar(df["alpha"], df["beta"], xerr=df["alpha_error"], yerr=df["beta_error"], fmt='o', alpha=0.7)
@@ -390,7 +390,7 @@ def test_coverage_no_sys():
         chivals = np.einsum('...i,ij,...j->...', pos, np.linalg.inv(mean_cov), pos)
 
         plt.contour(X, Y, chivals, levels=[2.3, 6], colors=['red', 'black'], linestyles=['dashed', 'dashed'])
-        plt.savefig(pathlib.Path(__file__).parent / "test_coverage_nosys_alpha_beta.png")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_nosys_alpha_beta.png")
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
@@ -418,11 +418,11 @@ def test_coverage_with_sys():
     """In this test we check the coverage properties of SAURON when there are no systematics.
         We should recover the truth (2.27e-5, 1.7) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
     """
-    outpath = pathlib.Path(__file__).parent / "test_coverage_sys_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_coverage_sys_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -463,7 +463,7 @@ def test_coverage_with_sys():
         plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
         plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
         plt.xlabel("Chi-squared statistic")
-        plt.savefig(pathlib.Path(__file__).parent / "test_coverage_sys_hist.png")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist.png")
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
@@ -498,11 +498,11 @@ def test_perfect_recovery_multisurvey():
     Therefore, we should get perfect recovery, i.e. (2.27e-5, 1.7) with a chi squared of 0.
     This time, we do DES, LOWZ and ROMAN together.
     """
-    outpath = pathlib.Path(__file__).parent / "test_perfect_output_multisurvey.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_perfect_output_multisurvey.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_sim_multisurvey.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_sim_multisurvey.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -522,11 +522,11 @@ def test_regression_multisurvey():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
     This time, we do DES, LOWZ and ROMAN together.
     """
-    outpath = pathlib.Path(__file__).parent / "test_regmultisurvey_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_regmultisurvey_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_multisurvey.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_multisurvey.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -537,7 +537,7 @@ def test_regression_multisurvey():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regmultisurvey_regression.csv")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regmultisurvey_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
@@ -546,7 +546,7 @@ def test_regression_multisurvey():
 def test_apply_cut():
     """Test that apply_cuts method in sauron.py works as expected."""
     args = SimpleNamespace()
-    config_path = pathlib.Path(__file__).parent / "test_config_cuts.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_cuts.yml"
     args.config = config_path
     args.cheat_cc = False
     runner = sauron_runner(args)
@@ -584,11 +584,11 @@ def test_apply_cut():
 
 def test_des_data_regression():
     """Regression test on real DES data with photo-z to ensure Sauron output is unchanged."""
-    outpath = pathlib.Path(__file__).parent / "test_desdatareg_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_desdatareg_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "./config_des_data_test.yml"
+    config_path = pathlib.Path(__file__).parent / "./test_configs/config_des_data_test.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -599,14 +599,14 @@ def test_des_data_regression():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_desdatareg_regression.csv")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_desdatareg_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
 
 
 def test_cc_decontam():
-    config_path = pathlib.Path(__file__).parent / "test_config_coverage.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage.yml"
     args = SimpleNamespace()
     args.config = config_path
     args.cheat_cc = False
@@ -616,7 +616,6 @@ def test_cc_decontam():
     survey = "DES"
 
     PROB_THRESH = 0.5
-    logger.debug("successfully reran")
 
     pulls = []
 
@@ -627,7 +626,7 @@ def test_cc_decontam():
         index = i+1
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
         runner.fit_args_dict['z_bins'][survey] = runner.z_bins
-        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
         residual = n_true - n_calc
@@ -656,13 +655,13 @@ def test_cc_decontam():
         plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
         plt.xlabel('Redshift')
         plt.ylabel('CC Counts')
-        plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts.png")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts.png")
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
 
 
 def test_cc_decontam_small():
-    config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_5pz.yml"
     args = SimpleNamespace()
     args.config = config_path
     args.cheat_cc = False
@@ -709,10 +708,10 @@ def test_cc_decontam_small():
         plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH)*bias_cor, color = "k", lw= 3,ls = "--", label='Data All Counts Cut w/ BCor')
         plt.yscale("log")
         plt.legend()
-        plt.savefig(pathlib.Path(__file__).parent / f"aaaa_test_cc_decontam_simcounts_{index}_small.png")
+        plt.savefig(pathlib.Path(__file__).parent / f"test_plots/aaaa_test_cc_decontam_simcounts_{index}_small.png")
 
         runner.fit_args_dict['z_bins'][survey] = runner.z_bins
-        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
         n_CC = runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins)
@@ -743,7 +742,7 @@ def test_cc_decontam_small():
     plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
     plt.xlabel('Redshift')
     plt.ylabel('CC Counts')
-    plt.savefig(pathlib.Path(__file__).parent / "test_cc_decontam_counts_small.png")
+    plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts_small.png")
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
 
@@ -752,11 +751,11 @@ def test_regression_multisurvey_all_possible_combos():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
     This time, we do DES, LOWZ and ROMAN together. Now, we fit every possible combo of 
     """
-    outpath = pathlib.Path(__file__).parent / "test_regmultisurvey_more_output.csv"
+    outpath = pathlib.Path(__file__).parent / "test_output/test_regmultisurvey_more_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_config_multisurvey.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_multisurvey.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o",
            str(outpath), "--no-sys_cov", "--no-sanity-check", "--no-fit-only-one-combined"]
     result = subprocess.run(cmd, capture_output=False, text=True)
@@ -768,7 +767,7 @@ def test_regression_multisurvey_all_possible_combos():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regmultisurvey_more_regression.csv")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regmultisurvey_more_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)

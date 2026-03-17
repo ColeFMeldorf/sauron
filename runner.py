@@ -484,7 +484,9 @@ class sauron_runner():
             plt.title(f"Log Transfer Matrix for {survey}")
             plt.xlabel("Reconstructed Redshift")
             plt.ylabel("True Redshift")
-            plt.savefig(f"pub_transfer_matrix_{survey}.png")
+            path = f"plots/transfer_matrix_{survey}.png"
+            logging.debug(f"Saving transfer matrix plot to {path}")
+            plt.savefig(path)
 
         return eff_ij
 
@@ -891,7 +893,9 @@ class sauron_runner():
                     plt.axhline(0, color='k', linestyle='--', lw=1)
                     logging.debug(f"Calculated n_data after CC contamination: {n_data}")
                     plt.legend()
-                    plt.savefig(f"scone_decontamination_{survey}_dataset{index}.png")
+                    path = f"debug_plots/scone_decontamination_{survey}_dataset{index}.png"
+                    logging.debug(f"Saving scone decontamination plot to {path} ")
+                    plt.savefig(path)
             elif method == "scone_cut":
                 logging.debug("Performing just a scone cut for decontamination.")
                 logger.debug(f"Total counts without scone cut: {np.sum(datasets[f'{survey}_DATA_ALL_{index}'].z_counts(z_bins))}")
@@ -920,7 +924,9 @@ class sauron_runner():
                     plt.plot(n_sim_scone_cut/sim_norm, label="SIM ALL counts after scone cut")
                     logging.debug(f"Calculated n_data after scone cut decontamination: {n_data}")
                     plt.legend()
-                    plt.savefig(f"scone_cut_decontamination_{survey}_dataset{index}.png")
+                    path = f"debug_plots/scone_decontamination_{survey}_dataset{index}.png"
+                    logging.debug(f"Saving scone decontamination plot to {path} ")
+                    plt.savefig(path)
 
         else:
             if cheat:
@@ -1168,7 +1174,9 @@ class sauron_runner():
                     plt.title(f"Reduced Rate Norm Covariance Matrix for {survey}")
                     plt.xlabel("Redshift Bin")
                     plt.ylabel("Redshift Bin")
-                    plt.savefig(f"cov_sys_{survey}.png")
+                    path = f"plots/cov_sys_{survey}.png"
+                    logging.debug(f"Saving systematic covariance plot to {path}")
+                    plt.savefig(path)
             else:
                 cov_sys = None
             self.fit_args_dict['cov_sys'][survey] = cov_sys
@@ -1412,13 +1420,13 @@ class sauron_runner():
                 else:
                     plt.hist(data[zcol], bins=bins, alpha=1, label=labels[i], histtype='step', linewidth=2)
 
-
             plt.xlabel("Redshift")
             plt.yscale("log")
             plt.ylabel("Counts")
             plt.legend()
-            logging.debug(f"Saving sanity check plots to sanity_check_counts_{survey}.png ")
-            plt.savefig(f"sanity_check_counts_{survey}.png")
+            path = f"debug_plots/sanity_check_counts_{survey}.png"
+            logging.debug(f"Saving sanity check plots {path}")
+            plt.savefig(path)
 
             plt.clf()
             bins = np.linspace(0, 1, 20)
@@ -1435,7 +1443,9 @@ class sauron_runner():
             plt.ylabel("Counts")
             plt.yscale("log")
             plt.legend()
-            plt.savefig(f"sanity_check_scone_{survey}.png")
+            path = f"debug_plots/sanity_check_scone_{survey}.png"
+            logging.debug(f"Saving sanity check plots {path}")
+            plt.savefig(path)
 
         if any(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict['z_bins'][survey]) < self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict['z_bins'][survey])):
             raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
