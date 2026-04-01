@@ -577,7 +577,23 @@ class sauron_runner():
             #  This is just to make sure it starts at a reasonable place and doesn't diverge immediately.
 
         fJ_0 = self.rate_function(z_centers, self.x0)
+
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
+        logging.debug(f"x0_counts shape: {x0_counts.shape}")
+        logging.debug(f", null_counts shape: {null_counts.shape}")
+        logging.debug(f", eff_ij shape: {eff_ij.shape}")
+        logging.debug(f", f_norms shape: {f_norms.shape}")
+        logging.debug(f", fJ_0 shape: {fJ_0.shape}")
+
+        binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        logging.debug(f"binned_rate shape: {binned_rate.shape}")
+        logging.debug(f"binned_rate: {binned_rate}")
+
+        # This is only an approximation of the error, this needs to be rethought
+        self.final_counts[survey]["binned_rate_84"] = (n_data + np.sqrt(n_data)) / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        self.final_counts[survey]["binned_rate_16"] = (n_data - np.sqrt(n_data)) / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+
+
 
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
@@ -761,6 +777,8 @@ class sauron_runner():
 
         self.final_counts[survey]["predicted_counts"] = Ei
         self.final_counts[survey]["x0_counts"] = x0_counts
+        self.final_counts[survey]["binned_rate"] = binned_rate
+        self.final_counts[survey]["final_rate"] = fJ
         self.final_counts[survey]["observed_counts"] = n_data
         self.final_counts[survey]["predicted_counts_err"] = Ei_err
         self.final_counts[survey]["predicted_counts_16"] = Ei_16
@@ -1020,28 +1038,46 @@ class sauron_runner():
                 z_centers = np.array(self.fit_args_dict['z_centers'][survey])
 
                 #yerr=self.final_counts[survey]["predicted_counts_err"]
-                ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
-                             yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                             label=f" {survey} Sauron Prediction ", ms = 5)
-                ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
-                             yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
-                             fmt='o', label=f" {survey} Data", ms = 5)
+                # ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
+                #              yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
+                #              label=f" {survey} Sauron Prediction ", ms = 5)
+                # ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
+                #              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
+                #              fmt='o', label=f" {survey} Data", ms = 5)
                 # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
                 #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
                 #              fmt='o', label=f" {survey} Initial Prediction ", ms=5)
 
+                yerr = np.array([self.final_counts[survey]["binned_rate_84"] - self.final_counts[survey]["binned_rate"], \
+                    self.final_counts[survey]["binned_rate"] - self.final_counts[survey]["binned_rate_16"]])
+                ax1.errorbar(z_centers, self.final_counts[survey]["binned_rate"], yerr=yerr, fmt='o', label=f" {survey} Binned Rate ", ms=5)
+                z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
+                logging.debug(f"Overplotting with{self.final_counts[survey]["result"]} for {survey}")
+                rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
+                ax1.plot(z_centers_fine, rate_fine, label=f" {survey} Rate Function ")
+
+                #ax1.errorbar(z_centers, self.final_counts[survey]["final_rate"], fmt='o', label=f" {survey} Rate Function ", ms=5)
+
+
                 ####
                 # Add 1 sigma confidence region
-                Ei_16 = self.final_counts[survey]["predicted_counts_16"]
-                Ei_84 = self.final_counts[survey]["predicted_counts_84"]
-                ax1.fill_between(z_centers, Ei_16, Ei_84, color='gray', alpha=0.5, label="1 sigma confidence region")
+                # Ei_16 = self.final_counts[survey]["predicted_counts_16"]
+                # Ei_84 = self.final_counts[survey]["predicted_counts_84"]
+                # ax1.fill_between(z_centers, Ei_16, Ei_84, color='gray', alpha=0.5, label="1 sigma confidence region")
 
-                ax1.legend()
-                ax1.set_xlabel("Redshift")
-                ax1.set_ylabel("Counts")
-                ax1.set_yscale("log")
-                ax1.grid(True, which="both", ls="--", lw=0.5)
 
+                # ax1.set_xlabel("Redshift")
+                # ax1.set_ylabel("Counts")
+                # ax1.set_yscale("log")
+                # ax1.grid(True, which="both", ls="--", lw=0.5)
+
+            else:
+                z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
+                logging.debug(f"Overplotting with{self.final_counts[survey]["result"]} for {survey}")
+                rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
+                ax1.plot(z_centers_fine, rate_fine, label=f" {survey} Rate Function ")
+
+            ax1.legend()
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:

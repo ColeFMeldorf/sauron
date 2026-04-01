@@ -781,7 +781,7 @@ def test_regression_SDSS():
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_SDSS.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_SDSS_redo.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -792,7 +792,7 @@ def test_regression_SDSS():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "SDSS_multi_regression.csv")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/SDSS_multi_regression.csv")
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
 # This test should be added in a different PR.
