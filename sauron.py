@@ -56,6 +56,7 @@ def main():
             runner.perform_sanity_checks(survey)
         if not args.skip_cuts:
             runner.apply_cuts(survey)
+
         runner.calculate_transfer_matrix(survey)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]
