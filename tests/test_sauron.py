@@ -452,7 +452,7 @@ def test_coverage_with_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = False
+    plot = True
     if plot:
         import matplotlib.pyplot as plt
 

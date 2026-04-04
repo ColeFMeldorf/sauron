@@ -66,11 +66,10 @@ def main():
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
 
-            runner.fit_rate(survey, index)
+            runner.fit_rate(survey, index, PROB_THRESH=PROB_THRESH)
             runner.add_results(survey, index)
 
     # Fit all surveys together
-
 
     if len(surveys) > 1:
         logging.debug("Starting combo fit with surveys: " + ", ".join(surveys))
@@ -85,8 +84,8 @@ def main():
         runner.fit_args_dict["n_datasets"]["combined"] = len(indices)  # Update the number of datasets for the combined survey to reflect the number of combinations of datasets across surveys.
 
         for index in indices:
-            logging.info(f"Fitting all possible combined dataset across all surveys, index {index} -----------------------")
-            runner.fit_rate(surveys, index=index)
+            logging.info(f"Fitting index {index} -----------------------")
+            runner.fit_rate(surveys, index=index, PROB_THRESH=PROB_THRESH)
             runner.add_results("combined", index=index)
         surveys.extend(["combined"])
 

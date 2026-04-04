@@ -84,7 +84,7 @@ class SN_dataset():
             # cols if the names don't match.
             potential_cols = self.actual_subset_cols.copy() if self.actual_subset_cols is not None else []
              # Start with the subset cols, since those are definitely needed if they exist.
-            potential_cols.extend([self.z_col, self.scone_col, self._true_z_col]) # Include redshift and scone columns
+            potential_cols.extend([self.z_col, self.z_err_col, self.scone_col, self._true_z_col]) # Include redshift and scone columns
 
             if "DUMP" not in data_name: # If this is a dump dataset, cuts aren't applied.
                 potential_cols.extend(list(cuts.keys()) if cuts is not None else []) # Need to get the cols being cut on
@@ -162,6 +162,30 @@ class SN_dataset():
             return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
         except AttributeError:
             raise AttributeError(f"z_col is not set for {self.data_name}! Can't calculate z counts without a valid z_col. Available columns: {self.df.columns}")
+
+    def determine_binned_z_error(self, z_bins, prob_thresh=None):
+        """Calculate the binned redshift error for this dataset."""
+        try:
+            if self.z_err_col is None:
+                raise ValueError(f"z_err_col is not set for {self.data_name}! Can't calculate binned z error without a valid z_err_col. Available columns: {self.df.columns}")
+
+            counts = self.z_counts(z_bins, prob_thresh=prob_thresh)
+
+            if prob_thresh is not None:
+                df_subset = self.df[self.prob_scone() > prob_thresh]
+            else:
+                df_subset = self.df
+
+            logging.debug(f"First few z errors for {self.data_name}: {df_subset[self.z_err_col].head()}")
+            logging.debug(f"Mean binned error for {self.data_name}: {binstat(df_subset[self.z_col], df_subset[self.z_err_col], statistic='mean', bins=z_bins)[0]}")
+            squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            logging.debug(f"Squared errors summed for {self.data_name}: {squared_errors_summed}")
+            binned_z_error = np.sqrt(squared_errors_summed) / counts
+            logging.debug(f"Binned z error for {self.data_name}: {binned_z_error}")
+            return binned_z_error
+
+        except AttributeError:
+            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned z error without valid z_col and z_err_col. Available columns: {self.df.columns}")
 
     def mu_res(self):
         """Calculate the Hubble residuals for the supernovae in this dataset. Currently not used."""
@@ -289,6 +313,21 @@ class SN_dataset():
             else:
                 raise ValueError(f"Couldn't find any valid zcol in dataframe for {self.data_name}!"
                                  f" I checked: {possible_z_cols}.")
+
+        # Determine the redshift error column
+        if self.z_col is not None and "GEN" not in self.z_col:
+            possible_extensions = ["_ERR", "ERR"]
+            for ext in possible_extensions:
+                potential_z_err_col = self.z_col + ext
+                if potential_z_err_col in all_cols:
+                    self.z_err_col = potential_z_err_col
+                    logging.debug(f"Found z error column {self.z_err_col} for {self.data_name}")
+                    break
+            if getattr(self, "z_err_col", None) is None:
+                raise ValueError(f"Couldn't find a valid z error column for {self.data_name}! Looked for columns"
+                f" with extensions {possible_extensions} added to z_col {self.z_col}. Available columns: {all_cols}")
+        else:
+            self.z_err_col = None
 
         # Find the appropriate SCONE probability column, if it exists.
         scone_col = []
