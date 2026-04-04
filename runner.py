@@ -88,7 +88,7 @@ func_name_dictionary = {
 
 
 default_x0_dictionary = {
-    "power_law": (2.3e-5, 1.75), #Change this back before merging
+    "power_law": (2.27e-5, 1.70), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
     "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
@@ -833,11 +833,8 @@ class sauron_runner():
                 logger.debug(f"Total n_data before CC contamination using scone cut: {np.sum(n_data)}")
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
-                logging.debug(f"Calculated bias correction using scone cut: {bias_correction}")
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-                logger.debug(f"Bias correction factor for scone cut: {1 / bias_correction}")
                 n_data /= bias_correction
-                logger.debug(f"Calculated n_data after CC contamination using scone cut: {n_data}")
                 logger.debug(f"Total n_data after CC contamination using scone cut: {np.sum(n_data)}")
                 if debug:
                     plt.clf()

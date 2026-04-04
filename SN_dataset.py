@@ -185,7 +185,7 @@ class SN_dataset():
             return binned_z_error
 
         except AttributeError:
-            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned z error without valid z_col and z_err_col. Available columns: {self.df.columns}")
+            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned z error without valid z_col and z_err_col. z_col: {self.z_col}, z_err_col: {self.z_err_col}. Available columns: {self.df.columns}")
 
     def mu_res(self):
         """Calculate the Hubble residuals for the supernovae in this dataset. Currently not used."""
@@ -218,6 +218,12 @@ class SN_dataset():
             scone_prob_col = pd.concat([self.prob_scone(), dataset.prob_scone()])
             new_df["PROB_SCONE"] = scone_prob_col
 
+        #####
+        new_z_err_col = pd.concat([self.df[self.z_err_col], dataset.df[dataset.z_err_col]]) \
+             if self.z_err_col is not None and dataset.z_err_col is not None else None
+
+        new_df[self.z_err_col] = new_z_err_col
+
         ####
         new_z_col = pd.concat([self.df[self.z_col], dataset.df[dataset.z_col]])
         new_df[self.z_col] = new_z_col
@@ -227,6 +233,7 @@ class SN_dataset():
         new_dataset = SN_dataset(None, newtype, zcol=self.z_col, data_name=data_name)
         new_dataset.df = new_df
         new_dataset.z_col = self.z_col
+        new_dataset.z_err_col = self.z_err_col if self.z_err_col is not None and dataset.z_err_col is not None else None
 
         new_dataset.scone_col = "PROB_SCONE" if self.scone_col is not None and dataset.scone_col is not None else None
         if self.true_z_col == dataset.true_z_col:
@@ -315,7 +322,7 @@ class SN_dataset():
                                  f" I checked: {possible_z_cols}.")
 
         # Determine the redshift error column
-        if self.z_col is not None and "GEN" not in self.z_col:
+        if (self.z_col is not None) and ("GEN" not in self.z_col) and ("DUMP" not in self.data_name):
             possible_extensions = ["_ERR", "ERR"]
             for ext in possible_extensions:
                 potential_z_err_col = self.z_col + ext
@@ -327,6 +334,7 @@ class SN_dataset():
                 raise ValueError(f"Couldn't find a valid z error column for {self.data_name}! Looked for columns"
                 f" with extensions {possible_extensions} added to z_col {self.z_col}. Available columns: {all_cols}")
         else:
+            logging.debug(f"z_col {self.z_col} for {self.data_name} looks like a true z column, so not looking for a z error column.")
             self.z_err_col = None
 
         # Find the appropriate SCONE probability column, if it exists.
