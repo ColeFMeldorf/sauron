@@ -84,7 +84,7 @@ class SN_dataset():
             # cols if the names don't match.
             potential_cols = self.actual_subset_cols.copy() if self.actual_subset_cols is not None else []
              # Start with the subset cols, since those are definitely needed if they exist.
-            potential_cols.extend([self.z_col, self.scone_col, self._true_z_col]) # Include redshift and scone columns
+            potential_cols.extend([self.z_col, self.z_err_col, self.scone_col, self._true_z_col]) # Include redshift and scone columns
 
             if "DUMP" not in data_name: # If this is a dump dataset, cuts aren't applied.
                 potential_cols.extend(list(cuts.keys()) if cuts is not None else []) # Need to get the cols being cut on
@@ -155,6 +155,7 @@ class SN_dataset():
             The counts of supernovae in each redshift bin.
         """
         try:
+            logging.debug(f"Using PROB_THRESH of {prob_thresh} for calculating z counts for {self.data_name}")
             if prob_thresh is not None:
                 return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                             self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
@@ -162,6 +163,34 @@ class SN_dataset():
             return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
         except AttributeError:
             raise AttributeError(f"z_col is not set for {self.data_name}! Can't calculate z counts without a valid z_col. Available columns: {self.df.columns}")
+
+    def determine_binned_z_error(self, z_bins, prob_thresh=None):
+        """Calculate the binned redshift error for this dataset."""
+        try:
+            if self.z_err_col is None:
+                raise ValueError(f"z_err_col is not set for {self.data_name}! Can't calculate binned z error without a valid z_err_col. Available columns: {self.df.columns}")
+
+
+
+            if prob_thresh is not None and "ALL" in self.data_name:  # If we're applying a probability threshold and this isn't a pure IA dataset, we need to subset the data for the error calculation as well.
+                df_subset = self.df[self.prob_scone() > prob_thresh]
+                counts = self.z_counts(z_bins, prob_thresh=prob_thresh)
+            else:
+                if "ALL" not in self.data_name:
+                    logging.debug("This is a pure IA/CC dataset, no prob thresh applied.")
+                df_subset = self.df
+                counts = self.z_counts(z_bins, prob_thresh=None)
+
+            logging.debug(f"First few z errors for {self.data_name}: {df_subset[self.z_err_col].head()}")
+            logging.debug(f"Mean binned error for {self.data_name}: {binstat(df_subset[self.z_col], df_subset[self.z_err_col], statistic='mean', bins=z_bins)[0]}")
+            squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            logging.debug(f"Squared errors summed for {self.data_name}: {squared_errors_summed}")
+            binned_z_error = np.sqrt(squared_errors_summed) / counts
+            logging.debug(f"Binned z error for {self.data_name}: {binned_z_error}")
+            return binned_z_error
+
+        except AttributeError:
+            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned z error without valid z_col and z_err_col. z_col: {getattr(self, 'z_col', None)}, z_err_col: {getattr(self, 'z_err_col', None)}. Available columns: {self.df.columns}")
 
     def mu_res(self):
         """Calculate the Hubble residuals for the supernovae in this dataset. Currently not used."""
@@ -194,6 +223,13 @@ class SN_dataset():
             scone_prob_col = pd.concat([self.prob_scone(), dataset.prob_scone()])
             new_df["PROB_SCONE"] = scone_prob_col
 
+        #####
+        new_z_err_col = pd.concat([self.df[self.z_err_col], dataset.df[dataset.z_err_col]]) \
+             if self.z_err_col is not None and dataset.z_err_col is not None else None
+
+        if self.z_err_col is not None and dataset.z_err_col is not None:
+            new_df[self.z_err_col] = new_z_err_col
+
         ####
         new_z_col = pd.concat([self.df[self.z_col], dataset.df[dataset.z_col]])
         new_df[self.z_col] = new_z_col
@@ -203,6 +239,7 @@ class SN_dataset():
         new_dataset = SN_dataset(None, newtype, zcol=self.z_col, data_name=data_name)
         new_dataset.df = new_df
         new_dataset.z_col = self.z_col
+        new_dataset.z_err_col = self.z_err_col if self.z_err_col is not None and dataset.z_err_col is not None else None
 
         new_dataset.scone_col = "PROB_SCONE" if self.scone_col is not None and dataset.scone_col is not None else None
         if self.true_z_col == dataset.true_z_col:
@@ -289,6 +326,22 @@ class SN_dataset():
             else:
                 raise ValueError(f"Couldn't find any valid zcol in dataframe for {self.data_name}!"
                                  f" I checked: {possible_z_cols}.")
+
+        # Determine the redshift error column
+        if (self.z_col is not None) and ("GEN" not in self.z_col) and ("DUMP" not in self.data_name):
+            possible_extensions = ["_ERR", "ERR"]
+            for ext in possible_extensions:
+                potential_z_err_col = self.z_col + ext
+                if potential_z_err_col in all_cols:
+                    self.z_err_col = potential_z_err_col
+                    logging.debug(f"Found z error column {self.z_err_col} for {self.data_name}")
+                    break
+            if getattr(self, "z_err_col", None) is None:
+                raise ValueError(f"Couldn't find a valid z error column for {self.data_name}! Looked for columns"
+                f" with extensions {possible_extensions} added to z_col {self.z_col}. Available columns: {all_cols}")
+        else:
+            logging.debug(f"z_col {self.z_col} for {self.data_name} looks like a true z column, so not looking for a z error column.")
+            self.z_err_col = None
 
         # Find the appropriate SCONE probability column, if it exists.
         scone_col = []
@@ -388,5 +441,8 @@ class SN_dataset():
 
         dataset_ia.z_col = self.z_col
         dataset_cc.z_col = self.z_col
+
+        dataset_ia.z_err_col = self.z_err_col
+        dataset_cc.z_err_col = self.z_err_col
 
         return dataset_ia, dataset_cc
