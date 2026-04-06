@@ -155,7 +155,6 @@ class SN_dataset():
             The counts of supernovae in each redshift bin.
         """
         try:
-            logging.debug(f"Using PROB_THRESH of {prob_thresh} for calculating z counts for {self.data_name}")
             if prob_thresh is not None:
                 return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                             self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
