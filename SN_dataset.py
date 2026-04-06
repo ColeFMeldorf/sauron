@@ -155,6 +155,7 @@ class SN_dataset():
             The counts of supernovae in each redshift bin.
         """
         try:
+            logging.debug(f"Using PROB_THRESH of {prob_thresh} for calculating z counts for {self.data_name}")
             if prob_thresh is not None:
                 return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                             self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
@@ -169,12 +170,16 @@ class SN_dataset():
             if self.z_err_col is None:
                 raise ValueError(f"z_err_col is not set for {self.data_name}! Can't calculate binned z error without a valid z_err_col. Available columns: {self.df.columns}")
 
-            counts = self.z_counts(z_bins, prob_thresh=prob_thresh)
 
-            if prob_thresh is not None:
+
+            if prob_thresh is not None and "ALL" in self.data_name:  # If we're applying a probability threshold and this isn't a pure IA dataset, we need to subset the data for the error calculation as well.
                 df_subset = self.df[self.prob_scone() > prob_thresh]
+                counts = self.z_counts(z_bins, prob_thresh=prob_thresh)
             else:
+                if "ALL" not in self.data_name:
+                    logging.debug("This is a pure IA/CC dataset, no prob thresh applied.")
                 df_subset = self.df
+                counts = self.z_counts(z_bins, prob_thresh=None)
 
             logging.debug(f"First few z errors for {self.data_name}: {df_subset[self.z_err_col].head()}")
             logging.debug(f"Mean binned error for {self.data_name}: {binstat(df_subset[self.z_col], df_subset[self.z_err_col], statistic='mean', bins=z_bins)[0]}")
@@ -185,7 +190,7 @@ class SN_dataset():
             return binned_z_error
 
         except AttributeError:
-            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned z error without valid z_col and z_err_col. z_col: {self.z_col}, z_err_col: {self.z_err_col}. Available columns: {self.df.columns}")
+            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned z error without valid z_col and z_err_col. z_col: {getattr(self, 'z_col', None)}, z_err_col: {getattr(self, 'z_err_col', None)}. Available columns: {self.df.columns}")
 
     def mu_res(self):
         """Calculate the Hubble residuals for the supernovae in this dataset. Currently not used."""
@@ -222,7 +227,8 @@ class SN_dataset():
         new_z_err_col = pd.concat([self.df[self.z_err_col], dataset.df[dataset.z_err_col]]) \
              if self.z_err_col is not None and dataset.z_err_col is not None else None
 
-        new_df[self.z_err_col] = new_z_err_col
+        if self.z_err_col is not None and dataset.z_err_col is not None:
+            new_df[self.z_err_col] = new_z_err_col
 
         ####
         new_z_col = pd.concat([self.df[self.z_col], dataset.df[dataset.z_col]])
@@ -435,5 +441,8 @@ class SN_dataset():
 
         dataset_ia.z_col = self.z_col
         dataset_cc.z_col = self.z_col
+
+        dataset_ia.z_err_col = self.z_err_col
+        dataset_cc.z_err_col = self.z_err_col
 
         return dataset_ia, dataset_cc

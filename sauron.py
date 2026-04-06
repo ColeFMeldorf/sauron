@@ -40,7 +40,7 @@ def main():
     runner = sauron_runner(args)
     runner.parse_global_fit_options()
 
-    PROB_THRESH = args.prob_thresh
+    PROB_THRESH = args.prob_thresh if not args.cheat_cc else None
 
     datasets, surveys = runner.unpack_dataframes()
 

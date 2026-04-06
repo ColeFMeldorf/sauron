@@ -88,7 +88,7 @@ func_name_dictionary = {
 
 
 default_x0_dictionary = {
-    "power_law": (2.27e-5, 1.70), # Does this cause issues in error sometimes?
+    "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
     "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
@@ -286,6 +286,7 @@ class sauron_runner():
             if self.fit_args_dict["cc_are_sep"][survey]:
 
                 if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
+
                     logging.info("Combining IA and CC dump and sim files..")
                     datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
                         datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
@@ -694,13 +695,12 @@ class sauron_runner():
             logging.debug(f"Calculating binned redshift errors for dataset {survey}...")
             if self.fit_args_dict.get("z_centers_err", None) is None:
                 self.fit_args_dict["z_centers_err"] = {}
-            self.fit_args_dict["z_centers_err"][survey] = ["placeholder"]
-            for i in range(self.fit_args_dict["n_datasets"][survey]):
-                index = i + 1
-                self.fit_args_dict["z_centers_err"][survey].append(
-                    self.datasets[f"{survey}_DATA_ALL_{index}"].determine_binned_z_error(self.fit_args_dict['z_bins'][survey],
-                                                                                        prob_thresh=PROB_THRESH)
-                )
+            if self.fit_args_dict["z_centers_err"].get(survey, None) is None:
+                self.fit_args_dict["z_centers_err"][survey] = ["placeholder"]
+            self.fit_args_dict["z_centers_err"][survey].append(
+                self.datasets[f"{survey}_DATA_ALL_{index}"].determine_binned_z_error(self.fit_args_dict['z_bins'][survey],
+                                                                                    prob_thresh=PROB_THRESH)
+            )
         else:
             pass
 
