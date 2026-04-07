@@ -180,12 +180,22 @@ class SN_dataset():
                 df_subset = self.df
                 counts = self.z_counts(z_bins, prob_thresh=None)
 
-            logging.debug(f"First few z errors for {self.data_name}: {df_subset[self.z_err_col].head()}")
-            logging.debug(f"Mean binned error for {self.data_name}: {binstat(df_subset[self.z_col], df_subset[self.z_err_col], statistic='mean', bins=z_bins)[0]}")
             squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
-            logging.debug(f"Squared errors summed for {self.data_name}: {squared_errors_summed}")
             binned_z_error = np.sqrt(squared_errors_summed) / counts
-            logging.debug(f"Binned z error for {self.data_name}: {binned_z_error}")
+
+            # Calculate the mean redshift weighted by error in each bin:
+            weighted_z_sum = binstat(df_subset[self.z_col], df_subset[self.z_col] / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            weights_sum = binstat(df_subset[self.z_col], 1 / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            weighted_mean_z = weighted_z_sum / weights_sum
+            logging.debug("Fiducial z centers are: {}".format(0.5 * (z_bins[:-1] + z_bins[1:])))
+            logging.debug("Weighted mean z in each bin for error calculation: {}".format(weighted_mean_z))
+            delta = weighted_mean_z - 0.5 * (z_bins[:-1] + z_bins[1:])
+            logging.debug("Delta between weighted mean z and fiducial z centers: {}".format(delta))
+            binsize = z_bins[1] - z_bins[0]
+            print("Fractional difference between weighted mean z and fiducial z centers: {}".format(delta / binsize))
+            print("Mean relative delta {}".format(np.mean(delta / binsize)))
+
+
             return binned_z_error
 
         except AttributeError:

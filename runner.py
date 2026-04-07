@@ -88,7 +88,7 @@ func_name_dictionary = {
 
 
 default_x0_dictionary = {
-    "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
+    "power_law": (2.3e-5, 1.75), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
     "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
@@ -578,21 +578,58 @@ class sauron_runner():
 
         elif fit_method == "minimize":
 
+            if self.rate_function_name == "power_law":
+                scales = np.array([1e-5, 1])
+            else:
+                logging.debug("No information about relative parameter scales, using 1 for all parameters. This may cause issues with convergence or covariance calculation.")
+                scales = np.ones_like(self.x0)
+
+            def scaled_chi2(params, *args):
+                return chi2(params * scales, *args)
+
             result = minimize(
-                        chi2,
-                        x0=self.x0,
+                        scaled_chi2,
+                        x0=self.x0 / scales,
                         args=(null_counts, f_norms, z_centers, eff_ij,
                               n_data, self.rate_function, cov_sys),
                         method=None
                     )
-            fit_params = result.x
+            logging.debug(f"Minimize Result: {result}")
+            fit_params = result.x * scales
             logging.debug(f"Minimize Result: {fit_params}")
 
+
             # This calculation of cov matrix is only valid if minimizing chi2
-            cov_x = result.hess_inv * 2
+            cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
             chi_squared = result.fun
             logging.debug(f"chi_squared minimize: {chi_squared}")
+            if np.sqrt(np.diag(cov_x))[0] <= 1e-6 or np.sqrt(np.diag(cov_x))[1] <= 1e-2:
+                raise ValueError("Unreasonably small errors on fit parameters, likely due to issues with fit convergence or covariance calculation. Check fit results and consider changing fit method or providing better initial guess.")
+
+            # Redo the above without the cov_sys to determine the systematic_error
+            no_sys_result = minimize(
+                        chi2,
+                        x0=self.x0,
+                        args=(null_counts, f_norms, z_centers, eff_ij,
+                              n_data, self.rate_function, None),
+                        method=None
+                    )
+            no_sys_fit_params = no_sys_result.x
+            logging.debug(f"Minimize Result without sys cov: {no_sys_fit_params}")
+            no_sys_cov_x = no_sys_result.hess_inv * 2
+            logging.debug(f"Standard errors without sys cov: {np.sqrt(np.diag(no_sys_cov_x))}")
+            no_sys_chi_squared = no_sys_result.fun
+            logging.debug(f"chi_squared minimize without sys cov: {no_sys_chi_squared}")
+
+            total_err = np.sqrt(np.diag(cov_x))
+            stat_err = np.sqrt(np.diag(no_sys_cov_x))
+            sys_err = np.sqrt(total_err**2 - stat_err**2)
+            logging.debug(f"######## Results for survey {survey} ##########")
+            for i, param_name in enumerate(default_parameter_name_dictionary.get(self.rate_function_name, [f"param_{j}" for j in range(len(fit_params))])):
+                logging.debug(f"{param_name}: {fit_params[i]:.3e} +/- {stat_err[i]:.3e} (stat) +/- {sys_err[i]:.3e} (sys)")
+            logging.debug(f"################################################")
+
 
             # logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
             # test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
