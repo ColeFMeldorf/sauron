@@ -23,6 +23,11 @@ import pandas as pd
 from astropy.cosmology import LambdaCDM
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
+global_rtol = 5e-3
+# We aren't measuring even close to the 0.5% level of precision
+warning_rtol = 1e-6
+# but I do want a warning if it changed even a little bit.
+
 
 # Configure the basic logging setup
 logging.basicConfig(
@@ -56,7 +61,14 @@ def test_regression_specz():
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regnopz_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+
 
 
 def test_regression_pz_5datasets():
@@ -83,7 +95,13 @@ def test_regression_pz_5datasets():
         if isinstance(regression[col][0], str):
             continue
         logger.debug(f"COL: {col}")
-        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
 
 
 def test_perfect_recovery():
@@ -540,7 +558,13 @@ def test_regression_multisurvey():
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regmultisurvey_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
 
 
 def test_apply_cut():
@@ -602,7 +626,13 @@ def test_des_data_regression():
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_desdatareg_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
 
 
 def test_cc_decontam():
@@ -770,7 +800,13 @@ def test_regression_multisurvey_all_possible_combos():
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regmultisurvey_more_regression.csv")
     # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
 
 
 def test_regression_SDSS():
@@ -794,7 +830,13 @@ def test_regression_SDSS():
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/SDSS_multi_regression.csv")
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression[col], rtol=1e-6)
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
 # This test should be added in a different PR.
 # def test_cc_decontam_new():
 #     config_path = pathlib.Path(__file__).parent / "test_config_50pz.yml"

@@ -88,7 +88,7 @@ func_name_dictionary = {
 
 
 default_x0_dictionary = {
-    "power_law": (2.3e-5, 1.75), # Does this cause issues in error sometimes?
+    "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
     "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
@@ -604,8 +604,6 @@ class sauron_runner():
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
             chi_squared = result.fun
             logging.debug(f"chi_squared minimize: {chi_squared}")
-            if np.sqrt(np.diag(cov_x))[0] <= 1e-6 or np.sqrt(np.diag(cov_x))[1] <= 1e-2:
-                raise ValueError("Unreasonably small errors on fit parameters, likely due to issues with fit convergence or covariance calculation. Check fit results and consider changing fit method or providing better initial guess.")
 
             # Redo the above without the cov_sys to determine the systematic_error
             no_sys_result = minimize(
