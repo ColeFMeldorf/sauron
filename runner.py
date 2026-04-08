@@ -601,7 +601,6 @@ class sauron_runner():
                               n_data, self.rate_function, cov_sys),
                         method=None
                     )
-            logging.debug(f"Minimize Result: {result}")
             fit_params = result.x * scales
             logging.debug(f"Minimize Result: {fit_params}")
 
