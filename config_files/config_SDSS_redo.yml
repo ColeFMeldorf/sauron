@@ -7,9 +7,9 @@ SDSS:
   FIT_OPTIONS:
     RATE_FUNC: power_law
     RATE_PARAMS: 2.27E-5, 1.7
-    Z_BINS: 7 # 8
+    Z_BINS: 8 # 8
     MIN_Z: 0.05 # 0.05
-    MAX_Z: 0.35
+    MAX_Z: 0.40
     CC_ARE_SEPARATE: false
     F_NORM: 0.0416666
   CUTS:

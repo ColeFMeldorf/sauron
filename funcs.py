@@ -14,8 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
-    #logging.debug(f"Calculating chi2 for x: {x}")
-    #import pdb; pdb.set_trace()
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)

@@ -41,7 +41,7 @@ logger.setLevel(logging.DEBUG)
 
 
 def test_regression_specz():
-    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
+    """In this test, we simply test that nothing has changed significantly. This is using CC decontam and realistic data. Spec Zs.
     """
     outpath = pathlib.Path(__file__).parent / "test_output/test_regnopz_output.csv"
     if os.path.exists(outpath):
@@ -72,7 +72,7 @@ def test_regression_specz():
 
 
 def test_regression_pz_5datasets():
-    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
+    """In this test, we simply test that nothing has changed significantly. This is using CC decontam and realistic data. Photo Zs.
        This also uses 5 datasets rather than 1 to test that functionality.
     """
     outpath = pathlib.Path(__file__).parent / "test_output/test_regpz_output.csv"
@@ -292,7 +292,7 @@ def test_chi():
 
 @pytest.mark.xfail(reason="This test is currently broken until new photoz runs")
 def test_regression_pz_5datasets_covariance():
-    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Photo Zs.
+    """In this test, we simply test that nothing has changed significantly. This is using CC decontam and realistic data. Photo Zs.
        This also uses 5 datasets rather than 1 to test that functionality.
     """
     outpath = pathlib.Path(__file__).parent / "test_output/test_regpz_sys_output.csv"
@@ -537,7 +537,7 @@ def test_perfect_recovery_multisurvey():
 
 
 def test_regression_multisurvey():
-    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
+    """In this test, we simply test that nothing has changed significantly. This is using CC decontam and realistic data. Spec Zs.
     This time, we do DES, LOWZ and ROMAN together.
     """
     outpath = pathlib.Path(__file__).parent / "test_output/test_regmultisurvey_output.csv"
@@ -810,7 +810,7 @@ def test_cc_decontam_small():
 
 
 def test_regression_SDSS():
-    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
+    """In this test, we simply test that nothing has changed significantly. This is using CC decontam and realistic data. Spec Zs.
     This time, we do DES and SDSS together.
     """
     outpath = pathlib.Path(__file__).parent / "test_SDSS_output.csv"
