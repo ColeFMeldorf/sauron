@@ -1010,6 +1010,9 @@ class sauron_runner():
                 ax1.set_yticklabels(['2', '3', '4', '5', '6', '7'])
                 ax1.set_ylabel(r'Rate $[\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$')
 
+
+
+
             if isinstance(self.results[s], list):
                 df = self.results[s][0]
             else:
@@ -1075,7 +1078,17 @@ class sauron_runner():
                 ax2.set_ylabel(r'$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$')
                 ax2.set_xlim(extent_chi[0], extent_chi[1])
                 ax2.set_ylim(extent_chi[2], extent_chi[3])
-                ax2.legend(loc="upper right", fontsize=9)
+
+                # Adaptively define the ticks
+                y_limits = extent_chi[2], extent_chi[3]
+                y_range = y_limits[1] - y_limits[0]
+                y_tick_spacing = y_range / 5  # Aim for around 5 ticks
+                y_tick_spacing = max(y_tick_spacing, 1e-6)  # Set a minimum spacing to avoid too many ticks
+                y_tick_spacing = min(y_tick_spacing, 1e-5)  # Set a maximum spacing to avoid too few ticks
+                y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
+                ax2.set_yticks(y_ticks)
+                ax2.set_yticklabels([f"{y_tick*1e5:.1f}" for y_tick in y_ticks])
+                ax2.legend(loc = "lower left", fontsize=9)
 
         fig.savefig("summary_plot.png")
 
