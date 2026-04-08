@@ -578,21 +578,63 @@ class sauron_runner():
 
         elif fit_method == "minimize":
 
+            if self.rate_function_name == "power_law":
+                scales = np.array([1e-5, 1])
+            else:
+                logging.debug("No information about relative parameter scales, using 1 for all parameters. This may cause issues with convergence or covariance calculation.")
+                scales = np.ones_like(self.x0)
+
+            def scaled_chi2(params, *args):
+                return chi2(params * scales, *args)
+
             result = minimize(
-                        chi2,
-                        x0=self.x0,
+                        scaled_chi2,
+                        x0=np.array(self.x0) / scales,
                         args=(null_counts, f_norms, z_centers, eff_ij,
                               n_data, self.rate_function, cov_sys),
                         method=None
                     )
-            fit_params = result.x
+            logging.debug(f"Minimize Result: {result}")
+            fit_params = result.x * scales
             logging.debug(f"Minimize Result: {fit_params}")
 
+
             # This calculation of cov matrix is only valid if minimizing chi2
-            cov_x = result.hess_inv * 2
+            cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
             logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
             chi_squared = result.fun
             logging.debug(f"chi_squared minimize: {chi_squared}")
+
+            # Redo the above without the cov_sys to determine the systematic_error
+            no_sys_result = minimize(
+                        chi2,
+                        x0=self.x0,
+                        args=(null_counts, f_norms, z_centers, eff_ij,
+                              n_data, self.rate_function, None),
+                        method=None
+                    )
+            no_sys_fit_params = no_sys_result.x
+            logging.debug(f"Minimize Result without sys cov: {no_sys_fit_params}")
+            no_sys_cov_x = no_sys_result.hess_inv * 2
+            logging.debug(f"Standard errors without sys cov: {np.sqrt(np.diag(no_sys_cov_x))}")
+            no_sys_chi_squared = no_sys_result.fun
+            logging.debug(f"chi_squared minimize without sys cov: {no_sys_chi_squared}")
+
+            total_err = np.sqrt(np.diag(cov_x))
+            stat_err = np.sqrt(np.diag(no_sys_cov_x))
+            sys_err_var = total_err**2 - stat_err**2
+            if np.any(sys_err_var < 0):
+                logging.debug(
+                    "Clipping negative systematic error variances to 0 for survey %s: %s",
+                    survey,
+                    sys_err_var[sys_err_var < 0],
+                )
+            sys_err = np.sqrt(np.clip(sys_err_var, 0.0, None))
+            logging.debug(f"######## Results for survey {survey} ##########")
+            for i, param_name in enumerate(default_parameter_name_dictionary.get(self.rate_function_name, [f"param_{j}" for j in range(len(fit_params))])):
+                logging.debug(f"{param_name}: {fit_params[i]:.3e} +/- {stat_err[i]:.3e} (stat) +/- {sys_err[i]:.3e} (sys)")
+            logging.debug(f"################################################")
+
 
             # logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
             # test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)

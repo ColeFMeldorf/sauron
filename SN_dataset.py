@@ -155,7 +155,6 @@ class SN_dataset():
             The counts of supernovae in each redshift bin.
         """
         try:
-            logging.debug(f"Using PROB_THRESH of {prob_thresh} for calculating z counts for {self.data_name}")
             if prob_thresh is not None:
                 return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
                             self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
@@ -181,12 +180,19 @@ class SN_dataset():
                 df_subset = self.df
                 counts = self.z_counts(z_bins, prob_thresh=None)
 
-            logging.debug(f"First few z errors for {self.data_name}: {df_subset[self.z_err_col].head()}")
-            logging.debug(f"Mean binned error for {self.data_name}: {binstat(df_subset[self.z_col], df_subset[self.z_err_col], statistic='mean', bins=z_bins)[0]}")
             squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
-            logging.debug(f"Squared errors summed for {self.data_name}: {squared_errors_summed}")
             binned_z_error = np.sqrt(squared_errors_summed) / counts
-            logging.debug(f"Binned z error for {self.data_name}: {binned_z_error}")
+
+            # Calculate the mean redshift weighted by error in each bin:
+            weighted_z_sum = binstat(df_subset[self.z_col], df_subset[self.z_col] / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            weights_sum = binstat(df_subset[self.z_col], 1 / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            weighted_mean_z = np.divide(weighted_z_sum, weights_sum, out=np.full_like(weighted_z_sum, np.nan), where=weights_sum!=0)
+            logging.debug("Fiducial z centers are: {}".format(0.5 * (z_bins[:-1] + z_bins[1:])))
+            logging.debug("Weighted mean z in each bin for error calculation: {}".format(weighted_mean_z))
+            delta = weighted_mean_z - 0.5 * (z_bins[:-1] + z_bins[1:])
+            logging.debug("Delta between weighted mean z and fiducial z centers: {}".format(delta))
+
+
             return binned_z_error
 
         except AttributeError:
