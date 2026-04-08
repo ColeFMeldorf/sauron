@@ -589,7 +589,7 @@ class sauron_runner():
 
             result = minimize(
                         scaled_chi2,
-                        x0=self.x0 / scales,
+                        x0=np.array(self.x0) / scales,
                         args=(null_counts, f_norms, z_centers, eff_ij,
                               n_data, self.rate_function, cov_sys),
                         method=None
@@ -622,7 +622,14 @@ class sauron_runner():
 
             total_err = np.sqrt(np.diag(cov_x))
             stat_err = np.sqrt(np.diag(no_sys_cov_x))
-            sys_err = np.sqrt(total_err**2 - stat_err**2)
+            sys_err_var = total_err**2 - stat_err**2
+            if np.any(sys_err_var < 0):
+                logging.debug(
+                    "Clipping negative systematic error variances to 0 for survey %s: %s",
+                    survey,
+                    sys_err_var[sys_err_var < 0],
+                )
+            sys_err = np.sqrt(np.clip(sys_err_var, 0.0, None))
             logging.debug(f"######## Results for survey {survey} ##########")
             for i, param_name in enumerate(default_parameter_name_dictionary.get(self.rate_function_name, [f"param_{j}" for j in range(len(fit_params))])):
                 logging.debug(f"{param_name}: {fit_params[i]:.3e} +/- {stat_err[i]:.3e} (stat) +/- {sys_err[i]:.3e} (sys)")

@@ -186,14 +186,11 @@ class SN_dataset():
             # Calculate the mean redshift weighted by error in each bin:
             weighted_z_sum = binstat(df_subset[self.z_col], df_subset[self.z_col] / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
             weights_sum = binstat(df_subset[self.z_col], 1 / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
-            weighted_mean_z = weighted_z_sum / weights_sum
+            weighted_mean_z = np.divide(weighted_z_sum, weights_sum, out=np.full_like(weighted_z_sum, np.nan), where=weights_sum!=0)
             logging.debug("Fiducial z centers are: {}".format(0.5 * (z_bins[:-1] + z_bins[1:])))
             logging.debug("Weighted mean z in each bin for error calculation: {}".format(weighted_mean_z))
             delta = weighted_mean_z - 0.5 * (z_bins[:-1] + z_bins[1:])
             logging.debug("Delta between weighted mean z and fiducial z centers: {}".format(delta))
-            binsize = z_bins[1] - z_bins[0]
-            print("Fractional difference between weighted mean z and fiducial z centers: {}".format(delta / binsize))
-            print("Mean relative delta {}".format(np.mean(delta / binsize)))
 
 
             return binned_z_error
