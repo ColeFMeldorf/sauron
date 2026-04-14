@@ -12,15 +12,15 @@ from runner import sauron_runner
 # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
+    format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S"
 )
 
 
 def main():
-    parser = argparse.ArgumentParser(description='SAURON: Survey-Agnostic volUmetric Rate Of superNovae')
-    parser.add_argument('config', help='Path to the config file (positional argument)')
-    parser.add_argument('--output', '-o', default='sauron_output.csv', help='Path to the output file (optional)')
+    parser = argparse.ArgumentParser(description="SAURON: Survey-Agnostic volUmetric Rate Of superNovae")
+    parser.add_argument("config", help="Path to the config file (positional argument)")
+    parser.add_argument("--output", "-o", default="sauron_output.csv", help="Path to the output file (optional)")
     parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
                         " Data_All.")
     parser.add_argument("--sys_cov", "--systematic_covariance", action=argparse.BooleanOptionalAction,
@@ -32,9 +32,11 @@ def main():
                         help="Probability threshold for classifying SNe as Type IA.")
     parser.add_argument("--sanity-check", action=argparse.BooleanOptionalAction, help="Perform sanity checks"
                         " that simulations look reasonable.", default=True)
-    parser.add_argument("--fit-only-one-combined", "--fit1", action=argparse.BooleanOptionalAction, help="Only fit one combined dataset across all"
+    parser.add_argument("--fit-only-one-combined", "--fit1", action=argparse.BooleanOptionalAction,
+                        help="Only fit one combined dataset across all"
                         " surveys, instead of fitting as many as there are datasets. I.e., if I have 5"
-                        "simulated datasets and 10 for another, I could do 5 combined datasets if this is set to False.", default=True)
+                        "simulated datasets and 10 for another, I could do 5 combined datasets "
+                        "if this is set to False.", default=True)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -50,7 +52,7 @@ def main():
 
     for survey in surveys:
         logging.info(f"Processing survey: {survey} ========================")
-        runner.apply_cuts(survey, subset_version=True) # This takes a subset of the data if asked for.
+        runner.apply_cuts(survey, subset_version=True)  # This takes a subset of the data if asked for.
         runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
         if args.sanity_check:
             runner.perform_sanity_checks(survey)
@@ -81,7 +83,9 @@ def main():
             total_possible_indexes = math.prod([runner.fit_args_dict["n_datasets"][s] for s in surveys])
             indices = range(1, total_possible_indexes + 1)
 
-        runner.fit_args_dict["n_datasets"]["combined"] = len(indices)  # Update the number of datasets for the combined survey to reflect the number of combinations of datasets across surveys.
+        # Update the number of datasets for the combined survey to reflect the number of combinations of
+        #  datasets across surveys.
+        runner.fit_args_dict["n_datasets"]["combined"] = len(indices)
 
         for index in indices:
             logging.info(f"Fitting index {index} -----------------------")
