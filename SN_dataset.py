@@ -3,15 +3,17 @@ import numpy as np
 import pandas as pd
 from scipy.stats import binned_statistic as binstat
 import logging
-logger = logging.getLogger(__name__)
+
 # Astronomy
 from astropy.cosmology import LambdaCDM
 from astropy.io import fits
 
+logger = logging.getLogger(__name__)
+
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
-class SN_dataset():
+class SN_dataset:
     """A class to hold a dataset of supernovae for one survey and type."""
     def __init__(self, paths, sntype, data_name, zcol=None, true_z_col=None, sntypecol=None, survey_dict=None):
         self.data_name = data_name
@@ -19,8 +21,8 @@ class SN_dataset():
         if not isinstance(paths, list):
             paths = [paths]
 
-        #Survey dict represents all the information valid for 1 survey. Z_bins, cuts, etc.
-        #Dataset dict represents all the information valid for 1 of the datasets within that survey.
+        # Survey dict represents all the information valid for 1 survey. Z_bins, cuts, etc.
+        # Dataset dict represents all the information valid for 1 of the datasets within that survey.
         # For instance, the redshift column name for that file.
         if survey_dict is not None:
             # Either DUMP, SIM, or DATA should be in the data name. Extract the correct one.
@@ -29,18 +31,23 @@ class SN_dataset():
             possible_types = [f"{p}{e}" for p in possible_prefixes for e in possible_extensions]
             type_in_name = [t for t in possible_types if t in data_name]
             if len(type_in_name) == 0:
-                raise ValueError(f"Couldn't find any of {possible_types} in data_name {data_name} to determine dataset type!")
+                raise ValueError(f"Couldn't find any of {possible_types} in"
+                                 f" data_name {data_name} to determine dataset type!")
             elif len(type_in_name) > 1:
-                raise ValueError(f"Found multiple of {possible_types} in data_name {data_name}! Can't determine dataset type. Found: {type_in_name}")
+                raise ValueError(f"Found multiple of {possible_types} in"
+                                 f" data_name {data_name}! Can't determine dataset type. Found: {type_in_name}")
             else:
                 type_in_name = type_in_name[0]
 
             # Now that we have the type, determine the corresponding dataset dict.
             corresponding_key = [k for k in survey_dict.keys() if type_in_name in k]
             if len(corresponding_key) == 0:
-                raise ValueError(f"Couldn't find a key in survey_dict with {type_in_name} in it for data_name {data_name}! Survey dict keys: {survey_dict.keys()}")
+                raise ValueError(f"Couldn't find a key in survey_dict with {type_in_name}"
+                                 f" in it for data_name {data_name}! Survey dict keys: {survey_dict.keys()}")
             elif len(corresponding_key) > 1:
-                raise ValueError(f"Found multiple keys in survey_dict with {type_in_name} in it for data_name {data_name}! Can't determine which to use. Found: {corresponding_key}")
+                raise ValueError(f"Found multiple keys in survey_dict with {type_in_name}"
+                                 f" in it for data_name {data_name}! Can't determine which to use. "
+                                 f"Found: {corresponding_key}")
             else:
                 corresponding_key = corresponding_key[0]
 
@@ -49,17 +56,20 @@ class SN_dataset():
             dataset_dict = None
 
         if zcol is not None and dataset_dict is not None:
-            raise ValueError("Cannot specify zcol both in config file and as a column in the dataset! Please choose one or the other.")
+            raise ValueError("Cannot specify zcol both in config file and as a column in the dataset!"
+                             " Please choose one or the other.")
         elif dataset_dict is not None:
             zcol = dataset_dict.get("ZCOL", None)
 
         if true_z_col is not None and dataset_dict is not None:
-            raise ValueError("Cannot specify true_z_col both in config file and as a column in the dataset! Please choose one or the other.")
+            raise ValueError("Cannot specify true_z_col both in config file and as a column in the dataset!"
+                             " Please choose one or the other.")
         elif dataset_dict is not None:
             true_z_col = dataset_dict.get("TRUEZCOL", None)
 
         if sntypecol is not None and dataset_dict is not None:
-            raise ValueError("Cannot specify sntypecol both in config file and as a column in the dataset! Please choose one or the other.")
+            raise ValueError("Cannot specify sntypecol both in config file and as a column in the dataset!"
+                             " Please choose one or the other.")
         elif dataset_dict is not None:
             sntypecol = dataset_dict.get("SNTYPECOL", None)
 
@@ -83,22 +93,27 @@ class SN_dataset():
             # This is the actual subset cols determined for this file. It may be different from the requested subset
             # cols if the names don't match.
             potential_cols = self.actual_subset_cols.copy() if self.actual_subset_cols is not None else []
-             # Start with the subset cols, since those are definitely needed if they exist.
-            potential_cols.extend([self.z_col, self.z_err_col, self.scone_col, self._true_z_col]) # Include redshift and scone columns
+            # Start with the subset cols, since those are definitely needed if they exist.
+            potential_cols.extend([self.z_col, self.z_err_col, self.scone_col, self._true_z_col])
+            # Include redshift and scone columns
 
-            if "DUMP" not in data_name: # If this is a dump dataset, cuts aren't applied.
-                potential_cols.extend(list(cuts.keys()) if cuts is not None else []) # Need to get the cols being cut on
+            if "DUMP" not in data_name:  # If this is a dump dataset, cuts aren't applied.
+                potential_cols.extend(list(cuts.keys()) if cuts is not None else [])
+                # Need to get the cols being cut on
 
             cols = [c for c in potential_cols if c is not None]
 
             if sntype == "CC" and "SIM" in data_name:
                 if sntypecol is None:
-                    sntypecol = "TYPE"  # default sntype column name for simulated data. This is a bit hacky, but I don't want to require the user to specify this in the config file if it's always the same.
+                    sntypecol = "TYPE"  # default sntype column name for simulated data.
+                    # This is a bit hacky, but I don't want to require the user to specify this in
+                    # the config file if it's always the same.
                 cols.append(sntypecol)  # need the sntypecol to apply the CC cut for simulated data.
                 # THIS IS EXTREMELY HACKY AND CANNOT STAY. THIS IS JUST TO SEE IF I CAN GET IT RUNNING.
             if sntype == "CC" and "DUMP" in data_name:
                 if sntypecol is not None:
-                    cols.append(sntypecol)  # We only need this if it is specified for splitting. This is still so hacky.
+                    cols.append(sntypecol)  # We only need this if it is specified for splitting.
+                    # This is still so hacky.
             if sntypecol is not None and "DATA" in data_name:
                 cols.append(sntypecol)  # This is for fake Data only. This is really hacky now, come back and fix this.
             logging.debug(f"Columns to load for {data_name}: {cols}")
@@ -119,7 +134,6 @@ class SN_dataset():
             dataframe = pd.concat([dataframe, df])
         self.df = dataframe
         logger.debug(f"z col for {data_name}: {getattr(self, 'z_col', None)}")
-
 
     @property
     def total_counts(self):
@@ -157,21 +171,23 @@ class SN_dataset():
         try:
             if prob_thresh is not None:
                 return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
-                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
+                               self.df[self.z_col][self.prob_scone() > prob_thresh], statistic="count", bins=z_bins)[0]
 
-            return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
+            return binstat(self.df[self.z_col], self.df[self.z_col], statistic="count", bins=z_bins)[0]
         except AttributeError:
-            raise AttributeError(f"z_col is not set for {self.data_name}! Can't calculate z counts without a valid z_col. Available columns: {self.df.columns}")
+            raise AttributeError(f"z_col is not set for {self.data_name}! Can't calculate z counts without a valid"
+                                 f" z_col. Available columns: {self.df.columns}")
 
     def determine_binned_z_error(self, z_bins, prob_thresh=None):
         """Calculate the binned redshift error for this dataset."""
         try:
             if self.z_err_col is None:
-                raise ValueError(f"z_err_col is not set for {self.data_name}! Can't calculate binned z error without a valid z_err_col. Available columns: {self.df.columns}")
+                raise ValueError(f"z_err_col is not set for {self.data_name}! Can't calculate binned z error"
+                                 f" without a valid z_err_col. Available columns: {self.df.columns}")
 
-
-
-            if prob_thresh is not None and "ALL" in self.data_name:  # If we're applying a probability threshold and this isn't a pure IA dataset, we need to subset the data for the error calculation as well.
+            if prob_thresh is not None and "ALL" in self.data_name:  # If we're applying a probability
+                # threshold and this isn't a pure IA dataset, we need to subset the data for the error
+                # calculation as well.
                 df_subset = self.df[self.prob_scone() > prob_thresh]
                 counts = self.z_counts(z_bins, prob_thresh=prob_thresh)
             else:
@@ -180,23 +196,29 @@ class SN_dataset():
                 df_subset = self.df
                 counts = self.z_counts(z_bins, prob_thresh=None)
 
-            squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2,
+                                            statistic="sum", bins=z_bins)[0]
             binned_z_error = np.sqrt(squared_errors_summed) / counts
 
             # Calculate the mean redshift weighted by error in each bin:
-            weighted_z_sum = binstat(df_subset[self.z_col], df_subset[self.z_col] / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
-            weights_sum = binstat(df_subset[self.z_col], 1 / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
-            weighted_mean_z = np.divide(weighted_z_sum, weights_sum, out=np.full_like(weighted_z_sum, np.nan), where=weights_sum!=0)
+            weighted_z_sum = binstat(df_subset[self.z_col], df_subset[self.z_col] / df_subset[self.z_err_col]**2,
+                                     statistic="sum", bins=z_bins)[0]
+            weights_sum = binstat(df_subset[self.z_col], 1 / df_subset[self.z_err_col]**2, statistic="sum",
+                                  bins=z_bins)[0]
+            weighted_mean_z = np.divide(weighted_z_sum, weights_sum, out=np.full_like(weighted_z_sum, np.nan),
+                                        where=weights_sum != 0)
             logging.debug("Fiducial z centers are: {}".format(0.5 * (z_bins[:-1] + z_bins[1:])))
             logging.debug("Weighted mean z in each bin for error calculation: {}".format(weighted_mean_z))
             delta = weighted_mean_z - 0.5 * (z_bins[:-1] + z_bins[1:])
             logging.debug("Delta between weighted mean z and fiducial z centers: {}".format(delta))
 
-
             return binned_z_error
 
         except AttributeError:
-            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned z error without valid z_col and z_err_col. z_col: {getattr(self, 'z_col', None)}, z_err_col: {getattr(self, 'z_err_col', None)}. Available columns: {self.df.columns}")
+            raise AttributeError(f"z_col or z_err_col is not set for {self.data_name}! Can't calculate binned"
+                                 f" z error without valid z_col and z_err_col. z_col: {getattr(self, 'z_col', None)},"
+                                 f" z_err_col: {getattr(self, 'z_err_col', None)}. "
+                                 f"Available columns: {self.df.columns}")
 
     def mu_res(self):
         """Calculate the Hubble residuals for the supernovae in this dataset. Currently not used."""
@@ -231,7 +253,7 @@ class SN_dataset():
 
         #####
         new_z_err_col = pd.concat([self.df[self.z_err_col], dataset.df[dataset.z_err_col]]) \
-             if self.z_err_col is not None and dataset.z_err_col is not None else None
+            if self.z_err_col is not None and dataset.z_err_col is not None else None
 
         if self.z_err_col is not None and dataset.z_err_col is not None:
             new_df[self.z_err_col] = new_z_err_col
@@ -251,9 +273,11 @@ class SN_dataset():
         if self.true_z_col == dataset.true_z_col:
             new_dataset.true_z_col = self.true_z_col
         else:
-            raise ValueError(f"True z cols don't match for datasets being combined! {self.true_z_col} vs {dataset.true_z_col}")
+            raise ValueError(f"True z cols don't match for datasets being combined! {self.true_z_col} vs"
+                             f" {dataset.true_z_col}")
 
-        logging.debug(f"Combined dataset {data_name} has z col: {new_dataset.z_col} and scone col: {new_dataset.scone_col} and true z col: {new_dataset.true_z_col}")
+        logging.debug(f"Combined dataset {data_name} has z col: {new_dataset.z_col} and scone col:"
+                      f" {new_dataset.scone_col} and true z col: {new_dataset.true_z_col}")
         return new_dataset
 
         # what if the two datasets ahave different zcols? I need to determine how to do the above more properly.
@@ -298,7 +322,7 @@ class SN_dataset():
 
         return dataframe
 
-    def determine_needed_columns(self, path, zcol, subset_cols = None):
+    def determine_needed_columns(self, path, zcol, subset_cols=None):
         logger.debug(f"Determining needed columns for {self.data_name} using file {path}")
         logger.debug(f"Specified zcol: {zcol}")
         # Only load the columns needed. This is important for memory management, especially for large datasets.
@@ -314,7 +338,7 @@ class SN_dataset():
             logger.debug(f"zcol specified in config file: {zcol}")
             z_col_specified = True
         else:
-            possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
+            possible_z_cols = ["zHD", "GENZ", "HOST_ZPHOT"]
             z_col_specified = False
 
         self.z_col = getattr(self, "z_col", None)
@@ -344,9 +368,11 @@ class SN_dataset():
                     break
             if getattr(self, "z_err_col", None) is None:
                 raise ValueError(f"Couldn't find a valid z error column for {self.data_name}! Looked for columns"
-                f" with extensions {possible_extensions} added to z_col {self.z_col}. Available columns: {all_cols}")
+                                 f" with extensions {possible_extensions} added to z_col {self.z_col}. "
+                                 f"Available columns: {all_cols}")
         else:
-            logging.debug(f"z_col {self.z_col} for {self.data_name} looks like a true z column, so not looking for a z error column.")
+            logging.debug(f"z_col {self.z_col} for {self.data_name} looks like a true z column, so not looking for a "
+                          "z error column.")
             self.z_err_col = None
 
         # Find the appropriate SCONE probability column, if it exists.
@@ -401,7 +427,7 @@ class SN_dataset():
                               col in all_cols]
                 if len(cols_in_df) > 1:
                     raise ValueError(f"Multiple possible true z cols found for {self.data_name}: {cols_in_df}. "
-                                      "Please specify TRUEZCOL in config file.")
+                                     "Please specify TRUEZCOL in config file.")
                 elif len(cols_in_df) == 1:
                     self._true_z_col = cols_in_df[0]
                     logging.info(f"Auto-setting true z col for {self.data_name} to {cols_in_df[0]}")
@@ -413,9 +439,11 @@ class SN_dataset():
             for scol in subset_cols:
                 potential_cols = [col for col in all_cols if scol in col]
                 if len(potential_cols) == 0:
-                    raise ValueError(f"Couldn't find any column with {scol} in it for subsetting in {self.data_name}! Available columns: {all_cols}")
+                    raise ValueError(f"Couldn't find any column with {scol} in it for subsetting in {self.data_name}!"
+                                     f" Available columns: {all_cols}")
                 elif len(potential_cols) > 1:
-                    raise ValueError(f"Found multiple columns with {scol} in it for subsetting in {self.data_name}! Which do I use? Found: {potential_cols}")
+                    raise ValueError(f"Found multiple columns with {scol} in it for subsetting in {self.data_name}! "
+                                     f"Which do I use? Found: {potential_cols}")
                 else:
                     all_good_subset_cols.append(potential_cols[0])
             logging.debug(f"Determined subset columns for {self.data_name}: {all_good_subset_cols}")
@@ -428,7 +456,8 @@ class SN_dataset():
         if sntype_col is None:
             raise ValueError("No sntype_col specified for splitting dataset!")
         if sntype_col not in self.df.columns:
-            raise ValueError(f"Couldn't find sntype_col {sntype_col} in dataframe for splitting! Available columns: {self.df.columns}")
+            raise ValueError(f"Couldn't find sntype_col {sntype_col} in dataframe for splitting! Available columns:"
+                             f" {self.df.columns}")
 
         df_ia = self.df[self.df[sntype_col].isin(ia_vals)]
         df_cc = self.df[~self.df[sntype_col].isin(ia_vals)]

@@ -99,7 +99,7 @@ def rescale_CC_for_cov(rescale_vals_and_seeds, PROB_THRESH, index, survey, datas
         temp_sim_all_df = pd.concat([new_sim_CC_df_cut, sim_IA_df_cut])
         temp_sim_all_cut_counts = binstat(temp_sim_all_df[datasets[f"{survey}_SIM_CC"].z_col],
                                           temp_sim_all_df[datasets[f"{survey}_SIM_CC"].z_col],
-                                          statistic='count', bins=z_bins)[0]
+                                          statistic="count", bins=z_bins)[0]
         # Finally do the bias correction as in CC decontam in the main analysis.
         n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
         bias_correction = datasets[f"{survey}_SIM_IA"].z_counts(z_bins) / temp_sim_all_cut_counts
@@ -125,6 +125,7 @@ def turnover_power_law(z, x):
                   alpha2 * (1 + z)**beta2)
     return fJ
 
+
 def turnover_power_law_forced_cty(z, x):
     alpha1, beta1, beta2 = x
     z_turn = 1
@@ -143,9 +144,10 @@ import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
-def cosmic_SFR(z,a,b,c,d):
+def cosmic_SFR(z, a, b, c, d):
     H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
     return (a + b * z) / (1 + (z / c)**d) * H0 / 100
+
 
 def cosmic_SFR_dt_dz(z, a, b, c, d):
     H0 = cosmology.H0  # in km/s/Mpc
@@ -169,7 +171,7 @@ def AplusB_cosmicSFH(z, x):
     c = 3.3
     d = 5.2
 
-    A,B = x
+    A, B = x
 
     rho_dot_evaluated = cosmic_SFR(z, a, b, c, d)
     vec_rho_integrated = np.vectorize(cosmic_SFR_integrated)
@@ -203,17 +205,15 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
     return np.array(total_counts)
 
 
-
 def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRANGE_PEAKMJD, cosmo):
-    """
-    Python translation of the C function SNcount_model.
-    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT) 
+    """Python translation of the C function SNcount_model.
+    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT)
     based on the provided C code and documentation,
     which was then modified by Cole, because Cole has not used C since middle school.
      However, testing it against the SNANA it seems to give consistent results
-    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA. 
-    Since those are slightly stochastic, this is 
-    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue 
+    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA.
+    Since those are slightly stochastic, this is
+    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue
     when we want to measure rates to
     that precision. But for now, this should be sufficient for testing and development purposes.
 
@@ -289,4 +289,3 @@ def chi2_to_sigma(chi2_diff, dof):
 
     sigma = np.sqrt(2) * erfinv(1 - 2 * p_value)
     return sigma
-
