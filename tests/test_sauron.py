@@ -32,8 +32,8 @@ warning_rtol = 1e-6
 # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
+    format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S"
 )
 
 logger = logging.getLogger(__name__)
@@ -41,14 +41,16 @@ logger.setLevel(logging.DEBUG)
 
 
 def test_regression_specz():
-    """In this test, we simply test that nothing has changed significantly. This is using CC decontam and realistic data. Spec Zs.
+    """In this test, we simply test that nothing has changed significantly. 
+    This is using CC decontam and realistic data. Spec Zs.
     """
     outpath = pathlib.Path(__file__).parent / "test_output/test_regnopz_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.5", "--no-sanity-check"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov",
+     "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -172,11 +174,11 @@ def test_calc_cov_term():
     plot = False
     if plot:
         plt.subplot(1, 2, 1)
-        plt.imshow(cov_mat, origin='lower')
+        plt.imshow(cov_mat, origin="lower")
         plt.colorbar()
         plt.title("Calculated Covariance Term")
         plt.subplot(1, 2, 2)
-        plt.imshow(regression_cov, origin='lower')
+        plt.imshow(regression_cov, origin="lower")
         plt.colorbar()
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/check_test_cov_term.png")
     np.testing.assert_allclose(cov_mat, regression_cov, atol=1e-7)
@@ -185,7 +187,6 @@ def test_calc_cov_term():
 @pytest.mark.xfail(reason="This test is currently broken until new photoz runs")
 def test_rescale_CC_for_cov():
     args = SimpleNamespace()
-    #config_path = pathlib.Path(__file__).parent / "test_config_5pz.yml"
     config_path = pathlib.Path(__file__).parent / "../config_des_data_zphot.yml"
     args.config = config_path
     args.cheat_cc = False
@@ -197,7 +198,7 @@ def test_rescale_CC_for_cov():
     xx = np.array([0.05, 0.15865525, 0.5, 0.84134475, 0.95])  # 5 sigma points for normal dist
     X = norm(loc=1, scale=0.2)
     vals = X.ppf(xx)
-    grid = np.meshgrid(vals, vals, vals, indexing='ij')
+    grid = np.meshgrid(vals, vals, vals, indexing="ij")
     grid0 = grid[0].flatten()
     grid1 = grid[1].flatten()
     grid2 = grid[2].flatten()
@@ -217,11 +218,11 @@ def test_rescale_CC_for_cov():
     plot = False
     if plot:
         plt.subplot(1, 2, 1)
-        plt.imshow(cov_rate_norm, origin='lower')
+        plt.imshow(cov_rate_norm, origin="lower")
         plt.colorbar()
         plt.title("Calculated Rescaled Covariance Term")
         plt.subplot(1, 2, 2)
-        plt.imshow(regression_cov, origin='lower')
+        plt.imshow(regression_cov, origin="lower")
         plt.colorbar()
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_rescale_cov_term.png")
     np.testing.assert_allclose(cov_rate_norm, regression_cov, atol=1e-7)
@@ -290,6 +291,7 @@ def test_chi():
     assert isinstance(measured_chi, float), "Measured chi is not a float."
     np.testing.assert_allclose(measured_chi, regression_chi, atol=1e-7)
 
+
 @pytest.mark.xfail(reason="This test is currently broken until new photoz runs")
 def test_regression_pz_5datasets_covariance():
     """In this test, we simply test that nothing has changed significantly. This is using CC decontam and realistic data. Photo Zs.
@@ -327,7 +329,7 @@ def test_coverage_no_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov', "--prob_thresh", "0.5"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.5"]
     # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -365,7 +367,7 @@ def test_coverage_no_sys():
     all_beta = df["beta"] - 1.7
     inv_cov = np.linalg.inv(mean_cov)
     all_pos = np.vstack([all_alpha, all_beta])
-    product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
+    product_1 = np.einsum("ij,jl->il", inv_cov, all_pos)
     product_2 = np.einsum("il,il->l", all_pos, product_1)
 
     sub_one_sigma = np.where(product_2 < sigma_1)
@@ -374,18 +376,18 @@ def test_coverage_no_sys():
     if plot:
         import matplotlib.pyplot as plt
 
-        plt.hist(product_2, bins=10, density=True, alpha=0.7, color='blue', label='Observed')
+        plt.hist(product_2, bins=10, density=True, alpha=0.7, color="blue", label="Observed")
         x = np.linspace(0, 12, 100)
         # Dof = 6, 8 bins - 2 fitted parameters
-        plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
-        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
-        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.plot(x, scipy_chi2.pdf(x, 2), color="red", linestyle="dashed", label="Expected")
+        plt.axvline(sigma_1, color="r", linestyle="dashed", linewidth=1)
+        plt.axvline(sigma_2, color="g", linestyle="dashed", linewidth=1)
         plt.xlabel("Chi-squared statistic")
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_nosys_hist.png")
         plt.clf()
 
-        plt.errorbar(df["alpha"], df["beta"], xerr=df["alpha_error"], yerr=df["beta_error"], fmt='o', alpha=0.7)
-        plt.scatter(2.27e-5, 1.7, color='red', label='Truth')
+        plt.errorbar(df["alpha"], df["beta"], xerr=df["alpha_error"], yerr=df["beta_error"], fmt="o", alpha=0.7)
+        plt.scatter(2.27e-5, 1.7, color="red", label="Truth")
         plt.xlabel("Alpha")
         plt.ylabel("Beta")
         # # x = np.linspace(2.27e-5 - 5e-5, 2.27e-5 + 5e-5, 100)
@@ -405,9 +407,9 @@ def test_coverage_no_sys():
         pos = np.dstack((X, Y))
         pos -= np.array([2.27e-5, 1.7])
 
-        chivals = np.einsum('...i,ij,...j->...', pos, np.linalg.inv(mean_cov), pos)
+        chivals = np.einsum("...i,ij,...j->...", pos, np.linalg.inv(mean_cov), pos)
 
-        plt.contour(X, Y, chivals, levels=[2.3, 6], colors=['red', 'black'], linestyles=['dashed', 'dashed'])
+        plt.contour(X, Y, chivals, levels=[2.3, 6], colors=["red", "black"], linestyles=["dashed", "dashed"])
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_nosys_alpha_beta.png")
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
@@ -464,7 +466,7 @@ def test_coverage_with_sys():
     all_beta = df["beta"] - 1.7
     inv_cov = np.linalg.inv(mean_cov)
     all_pos = np.vstack([all_alpha, all_beta])
-    product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
+    product_1 = np.einsum("ij,jl->il", inv_cov, all_pos)
     product_2 = np.einsum("il,il->l", all_pos, product_1)
 
     sub_one_sigma = np.where(product_2 < sigma_1)
@@ -474,12 +476,12 @@ def test_coverage_with_sys():
     if plot:
         import matplotlib.pyplot as plt
 
-        plt.hist(product_2, bins=10, density=True, alpha=0.7, color='blue', label='Observed')
+        plt.hist(product_2, bins=10, density=True, alpha=0.7, color="blue", label="Observed")
         x = np.linspace(0, 12, 100)
         # Dof = 6, 8 bins - 2 fitted parameters
-        plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
-        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
-        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.plot(x, scipy_chi2.pdf(x, 2), color="red", linestyle="dashed", label="Expected")
+        plt.axvline(sigma_1, color="r", linestyle="dashed", linewidth=1)
+        plt.axvline(sigma_2, color="g", linestyle="dashed", linewidth=1)
         plt.xlabel("Chi-squared statistic")
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist.png")
 
@@ -655,7 +657,7 @@ def test_cc_decontam():
     for i in range(50):
         index = i+1
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
-        runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+        runner.fit_args_dict["z_bins"][survey] = runner.z_bins
         n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
@@ -681,10 +683,10 @@ def test_cc_decontam():
     plot = False
     if plot:
         plt.clf()
-        plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
-        plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
-        plt.xlabel('Redshift')
-        plt.ylabel('CC Counts')
+        plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt="o", label="True CC Counts")
+        plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt="o", label="Calculated CC Counts")
+        plt.xlabel("Redshift")
+        plt.ylabel("CC Counts")
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts.png")
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
@@ -715,32 +717,32 @@ def test_cc_decontam_small():
         index = i+1
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
         plt.clf()
-        plt.subplot(1,2,1)
-        plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins), label='Sim IA Counts')
-        plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins), label='Sim CC Counts')
-        plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins), label='Sim All Counts')
+        plt.subplot(1, 2, 1)
+        plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins), label="Sim IA Counts")
+        plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins), label="Sim CC Counts")
+        plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins), label="Sim All Counts")
         plt.plot(runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins, prob_thresh=PROB_THRESH), ls="--",
-                 label='Sim IA Counts Cut')
+                 label="Sim IA Counts Cut")
         plt.plot(runner.datasets[f"{survey}_SIM_CC"].z_counts(runner.z_bins, prob_thresh=PROB_THRESH), ls="--" ,
-                 label='Sim CC Counts Cut')
+                 label="Sim CC Counts Cut")
         plt.plot(runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh=PROB_THRESH), ls="--",
-                 label='Sim All Counts Cut')
+                 label="Sim All Counts Cut")
         plt.yscale("log")
         plt.legend()
 
         bias_cor = runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins) / runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh = 0.5)
-        plt.subplot(1,2,2)
-        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins), label='Data IA Counts')
-        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins), label='Data CC Counts')
-        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins), label='Data All Counts')
-        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data IA Counts Cut')
-        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),ls = "--", label='Data CC Counts Cut')
-        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH)*bias_cor, color = "k", lw= 3,ls = "--", label='Data All Counts Cut w/ BCor')
+        plt.subplot(1, 2, 2)
+        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins), label="Data IA Counts")
+        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins), label="Data CC Counts")
+        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins), label="Data All Counts")
+        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH), ls = "--", label="Data IA Counts Cut")
+        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH), ls = "--", label="Data CC Counts Cut")
+        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH)*bias_cor, color = "k", lw= 3, ls = "--", label="Data All Counts Cut w/ BCor")
         plt.yscale("log")
         plt.legend()
         plt.savefig(pathlib.Path(__file__).parent / f"test_plots/aaaa_test_cc_decontam_simcounts_{index}_small.png")
 
-        runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+        runner.fit_args_dict["z_bins"][survey] = runner.z_bins
         n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
@@ -748,11 +750,11 @@ def test_cc_decontam_small():
         residual = n_true - n_calc
         pull = residual / np.sqrt(n_true)
 
-        pulls[i,:] = pull
-        all_ntrue[i,:] = n_true
-        all_ncalc[i,:] = n_calc
-        all_ncc[i,:] = n_CC
-        #pulls.extend(list(pull))
+        pulls[i, :] = pull
+        all_ntrue[i, :] = n_true
+        all_ncalc[i, :] = n_calc
+        all_ncc[i, :] = n_CC
+        # pulls.extend(list(pull))
 
     pulls = np.array(pulls)
 
@@ -768,10 +770,10 @@ def test_cc_decontam_small():
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
     plt.clf()
-    plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
-    plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
-    plt.xlabel('Redshift')
-    plt.ylabel('CC Counts')
+    plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt="o", label="True CC Counts")
+    plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt="o", label="Calculated CC Counts")
+    plt.xlabel("Redshift")
+    plt.ylabel("CC Counts")
     plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts_small.png")
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(n_trials))
