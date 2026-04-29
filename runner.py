@@ -1245,7 +1245,7 @@ class sauron_runner:
                 if i < j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
 
-        result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names))
+        result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names)) # oops this should be z center
         result_to_add["survey"] = survey_name
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
