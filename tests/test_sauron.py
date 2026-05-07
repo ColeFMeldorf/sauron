@@ -370,7 +370,7 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 
@@ -470,7 +470,7 @@ def test_coverage_with_sys():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 
@@ -681,31 +681,20 @@ def test_cc_decontam():
     std_ncalc = np.std(all_ncalc, axis=0)
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
-    plot = True
+    plot = False
     if plot:
         plt.clf()
-        #plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
-        #plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
 
         # Print the following in a form that can be copied into a python list
-        print("z_centers = ", list(z_centers))
-        print("mean_res = ", list(mean_res))
-        print("std_ntrue = ", list(std_ntrue))
+        logging.debug("z_centers = ", list(z_centers))
+        logging.debug("mean_res = ", list(mean_res))
+        logging.debug("std_ntrue = ", list(std_ntrue))
 
         plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
         plt.axhline(0, color='k', linestyle='--')
         plt.xlabel('Redshift')
         plt.ylabel('CC Counts')
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts.png")
-
-    print("Means: ", means)
-    print(1/np.sqrt(50))
-    sub_one_sigma = np.where(np.abs(pulls) < 1/np.sqrt(50))
-    sub_two_sigma = np.where(np.abs(pulls) < 2/np.sqrt(50))
-    #logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(pulls)}")
-    #logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(pulls)}")
-    #np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(pulls), 0.68, atol=0.1)
-    #np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(pulls), 0.95, atol=0.1)
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
 
@@ -837,7 +826,7 @@ def test_regression_SDSS():
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_SDSS_redo.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_SDSS_redo_again.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -1003,7 +992,7 @@ def test_coverage_SDSS():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 
@@ -1082,16 +1071,14 @@ def test_cc_decontam_SDSS():
     std_ncalc = np.std(all_ncalc, axis=0)
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
-    plot = True
+    plot = False
     if plot:
         plt.clf()
-        #plt.errorbar(z_centers, mean_ntrue, yerr=std_ntrue, fmt='o', label='True CC Counts')
-        #plt.errorbar(z_centers, mean_ncalc, yerr=std_ncalc, fmt='o', label='Calculated CC Counts')
 
         # Print the following in a form that can be copied into a python list
-        print("z_centers = ", list(z_centers))
-        print("mean_res = ", list(mean_res))
-        print("std_ntrue = ", list(std_ntrue))
+        logging.debug("z_centers = ", list(z_centers))
+        logging.debug("mean_res = ", list(mean_res))
+        logging.debug("std_ntrue = ", list(std_ntrue))
 
         plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
         plt.axhline(0, color='k', linestyle='--')

@@ -897,7 +897,7 @@ class sauron_runner():
                     plt.plot(n_sim_scone_cut/sim_norm, label="SIM ALL counts after scone cut")
                     logging.debug(f"Calculated n_data after scone cut decontamination: {n_data}")
                     plt.legend()
-                    path = f"/home/colefmeldorf/sauron/debug_plots/scone_decontamination_{survey}_dataset{index}.png"
+                    path = f"debug_plots/scone_decontamination_{survey}_dataset{index}.png"
                     logging.debug(f"Saving scone decontamination plot to {path} ")
                     plt.savefig(path)
 
