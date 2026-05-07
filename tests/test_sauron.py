@@ -326,7 +326,7 @@ def test_coverage_no_sys():
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage_cc_fixed.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov', "--prob_thresh", "0.5"]
     # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
@@ -370,7 +370,7 @@ def test_coverage_no_sys():
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
-    plot = False
+    plot = True
     if plot:
         import matplotlib.pyplot as plt
 
@@ -440,7 +440,7 @@ def test_coverage_with_sys():
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage_cc_fixed.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -636,7 +636,7 @@ def test_des_data_regression():
 
 
 def test_cc_decontam():
-    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage_cc_fixed.yml"
     args = SimpleNamespace()
     args.config = config_path
     args.cheat_cc = False
@@ -661,6 +661,8 @@ def test_cc_decontam():
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
         residual = n_true - n_calc
         pull = residual / np.sqrt(n_true)
+        logger.debug(f"n_true: {n_true}")
+        logger.debug(f"n_calc: {n_calc}")
 
         pulls[i, :] = pull
         all_ntrue[i, :] = n_true
@@ -689,13 +691,21 @@ def test_cc_decontam():
         print("z_centers = ", list(z_centers))
         print("mean_res = ", list(mean_res))
         print("std_ntrue = ", list(std_ntrue))
-        import pdb; pdb.set_trace()
 
         plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
         plt.axhline(0, color='k', linestyle='--')
         plt.xlabel('Redshift')
         plt.ylabel('CC Counts')
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts.png")
+
+    print("Means: ", means)
+    print(1/np.sqrt(50))
+    sub_one_sigma = np.where(np.abs(pulls) < 1/np.sqrt(50))
+    sub_two_sigma = np.where(np.abs(pulls) < 2/np.sqrt(50))
+    #logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(pulls)}")
+    #logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(pulls)}")
+    #np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(pulls), 0.68, atol=0.1)
+    #np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(pulls), 0.95, atol=0.1)
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
 
@@ -1048,7 +1058,7 @@ def test_cc_decontam_SDSS():
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
         runner.fit_args_dict['z_bins'][survey] = runner.z_bins
         args.cheat_cc = False
-        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
         residual = n_true - n_calc
@@ -1082,13 +1092,13 @@ def test_cc_decontam_SDSS():
         print("z_centers = ", list(z_centers))
         print("mean_res = ", list(mean_res))
         print("std_ntrue = ", list(std_ntrue))
-        import pdb; pdb.set_trace()
 
         plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
         plt.axhline(0, color='k', linestyle='--')
         plt.xlabel('Redshift')
         plt.ylabel('CC Counts')
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts_SDSS.png")
+
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
 

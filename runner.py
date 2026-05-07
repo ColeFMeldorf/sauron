@@ -872,18 +872,22 @@ class sauron_runner():
             elif method == "scone_cut":
                 logger.debug(f"Total counts without scone cut: {np.sum(datasets[f'{survey}_DATA_ALL_{index}'].z_counts(z_bins))}")
                 n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                logger.debug(f"Total n_data before CC contamination using scone cut: {np.sum(n_data)}")
+                logger.debug(f"Total n_data before bias correction using scone cut: {n_data}")
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
                 n_data /= bias_correction
-                logger.debug(f"Total n_data after CC contamination using scone cut: {np.sum(n_data)}")
+                logger.debug(f"Total n_data after bias correction using scone cut: {n_data}")
                 if debug:
                     plt.clf()
                     data_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
                     plt.plot(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, PROB_THRESH)/data_norm, label="DATA ALL counts using JUST scone cut")
                     plt.plot(n_data/data_norm, label="DATA ALL counts after scone cut decontamination")
                     n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
+
+                    #n_data_ia = datasets[f"{survey}_DATA_IA"].z_counts(z_bins)
+                    #plt.plot(n_data_ia/data_norm, label="DATA IA counts cheating")
+
                     plt.plot(n_all/data_norm, label="DATA counts before CC contamination")
                     plt.axhline(0, color='k', linestyle='--', lw=1)
                     n_sim = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)
@@ -893,7 +897,7 @@ class sauron_runner():
                     plt.plot(n_sim_scone_cut/sim_norm, label="SIM ALL counts after scone cut")
                     logging.debug(f"Calculated n_data after scone cut decontamination: {n_data}")
                     plt.legend()
-                    path = f"debug_plots/scone_decontamination_{survey}_dataset{index}.png"
+                    path = f"/home/colefmeldorf/sauron/debug_plots/scone_decontamination_{survey}_dataset{index}.png"
                     logging.debug(f"Saving scone decontamination plot to {path} ")
                     plt.savefig(path)
 
