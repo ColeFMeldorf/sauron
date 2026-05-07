@@ -12,15 +12,15 @@ from runner import sauron_runner
 # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
+    format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
+    datefmt="%H:%M:%S"
 )
 
 
 def main():
-    parser = argparse.ArgumentParser(description='SAURON: Survey-Agnostic volUmetric Rate Of superNovae')
-    parser.add_argument('config', help='Path to the config file (positional argument)')
-    parser.add_argument('--output', '-o', default='sauron_output.csv', help='Path to the output file (optional)')
+    parser = argparse.ArgumentParser(description="SAURON: Survey-Agnostic volUmetric Rate Of superNovae")
+    parser.add_argument("config", help="Path to the config file (positional argument)")
+    parser.add_argument("--output", "-o", default="sauron_output.csv", help="Path to the output file (optional)")
     parser.add_argument("--cheat_cc", action="store_true", help="Cheat and skip CC step. Data_IA will be used as"
                         " Data_All.")
     parser.add_argument("--sys_cov", "--systematic_covariance", action=argparse.BooleanOptionalAction,
