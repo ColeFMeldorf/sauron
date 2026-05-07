@@ -270,7 +270,15 @@ class sauron_runner:
                                                                             survey_dict=survey_dict)
                     n_datasets = len(paths)
                     self.fit_args_dict["n_datasets"][survey] = n_datasets
-                    self.fit_args_dict["n_datasets"]["combined"] = 1  # This needs to be fixed later TODO
+                    all_n_datasets = []
+                    for k in self.fit_args_dict["n_datasets"].keys():
+                        if "combined" in k:
+                            continue
+                        else:
+                            all_n_datasets.append(self.fit_args_dict["n_datasets"][k])
+                    num_combined_datasets = min(all_n_datasets) if len(all_n_datasets) > 0 else 1
+
+                    self.fit_args_dict["n_datasets"]["combined"] = num_combined_datasets  # This needs to be fixed later TODO
                     logging.info(f"Found {n_datasets} data sets for {survey}")
 
                 else:
@@ -400,7 +408,6 @@ class sauron_runner:
 
         z_bins = self.fit_args_dict["z_bins"][survey]
         dump_counts = dump.z_counts(z_bins)
-
 
         z_bins_expanded = np.concatenate(([-np.inf], z_bins, [np.inf]))
 
@@ -594,7 +601,6 @@ class sauron_runner:
                               n_data, self.rate_function, cov_sys),
                         method=None
                     )
-            logging.debug(f"Minimize Result: {result}")
             fit_params = result.x * scales
             logging.debug(f"Minimize Result: {fit_params}")
 
@@ -1514,7 +1520,7 @@ class sauron_runner:
                 data_indices[s] = np.arange(1, self.fit_args_dict["n_datasets"][s] + 1)
 
             # Create a meshgrid of all possible combinations of dataset indexes across the surveys
-            mesh = np.meshgrid(*[data_indices[s] for s in survey], indexing="ij")
-            mesh = [m.flatten() for m in mesh]
-            for i, s in enumerate(survey):
-                self.fit_args_dict[f"{s}_combined_indices"] = mesh[i]
+            min_datasets = min(len(data_indices[s]) for s in survey)
+            for s in survey:
+                self.fit_args_dict[f"{s}_combined_indices"] = np.arange(1, min_datasets + 1)
+                logging.debug(f"Combined indices for survey {s}: {self.fit_args_dict[f'{s}_combined_indices']}")
