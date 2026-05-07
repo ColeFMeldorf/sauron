@@ -11,7 +11,7 @@ from astropy.io import fits
 cosmo = LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
-class SN_dataset():
+class SN_dataset:
     """A class to hold a dataset of supernovae for one survey and type."""
     def __init__(self, paths, sntype, data_name, zcol=None, true_z_col=None, sntypecol=None, survey_dict=None):
         self.data_name = data_name
@@ -19,8 +19,8 @@ class SN_dataset():
         if not isinstance(paths, list):
             paths = [paths]
 
-        #Survey dict represents all the information valid for 1 survey. Z_bins, cuts, etc.
-        #Dataset dict represents all the information valid for 1 of the datasets within that survey.
+        # Survey dict represents all the information valid for 1 survey. Z_bins, cuts, etc.
+        # Dataset dict represents all the information valid for 1 of the datasets within that survey.
         # For instance, the redshift column name for that file.
         if survey_dict is not None:
             # Either DUMP, SIM, or DATA should be in the data name. Extract the correct one.
@@ -157,9 +157,9 @@ class SN_dataset():
         try:
             if prob_thresh is not None:
                 return binstat(self.df[self.z_col][self.prob_scone() > prob_thresh],
-                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic='count', bins=z_bins)[0]
+                            self.df[self.z_col][self.prob_scone() > prob_thresh], statistic="count", bins=z_bins)[0]
 
-            return binstat(self.df[self.z_col], self.df[self.z_col], statistic='count', bins=z_bins)[0]
+            return binstat(self.df[self.z_col], self.df[self.z_col], statistic="count", bins=z_bins)[0]
         except AttributeError:
             raise AttributeError(f"z_col is not set for {self.data_name}! Can't calculate z counts without a valid z_col. Available columns: {self.df.columns}")
 
@@ -180,12 +180,12 @@ class SN_dataset():
                 df_subset = self.df
                 counts = self.z_counts(z_bins, prob_thresh=None)
 
-            squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            squared_errors_summed = binstat(df_subset[self.z_col], df_subset[self.z_err_col]**2, statistic="sum", bins=z_bins)[0]
             binned_z_error = np.sqrt(squared_errors_summed) / counts
 
             # Calculate the mean redshift weighted by error in each bin:
-            weighted_z_sum = binstat(df_subset[self.z_col], df_subset[self.z_col] / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
-            weights_sum = binstat(df_subset[self.z_col], 1 / df_subset[self.z_err_col]**2, statistic='sum', bins=z_bins)[0]
+            weighted_z_sum = binstat(df_subset[self.z_col], df_subset[self.z_col] / df_subset[self.z_err_col]**2, statistic="sum", bins=z_bins)[0]
+            weights_sum = binstat(df_subset[self.z_col], 1 / df_subset[self.z_err_col]**2, statistic="sum", bins=z_bins)[0]
             weighted_mean_z = np.divide(weighted_z_sum, weights_sum, out=np.full_like(weighted_z_sum, np.nan), where=weights_sum!=0)
             logging.debug("Fiducial z centers are: {}".format(0.5 * (z_bins[:-1] + z_bins[1:])))
             logging.debug("Weighted mean z in each bin for error calculation: {}".format(weighted_mean_z))
@@ -314,7 +314,7 @@ class SN_dataset():
             logger.debug(f"zcol specified in config file: {zcol}")
             z_col_specified = True
         else:
-            possible_z_cols = ['zHD', "GENZ", "HOST_ZPHOT"]
+            possible_z_cols = ["zHD", "GENZ", "HOST_ZPHOT"]
             z_col_specified = False
 
         self.z_col = getattr(self, "z_col", None)
