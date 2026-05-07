@@ -682,14 +682,14 @@ def test_cc_decontam():
     std_ncalc = np.std(all_ncalc, axis=0)
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
-    plot = False
+    plot = True
     if plot:
         plt.clf()
 
         # Print the following in a form that can be copied into a python list
-        logging.debug("z_centers = ", list(z_centers))
-        logging.debug("mean_res = ", list(mean_res))
-        logging.debug("std_ntrue = ", list(std_ntrue))
+        print("z_centers = ", list(z_centers))
+        print("mean_res = ", list(mean_res))
+        print("std_ntrue = ", list(std_ntrue))
 
         plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
         plt.axhline(0, color='k', linestyle='--')
