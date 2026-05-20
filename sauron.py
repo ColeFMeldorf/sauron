@@ -59,7 +59,7 @@ def main():
 
         runner.calculate_transfer_matrix(survey)
 
-        n_datasets = runner.fit_args_dict["n_datasets"][survey]
+        n_datasets = runner.survey_configs[survey].n_datasets
         runner.load_and_decontaminate_datasets(survey, PROB_THRESH=PROB_THRESH)
 
         for i in range(n_datasets):
@@ -78,10 +78,10 @@ def main():
             logging.info("Fitting only one combined dataset across all surveys.")
             indices = [0]
         else:
-            total_possible_indexes = math.prod([runner.fit_args_dict["n_datasets"][s] for s in surveys])
+            total_possible_indexes = math.prod([runner.survey_configs[s].n_datasets for s in surveys])
             indices = range(1, total_possible_indexes + 1)
 
-        runner.fit_args_dict["n_datasets"]["combined"] = len(indices)  # Update the number of datasets for the combined survey to reflect the number of combinations of datasets across surveys.
+        runner.survey_configs["combined"].n_datasets = len(indices) # Update the survey config for combined to reflect the number of combinations of datasets across surveys.
 
         for index in indices:
             logging.info(f"Fitting index {index} -----------------------")

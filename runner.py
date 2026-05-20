@@ -32,6 +32,32 @@ matplotlib_logger.setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+from dataclasses import dataclass, field
+
+@dataclass
+class SurveyConfig:
+    "A class that stores the configuration for a single survey, including paths to data files and fit options."
+    name: str
+    z_bins: np.ndarray = None
+    z_centers: np.ndarray = None
+    z_centers_err: list = field(default_factory=list) # List of ndarrays, one for each dataset
+    f_norm: float = None
+    N_gen: np.ndarray = None
+    eff_ij: np.ndarray = None
+    null_counts: np.ndarray = None
+    cov_sys: np.ndarray = None
+    n_data: list = field(default_factory=list)
+    n_datasets: int = 0
+    rate_function_name: str = None
+    rate_params: list = None
+    cc_are_separate: bool = True
+
+    n_data: list = field(default_factory=list)
+
+    # append placeholder to n_data list for 0 index because dataset indices start at 1
+    def __post_init__(self):
+        self.n_data.append("placeholder")
+
 
 def update_rcParams(key, val):
     if key in rcParams:
@@ -108,19 +134,7 @@ class sauron_runner:
     """Class to run SAURON analysis."""
     def __init__(self, args):
         self.args = args
-        self.fit_args_dict = {}
-        self.fit_args_dict["N_gen"] = {}
-        self.fit_args_dict["null_counts"] = {}
-        self.fit_args_dict["eff_ij"] = {}
-        self.fit_args_dict["f_norm"] = {}
-        self.fit_args_dict["n_data"] = {}
-        self.fit_args_dict["cov_sys"] = {}
-        self.fit_args_dict["cc_are_sep"] = {}
-        self.fit_args_dict["z_bins"] = {}
-        self.fit_args_dict["z_centers"] = {}
-        self.fit_args_dict["n_datasets"] = {}
-        self.fit_args_dict["simulated_rate_function"] = {}
-        self.fit_args_dict["rate_params"] = {}
+        self.survey_configs = {}
         self.results = {}
         self.final_counts = {}
 
@@ -163,9 +177,11 @@ class sauron_runner:
             Name of the survey.
         """
 
+        self.survey_configs[survey] = SurveyConfig(name=survey)
+
         raw_f_norm = args_dict.get("F_NORM", None)
         if raw_f_norm is None:
-            self.fit_args_dict["f_norm"][survey] = None
+            self.survey_configs[survey].f_norm = None
         else:
             try:
                 f_norm = float(raw_f_norm)
@@ -177,34 +193,36 @@ class sauron_runner:
                 raise ValueError(
                     f"F_NORM for survey {survey} must be a positive float greater than zero; got {f_norm!r}."
                 )
-            self.fit_args_dict["f_norm"][survey] = f_norm
+            self.survey_configs[survey].f_norm = f_norm
 
 
-        self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
+        self.survey_configs[survey].cc_are_separate = args_dict.get("CC_ARE_SEPARATE", None)
         logging.debug(f"Setting CC_ARE_SEPARATE for {survey} to {args_dict.get('CC_ARE_SEPARATE', None)}")
-        self.fit_args_dict["z_bins"][survey] = np.arange(0.0, 1.4, 0.1)
+        self.survey_configs[survey].z_bins = np.arange(0.0, 1.4, 0.1)
         if "Z_BINS" in args_dict:
             if isinstance(args_dict["Z_BINS"], list):
-                self.fit_args_dict["z_bins"][survey] = np.array(args_dict["Z_BINS"])
+                self.survey_configs[survey].z_bins = np.array(args_dict["Z_BINS"])
             elif isinstance(args_dict["Z_BINS"], int):
                 if "MIN_Z" not in args_dict or "MAX_Z" not in args_dict:
                     logging.warning("When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
                                     " Defaulting to MIN_Z=0 and MAX_Z=1.4")
                 min_z = args_dict.get("MIN_Z", 0)
                 max_z = args_dict.get("MAX_Z", 1.4)
-                self.fit_args_dict["z_bins"][survey] = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
-            logging.debug(f"Using z_bin edges for {survey}: {self.fit_args_dict['z_bins'][survey]}")
+                self.survey_configs[survey].z_bins = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
+            logging.debug(f"Using z_bin edges for {survey}: {self.survey_configs[survey].z_bins}")
 
         else:
             logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
+            self.survey_configs[survey].z_bins = np.arange(0.0, 1.4, 0.1)
 
-        self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] +
-                                                   self.fit_args_dict["z_bins"][survey][:-1]) / 2
+        self.survey_configs[survey].z_centers = (self.survey_configs[survey].z_bins[1:] +
+                                                   self.survey_configs[survey].z_bins[:-1]) / 2
 
         simulated_rate_func = args_dict.get("RATE_FUNC", None)
         if simulated_rate_func is not None:
-            self.fit_args_dict["simulated_rate_function"][survey] = simulated_rate_func
-            self.fit_args_dict["simulated_rate_function"]["combined"] = simulated_rate_func
+            self.survey_configs[survey].simulated_rate_function = simulated_rate_func
+            if "combined" in self.survey_configs:
+                self.survey_configs["combined"].simulated_rate_function = simulated_rate_func
             logging.warning("Using specified RATE_FUNC for the surveys to define combined rate func."
                             " This needs to be fixed later.")
         else:
@@ -213,8 +231,9 @@ class sauron_runner:
         simulated_rate_params = args_dict.get("RATE_PARAMS", None)
         if simulated_rate_params is not None:
             simulated_rate_params = [float(i) for i in simulated_rate_params.split(",")]
-            self.fit_args_dict["rate_params"][survey] = simulated_rate_params
-            self.fit_args_dict["rate_params"]["combined"] = simulated_rate_params
+            self.survey_configs[survey].rate_params = simulated_rate_params
+            if "combined" in self.survey_configs:
+                self.survey_configs["combined"].rate_params = simulated_rate_params
             logging.warning("Using specified RATE_PARAMS for the surveys to define combined rate params."
                             " This needs to be fixed later.")
         else:
@@ -232,6 +251,10 @@ class sauron_runner:
             surveys.remove("FIT_OPTIONS")
         datasets = {}
         # Unpack dataframes into SN_dataset objects
+        if len(surveys) > 1:
+            logging.debug(f"Multiple surveys found in config file: {surveys}. Will attempt to combine them in the fit if specified in FIT_OPTIONS.")
+            self.survey_configs["combined"] = SurveyConfig(name="combined")
+
         for survey in surveys:
             survey_dict = files_input[survey]
             fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
@@ -269,8 +292,9 @@ class sauron_runner:
                                                                             sntype, data_name=survey+"_"+file,
                                                                             survey_dict=survey_dict)
                     n_datasets = len(paths)
-                    self.fit_args_dict["n_datasets"][survey] = n_datasets
-                    self.fit_args_dict["n_datasets"]["combined"] = 1  # This needs to be fixed later TODO
+                    self.survey_configs[survey].n_datasets = n_datasets
+                    if "combined" in self.survey_configs:
+                        self.survey_configs["combined"].n_datasets = 1  # This needs to be fixed later TODO
                     logging.info(f"Found {n_datasets} data sets for {survey}")
 
                 else:
@@ -278,12 +302,12 @@ class sauron_runner:
                                                            survey_dict=survey_dict)
                     logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
 
-            if self.fit_args_dict["cc_are_sep"].get(survey) is None:
-                self.fit_args_dict["cc_are_sep"][survey] = True
+            if self.survey_configs[survey].cc_are_separate is None:
+                self.survey_configs[survey].cc_are_separate = True
                 logging.warning("CC_ARE_SEPARATE not specified in config file for "f"{survey}. Defaulting to True.")
             # Combine IA and CC files if they are separate
 
-            if self.fit_args_dict["cc_are_sep"][survey]:
+            if self.survey_configs[survey].cc_are_separate:
 
                 if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
 
@@ -343,28 +367,16 @@ class sauron_runner:
                         datasets[f"{survey}_DATA_ALL_"+str(i+1)].split_into_IA_and_CC(
                             data_sn_col, ia_vals_data)
 
-
-                    # data_df = datasets[f"{survey}_DATA_ALL_"+str(i+1)].df
-                    # data_ia_df = data_df[data_df[data_sn_col].isin(ia_vals_data)]
-                    # datasets[f"{survey}_DATA_IA_"+str(i+1)] =\
-                    #     SN_dataset(data_ia_df, "IA", zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
-                    #                data_name=survey+f"_DATA_IA_{i+1}")
-
-
         self.datasets = datasets
         self.surveys = surveys
 
         for survey in surveys:
-            if self.fit_args_dict["f_norm"][survey] is None:
+            if self.survey_configs[survey].f_norm is None:
                 f_norm_guess = self.calculate_f_norm(survey, index=1)
                 logging.debug(f"The f_norm is probably close to this number {f_norm_guess}, "
                 "which is just the sum of the DATA_* counts divided by the sum of the SIM_* counts "
                 "for the first dataset. Your f_norm is probably then nearest rational fraction to this number.")
                 raise ValueError(f"F_NORM must be specified in FIT_OPTIONS for {survey} in config file {self.args.config}.")
-
-        # for d in datasets:
-        #     counts = datasets[d].z_counts(self.fit_args_dict['z_bins'][survey])
-        #     assert np.size(np.where(counts == 0)[0]) <= 2, f"{d} has several zero count bins! {counts}"
 
         return datasets, surveys
 
@@ -375,8 +387,8 @@ class sauron_runner:
         survey : str
             Name of the survey.
         """
-        z_bins = self.fit_args_dict["z_bins"][survey]
-        self.fit_args_dict["N_gen"][survey] = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
+        z_bins = self.survey_configs[survey].z_bins
+        self.survey_configs[survey].N_gen = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)
         self.results[survey] = []
 
         self.final_counts[survey] = {}
@@ -391,16 +403,15 @@ class sauron_runner:
             Name of the survey."""
         dump = self.datasets[f"{survey}_DUMP_IA"]
         sim = self.datasets[f"{survey}_SIM_IA"]
-        z_bins = self.fit_args_dict["z_bins"][survey]
+        z_bins = self.survey_configs[survey].z_bins
 
         logging.info(f"Using true col: {sim.true_z_col} and recovered col: {sim.z_col}")
         simulated_events = sim.df
         sim_z_col = sim.z_col
         true_z_col = sim.true_z_col
 
-        z_bins = self.fit_args_dict["z_bins"][survey]
+        z_bins = self.survey_configs[survey].z_bins
         dump_counts = dump.z_counts(z_bins)
-
 
         z_bins_expanded = np.concatenate(([-np.inf], z_bins, [np.inf]))
 
@@ -416,23 +427,10 @@ class sauron_runner:
 
         eff_ij = num/dump_counts
 
-        self.fit_args_dict["eff_ij"][survey] = eff_ij
+        self.survey_configs[survey].eff_ij = eff_ij
 
         if getattr(self.args, "plot", False):
-            LaurenNicePlots()
-            plt.clf()
-            plt.figure(figsize=(7, 6), dpi = 200)
-            plt.imshow(eff_ij[1:-1, :].T, origin="lower", aspect="auto",
-                       extent=[z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]],
-                       vmin=0, vmax=np.max(eff_ij)
-                       )
-            plt.colorbar(label=r"Efficiency (n$_{\mathrm{obs}}$ / n$_{\mathrm{sim}}$)")
-            plt.title(f"Efficiency Matrix for {survey}")
-            plt.ylabel("Recovered Redshift")
-            plt.xlabel("True Redshift")
-            path = f"plots/efficiency_matrix_{survey}.png"
-            logging.debug(f"Saving efficiency matrix plot to {path}")
-            plt.savefig(path)
+            efficiency_matrix_debug_plot(eff_ij, survey, z_bins)
 
         return eff_ij
 
@@ -451,7 +449,7 @@ class sauron_runner:
         z_bins_list = []
         f_norms = []
         for s in survey:
-            z_bins = self.fit_args_dict["z_bins"][s]
+            z_bins = self.survey_configs[s].z_bins
             z_bins_list.extend(z_bins)
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
 
@@ -459,52 +457,53 @@ class sauron_runner:
 
         # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
-            n_data = np.concatenate([self.fit_args_dict["n_data"][s][index] for s in survey])
-            f_norm = self.fit_args_dict["f_norm"][s]
+            n_data = np.concatenate([self.survey_configs[s].n_data[index] for s in survey])
+            f_norm = self.survey_configs[s].f_norm
             logging.debug(f"Using f_norm {f_norm} for survey {s}")
             f_norms.extend(np.repeat(f_norm, len(z_bins)-1))
         else:
             n_data = np.array([])
             for s in survey:
-                survey_index = self.fit_args_dict[f"{s}_combined_indices"][index-1]
-                n_data = np.concatenate([n_data, self.fit_args_dict["n_data"][s][survey_index]])
-                f_norm = self.fit_args_dict["f_norm"][s]
-                f_norms.extend(np.repeat(f_norm, len(self.fit_args_dict["z_bins"][s])-1))
+                survey_index = self.survey_configs[s].combined_indices[index-1]
+                n_data = np.concatenate([n_data, self.survey_configs[s].n_data[survey_index]])
+                f_norm = self.survey_configs[s].f_norm
+                f_norms.extend(np.repeat(f_norm, len(self.survey_configs[s].z_bins)-1))
 
         f_norms = np.array(f_norms)
-        N_gen = np.concatenate([self.fit_args_dict["N_gen"][s] for s in survey])
-        eff_ij_list = [self.fit_args_dict["eff_ij"][s] for s in survey]
+        N_gen = np.concatenate([self.survey_configs[s].N_gen for s in survey])
+        eff_ij_list = [self.survey_configs[s].eff_ij for s in survey]
         eff_ij = block_diag(eff_ij_list).toarray()
-        cov_sys_list = [self.fit_args_dict["cov_sys"][s] for s in survey]
+        cov_sys_list = [self.survey_configs[s].cov_sys for s in survey]
         for i, c in enumerate(cov_sys_list):
             s = survey[i]
-            size = len(self.fit_args_dict["z_centers"][s])
+            size = len(self.survey_configs[s].z_centers)
             if c is None:
                 cov_sys_list[i] = np.zeros((size, size))
         cov_sys = block_diag(cov_sys_list).toarray()
 
         if len(survey) == 1:
             survey = survey[0]
-            true_rate_function = func_name_dictionary.get(self.fit_args_dict["simulated_rate_function"][survey])
+            true_rate_function = func_name_dictionary.get(self.survey_configs[survey].simulated_rate_function)
             logging.debug(f"Using true rate function: {true_rate_function}")
-            logging.debug(f"With params: {self.fit_args_dict['rate_params'][survey]}")
+            logging.debug(f"With params: {self.survey_configs[survey].rate_params}")
             null_counts = calculate_null_counts(z_bins_list, z_centers, N_gen, cosmo=cosmo,
                                                 true_rate_function=true_rate_function,
-                                                rate_params=self.fit_args_dict["rate_params"][survey])
+                                                rate_params=self.survey_configs[survey].rate_params)
         else:
-            null_counts = np.concatenate([self.fit_args_dict["null_counts"][s] for s in survey])
+            null_counts = np.concatenate([self.survey_configs[s].null_counts for s in survey])
             survey = "combined"
-        self.fit_args_dict["null_counts"][survey] = null_counts
+        self.survey_configs[survey].null_counts = null_counts
 
         # Note this only allows for individual surveys or all, no subsets. Fix this later.
         if survey == "combined":
-            self.fit_args_dict["f_norm"][survey] = f_norms
-            self.fit_args_dict["z_bins"][survey] = z_bins_list
-            self.fit_args_dict["n_data"][survey] = n_data
-            self.fit_args_dict["N_gen"][survey] = N_gen
-            self.fit_args_dict["eff_ij"][survey] = eff_ij
-            self.fit_args_dict["cov_sys"][survey] = cov_sys
-            self.fit_args_dict["z_centers"][survey] = z_centers
+            self.survey_configs[survey].f_norm = f_norms
+            self.survey_configs[survey].z_bins = z_bins_list
+            self.survey_configs[survey].z_centers = z_centers
+            self.survey_configs[survey].n_data = n_data
+            self.survey_configs[survey].N_gen = N_gen
+            self.survey_configs[survey].eff_ij = eff_ij
+            self.survey_configs[survey].cov_sys = cov_sys
+
             self.final_counts[survey] = {}
             self.results[survey] = [] if self.results.get(survey) is None else self.results[survey]
 
@@ -735,13 +734,10 @@ class sauron_runner:
 
         if survey != "combined":
             logging.debug(f"Calculating binned redshift errors for dataset {survey}...")
-            if self.fit_args_dict.get("z_centers_err", None) is None:
-                self.fit_args_dict["z_centers_err"] = {}
-            if self.fit_args_dict["z_centers_err"].get(survey, None) is None:
-                self.fit_args_dict["z_centers_err"][survey] = ["placeholder"]
-            self.fit_args_dict["z_centers_err"][survey].append(
-                self.datasets[f"{survey}_DATA_ALL_{index}"].determine_binned_z_error(self.fit_args_dict["z_bins"][survey],
-                                                                                    prob_thresh=PROB_THRESH)
+
+            self.survey_configs[survey].z_centers_err = self.datasets[f"{survey}_DATA_ALL_{index}"].determine_binned_z_error(
+                self.survey_configs[survey].z_bins,
+                prob_thresh=PROB_THRESH
             )
         else:
             pass
@@ -778,128 +774,37 @@ class sauron_runner:
             used for the rescaling contaminant rates systematic, it is passed as an argument here.
         """
         datasets = self.datasets if datasets is None else datasets
-        z_bins = self.fit_args_dict["z_bins"][survey]
+        z_bins = self.survey_configs[survey].z_bins
         cheat = self.args.cheat_cc
         method = "scone_cut"
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
-            if method == "Lasker":
-                IA_frac = (datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH) /
-                           datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-                logging.debug(f"Simulated IA counts {datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH)}")
-                logging.debug(f"Simulated ALL counts {datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH)}")
+            logger.debug(f"Total counts without scone cut: {np.sum(datasets[f'{survey}_DATA_ALL_{index}'].z_counts(z_bins))}")
+            n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+            logger.debug(f"Total n_data before bias correction using scone cut: {n_data}")
+            bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
+                                datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
+            bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
+            n_data /= bias_correction
+            logger.debug(f"Total n_data after bias correction using scone cut: {n_data}")
+            if debug:
+                plt.clf()
+                data_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
+                plt.plot(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, PROB_THRESH)/data_norm, label="DATA ALL counts using JUST scone cut")
+                plt.plot(n_data/data_norm, label="DATA ALL counts after scone cut decontamination")
+                n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
-
-                N_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
-                logging.debug("Total N_data before CC contamination: "
-                              f"{datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)}")
-                n_data = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-
-                N_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
-                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-
-                dataset = datasets[f"{survey}_DATA_ALL_{index}"].df
-
-
-
-
-                R = n_data / N_data
-
-                # N_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins))
-                # n_IA_sim = np.sum(datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-
-                N_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
-                n_IA_sim = datasets[f"{survey}_SIM_IA"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-
-
-
-                # N_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins))
-                # n_CC_sim = np.sum(datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH))
-
-                N_CC_sim = datasets[f"{survey}_SIM_CC"].z_counts(z_bins)
-                n_CC_sim = datasets[f"{survey}_SIM_CC"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-
-                # These lines below are debug and should be removed
-                true_IAs_data = dataset[dataset["TYPE"].isin([101, 111])]
-                true_CCs_data = dataset[~dataset["TYPE"].isin([101, 111])] # I need to confirm these are the right types
-                # for c in true_IAs_data.columns:
-                #    logging.debug(c)
-                true_IAs_data = true_IAs_data[true_IAs_data["PROB_SCONE"] >= PROB_THRESH]
-                true_CCs_data = true_CCs_data[true_CCs_data["PROB_SCONE"] >= PROB_THRESH]
-
-                true_IAs_data = np.histogram(true_IAs_data["zHD"], bins=z_bins, weights=None)[0]
-                true_CCs_data = np.histogram(true_CCs_data["zHD"], bins=z_bins, weights=None)[0]
-                logging.debug(f"True IA counts in data: {true_IAs_data}")
-                logging.debug(f"True CC counts in data: {true_CCs_data}")
-                logging.debug(f"True IA fraction in data: {true_IAs_data / (true_IAs_data + true_CCs_data)}")
-                logging.debug(f"True scaling: {true_CCs_data / (0.02 * np.sum(N_CC_sim))}")
-
-                logging.debug(f"Calculated R: {R}")
-                logging.debug(f"N_IA_sim: {N_IA_sim}, n_IA_sim: {n_IA_sim}")
-                logging.debug(f"N_CC_sim: {N_CC_sim}, n_CC_sim: {n_CC_sim}")
-                S = (R * N_IA_sim - n_IA_sim) / (n_CC_sim - R * N_CC_sim)
-                logging.debug(f"Calculated contamination scaling S: {S}")
-                logging.debug(f"CC_frac before rescaling: {1 - IA_frac}")
-                CC_frac = (1 - IA_frac) * S
-                logging.debug(f"Calculated CC fraction after rescaling: {CC_frac}")
-                IA_frac = np.nan_to_num(1 - CC_frac)
-                logging.debug(f"Calculated IA fraction after contamination: {IA_frac}")
-                logging.debug(f"True IA fraction in data: {true_IAs_data / (true_IAs_data + true_CCs_data)}")
-
-                inverse_Ia_reduction_Fraction = N_IA_sim / n_IA_sim
-
-                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH) * IA_frac *\
-                    inverse_Ia_reduction_Fraction
-
-                if debug:
-                    plt.clf()
-                    plt.subplot(1, 2, 1)
-                    plt.plot(CC_frac, label="CC fraction vs z after contamination")
-                    plt.plot(IA_frac, label="IA fraction vs z after contamination")
-                    plt.axhline(0, color="k", linestyle="--", lw=1)
-                    plt.legend()
-                    plt.subplot(1, 2, 2)
-                    plt.plot(n_data, label="DATA ALL counts after CC contamination")
-                    # n_data_scone_cut = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                    # plt.plot(n_data_scone_cut, label="DATA ALL counts using scone cut")
-                    n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
-                    plt.plot(n_all, label="DATA counts before CC contamination")
-                    plt.axhline(0, color="k", linestyle="--", lw=1)
-                    logging.debug(f"Calculated n_data after CC contamination: {n_data}")
-                    plt.legend()
-                    path = f"debug_plots/scone_decontamination_{survey}_dataset{index}.png"
-                    logging.debug(f"Saving scone decontamination plot to {path} ")
-                    plt.savefig(path)
-            elif method == "scone_cut":
-                logger.debug(f"Total counts without scone cut: {np.sum(datasets[f'{survey}_DATA_ALL_{index}'].z_counts(z_bins))}")
-                n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                logger.debug(f"Total n_data before bias correction using scone cut: {n_data}")
-                bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
-                                    datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
-                bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-                n_data /= bias_correction
-                logger.debug(f"Total n_data after bias correction using scone cut: {n_data}")
-                if debug:
-                    plt.clf()
-                    data_norm = np.sum(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins))
-                    plt.plot(datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, PROB_THRESH)/data_norm, label="DATA ALL counts using JUST scone cut")
-                    plt.plot(n_data/data_norm, label="DATA ALL counts after scone cut decontamination")
-                    n_all = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
-
-                    #n_data_ia = datasets[f"{survey}_DATA_IA"].z_counts(z_bins)
-                    #plt.plot(n_data_ia/data_norm, label="DATA IA counts cheating")
-
-                    plt.plot(n_all/data_norm, label="DATA counts before CC contamination")
-                    plt.axhline(0, color="k", linestyle="--", lw=1)
-                    n_sim = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)
-                    n_sim_scone_cut = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-                    sim_norm = np.sum(n_sim)
-                    plt.plot(n_sim/sim_norm, label="SIM ALL counts before scone cut")
-                    plt.plot(n_sim_scone_cut/sim_norm, label="SIM ALL counts after scone cut")
-                    logging.debug(f"Calculated n_data after scone cut decontamination: {n_data}")
-                    plt.legend()
-                    path = f"debug_plots/scone_decontamination_{survey}_dataset{index}.png"
-                    logging.debug(f"Saving scone decontamination plot to {path} ")
-                    plt.savefig(path)
+                plt.plot(n_all/data_norm, label="DATA counts before CC contamination")
+                plt.axhline(0, color="k", linestyle="--", lw=1)
+                n_sim = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)
+                n_sim_scone_cut = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH)
+                sim_norm = np.sum(n_sim)
+                plt.plot(n_sim/sim_norm, label="SIM ALL counts before scone cut")
+                plt.plot(n_sim_scone_cut/sim_norm, label="SIM ALL counts after scone cut")
+                logging.debug(f"Calculated n_data after scone cut decontamination: {n_data}")
+                plt.legend()
+                path = f"debug_plots/scone_decontamination_{survey}_dataset{index}.png"
+                logging.debug(f"Saving scone decontamination plot to {path} ")
+                plt.savefig(path)
 
         else:
             if cheat:
@@ -913,11 +818,6 @@ class sauron_runner:
                 datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_IA_{index}"]
             else:
                 raise notImplementedError("DATA_IA file not found, and cheat_cc is set. Cannot proceed.")
-                # If no DATA_IA file exists, filter DATA_ALL for IA SNe only
-                # data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
-                # ia_vals_data = survey_dict["DATA_ALL"]["IA_VALS"]
-                # datasets[f"{survey}_DATA_ALL_{index}"] = datasets[f"{survey}_DATA_ALL"][np.where(
-                #     datasets[f"{survey}_DATA_ALL"].df[data_sn_col].isin(ia_vals_data))]
 
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins)
 
@@ -931,12 +831,11 @@ class sauron_runner:
         survey : str
             Name of the survey.
         """
-        fit_args_dict = self.fit_args_dict
         chi2_map = np.empty((n_samples, n_samples))
-        z_centers = self.fit_args_dict["z_centers"][survey]
+        z_centers = self.survey_configs[survey].z_centers
 
-        if len(fit_args_dict["N_gen"][survey]) != len(z_centers):
-            num_surveys = len(fit_args_dict["N_gen"][survey]) / len(z_centers)
+        if len(self.survey_configs[survey].N_gen) != len(z_centers):
+            num_surveys = len(self.survey_configs[survey].N_gen) / len(z_centers)
             if num_surveys % 1 != 0:
                 raise ValueError("N_gen length is not a multiple of z_centers length!")
             z_centers = np.tile(z_centers, int(num_surveys))
@@ -989,7 +888,7 @@ class sauron_runner:
             s = survey
             if survey != "combined":
                 # ax1 = ax[0]
-                z_centers = np.array(self.fit_args_dict["z_centers"][survey])
+                z_centers = self.survey_configs[survey].z_centers
 
                 # yerr=self.final_counts[survey]["predicted_counts_err"]
                 # ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
@@ -1006,7 +905,7 @@ class sauron_runner:
                 yerr = np.array([self.final_counts[survey]["binned_rate_84"] - self.final_counts[survey]["binned_rate"],
                     self.final_counts[survey]["binned_rate"] - self.final_counts[survey]["binned_rate_16"]])
                 index = -1
-                xerr = self.fit_args_dict["z_centers_err"][survey][index] # this needs to be fixed for multiple sim datasets
+                xerr = self.survey_configs[survey].z_centers_err[index] # this needs to be fixed for multiple sim datasets
                 ax1.errorbar(z_centers, self.final_counts[survey]["binned_rate"], xerr=xerr, yerr=yerr, fmt="o", label=f" {survey} Binned Rate ", ms=5)
 
                 ax1.set_xlabel("Redshift")
@@ -1029,9 +928,8 @@ class sauron_runner:
                 extraplot_survey = surveys[-1]
 
             if survey == extraplot_survey:
-
-                z_bins = self.fit_args_dict["z_bins"][survey]
-                z_centers = self.fit_args_dict["z_centers"][survey]
+                z_bins = self.survey_configs[survey].z_bins
+                z_centers = self.survey_configs[survey].z_centers
 
                 z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
                 rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
@@ -1109,7 +1007,7 @@ class sauron_runner:
             do_sys_cov = False if do_sys_cov is None else do_sys_cov
             if do_sys_cov:
                 cov_thresh = calculate_covariance_matrix_term(self.calculate_CC_contamination, [0.45, 0.5, 0.55],
-                                                              self.fit_args_dict["z_bins"][survey], 1, survey)
+                                                              self.survey_configs[survey].z_bins, 1, survey)
 
                 xx = [0.05, 0.16, 0.5, 0.84, 0.95] # 5 values between +/- 2 sigma \
                 X = stats.norm(loc=1, scale=0.2)
@@ -1133,9 +1031,9 @@ class sauron_runner:
                 rescale_vals = np.array(rescale_vals).T
 
                 cov_rate_norm = calculate_covariance_matrix_term(rescale_CC_for_cov, rescale_vals,
-                                                                 self.fit_args_dict["z_bins"][survey], PROB_THRESH,
+                                                                 self.survey_configs[survey].z_bins, PROB_THRESH,
                                                                  1, survey, self.datasets,
-                                                                 self.fit_args_dict["z_bins"][survey], False)
+                                                                 self.survey_configs[survey].z_bins, False)
                 # Hard coding index to one needs to change. TODO: Refactor to avoid hardcoded index value
                 #  (currently set to 1). This function should not need index at all.
                 cov_sys = cov_thresh + cov_rate_norm
@@ -1156,33 +1054,12 @@ class sauron_runner:
 
 
                 if self.args.debug:
+                    debug_covariance_matrix_plot(reduced_cov, reduced_cov_thresh, reduced_cov_rate_norm, survey)
 
-                    plt.clf()
 
-                    plt.subplot(1, 3, 1)
-                    plt.imshow(reduced_cov, origin="lower")
-                    plt.colorbar(label="Reduced Covariance")
-                    plt.title(f"Reduced Systematic Covariance Matrix for {survey}")
-                    plt.xlabel("Redshift Bin")
-                    plt.ylabel("Redshift Bin")
-                    plt.subplot(1, 3, 2)
-                    plt.imshow(reduced_cov_thresh, origin="lower")
-                    plt.colorbar(label="Reduced Covariance")
-                    plt.title(f"Reduced Threshold Covariance Matrix for {survey}")
-                    plt.xlabel("Redshift Bin")
-                    plt.ylabel("Redshift Bin")
-                    plt.subplot(1, 3, 3)
-                    plt.imshow(reduced_cov_rate_norm, origin="lower")
-                    plt.colorbar(label="Reduced Covariance")
-                    plt.title(f"Reduced Rate Norm Covariance Matrix for {survey}")
-                    plt.xlabel("Redshift Bin")
-                    plt.ylabel("Redshift Bin")
-                    path = f"plots/cov_sys_{survey}.png"
-                    logging.debug(f"Saving systematic covariance plot to {path}")
-                    plt.savefig(path)
             else:
                 cov_sys = None
-            self.fit_args_dict["cov_sys"][survey] = cov_sys
+            self.survey_configs[survey].cov_sys = cov_sys
 
     def calculate_f_norm(self, survey, index):
         """Calculate f_norm, the factor by which the real data is smaller than the simulation,
@@ -1208,7 +1085,7 @@ class sauron_runner:
         else:
 
             logging.debug("Couldn't find DATA_IA dataset for f_norm calculation so I am using inferred Ia counts.")
-            num_Ia = self.fit_args_dict["n_data"][survey][index]
+            num_Ia = self.survey_configs[survey].ndata[index]
             f_norm = np.sum(num_Ia) / \
                     self.datasets[f"{survey}_SIM_IA"].total_counts
 
@@ -1223,7 +1100,7 @@ class sauron_runner:
         index : int
             Dataset index.
         """
-        n_datasets = self.fit_args_dict["n_datasets"][survey]
+        n_datasets = self.survey_configs[survey].n_datasets
         # This needs to be updated for more parameters later
         if n_datasets > 1:
             survey_name = survey + f"_dataset_{index}"
@@ -1233,7 +1110,7 @@ class sauron_runner:
         result = self.final_counts[survey]["result"]
         cov = self.final_counts[survey]["covariance"]
         chi = self.final_counts[survey]["chi"]
-        z_bins = self.fit_args_dict["z_bins"][survey]
+        z_bins = self.survey_configs[survey].z_bins
 
         param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
         if param_names is None:
@@ -1259,7 +1136,7 @@ class sauron_runner:
         The cuts are determined by the CUTS field for each survey in the config file,
         of the form:
         CUTS:
-          parameter_name: min_value, max_value      
+          parameter_name: min_value, max_value
         For example:
         DES:
           CUTS:
@@ -1273,8 +1150,8 @@ class sauron_runner:
             Name of the survey.
         subset_version : bool
             Sometimes you only want to fit the rate to a portion of a dataset. E.g., the pilot survey for Roman,
-            or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the 
-            DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets, 
+            or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the
+            DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets,
             including DUMP datasets, and the cuts will be fetched from the SUBSET category in the config file
             instead of the CUTS category. If False, cuts will only be applied to the SIM and DATA datasets only, and
             the cuts will be fetched from the CUTS category in the config file.
@@ -1282,23 +1159,14 @@ class sauron_runner:
         datasets = self.datasets
         with open(self.args.config, "r") as config_file:
             files_input = yaml.safe_load(config_file)[survey]
-        n_datasets = self.fit_args_dict["n_datasets"][survey]
-        # if n_datasets == 1:
-        #     for datatype in ["ALL", "IA", "CC"]:
-        #         if datasets.get(f"{survey}_{datatype}") is not None:
-        #             before = datasets[f"{survey}_{datatype}"].total_counts
-        #             after = np.sum(datasets[f"{survey}_{datatype}"].z_counts(self.fit_args_dict["z_bins"][survey]))
-        #             logging.debug(f"Applied redshift bounds cut to {survey}_{datatype}: before={before}, after={after} fraction_kept={after/before if before > 0 else 0}")
-        #         else:
-        #             logging.debug(f"Dataset {survey}_{datatype} not found, skipping redshift bounds cut application.")
-        # else:
+        n_datasets = self.survey_configs[survey].n_datasets
+
         for i in range(n_datasets):
             for datatype in ["ALL", "IA", "CC"]:
                 if datasets.get(f"{survey}_DATA_{datatype}_{i+1}") is not None:
                     before = datasets[f"{survey}_DATA_{datatype}_{i+1}"].total_counts
-                    after = np.sum(datasets[f"{survey}_DATA_{datatype}_{i+1}"].z_counts(self.fit_args_dict["z_bins"][survey]))
+                    after = np.sum(datasets[f"{survey}_DATA_{datatype}_{i+1}"].z_counts(self.survey_configs[survey].z_bins))
                     logging.debug(f"Applied redshift bounds cut to {survey}_{datatype}_{i+1}: before={before}, after={after} fraction_kept={after/before if before > 0 else 0}")
-
 
 
         # Something to think about: Should cuts be applied to ALL datasets, CC datasets and IA datasets,
@@ -1464,11 +1332,12 @@ class sauron_runner:
             logging.debug(f"Saving sanity check plots {path}")
             plt.savefig(path)
 
-        if any(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict["z_bins"][survey]) < self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict["z_bins"][survey])):
+        z_bins = self.survey_configs[survey].z_bins
+        if any(self.datasets[f"{survey}_DUMP_ALL"].z_counts(z_bins) < self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)):
             raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
 
-        if not all(self.datasets[f"{survey}_DUMP_ALL"].z_counts(self.fit_args_dict["z_bins"][survey]) >=
-                     self.datasets[f"{survey}_SIM_ALL"].z_counts(self.fit_args_dict["z_bins"][survey])):
+        if not all(self.datasets[f"{survey}_DUMP_ALL"].z_counts(z_bins) >=
+                     self.datasets[f"{survey}_SIM_ALL"].z_counts(z_bins)):
             raise ValueError(f"DUMP_ALL dataset has fewer counts than SIM_ALL dataset in at least one redshift bin for survey {survey}!")
         # No dataset should have zero total counts
         for key in self.datasets.keys():
@@ -1479,42 +1348,29 @@ class sauron_runner:
         sim_IA = self.datasets[f"{survey}_SIM_IA"].total_counts
         sim_CC = self.datasets[f"{survey}_SIM_CC"].total_counts
         ratio = sim_CC / sim_IA if sim_IA > 0 else np.inf
-        # # The exact ratio is really quite variable. This is only to detect extremely bad set ups.
-        # # According to Jillian's Hourglass2 simulations, the ratio is about 4 CC : 3 IA, so
-        # # I set very wide bounds for the sanity check here.
-        # if ratio > 5 or ratio < 0.3:
-        #     raise ValueError(f"Unreasonable CC to IA ratio in SIM datasets for survey {survey}: {ratio}")
-        # dump_IA = self.datasets[f"{survey}_DUMP_IA"].total_counts
-        # dump_CC = self.datasets[f"{survey}_DUMP_CC"].total_counts
-        # dump_ratio = dump_CC / dump_IA if dump_IA > 0 else np.inf
-        # # What should these numbers be? Making them extremely wide for now.
-        # if dump_ratio > 100 or dump_ratio < 0.01:
-        #     raise ValueError(f"Unreasonable CC to IA ratio in DUMP datasets for survey {survey}: {dump_ratio}")
 
     def load_and_decontaminate_datasets(self, survey, PROB_THRESH):
         """Load in the datasets for each survey into n_data."""
 
         if not isinstance(survey, list):
-            self.fit_args_dict["n_data"][survey] = []
-            # Fill in the zeroth element because the index starts at 1 for the datasets.
-            self.fit_args_dict["n_data"][survey].append("placeholder")
 
-            for i in range(self.fit_args_dict["n_datasets"][survey]):
+
+            for i in range(self.survey_configs[survey].n_datasets):
                 index = i + 1
-                self.fit_args_dict["n_data"][survey].append(
+                self.survey_configs[survey].n_data.append(
                     self.calculate_CC_contamination(PROB_THRESH, index, survey, debug=self.args.debug)
                 )
 
-            logging.debug(f"Total length of n_data for {survey}: {len(self.fit_args_dict['n_data'][survey])}")
+            logging.debug(f"Total length of n_data for {survey}: {len(self.survey_configs[survey].n_data)}")
         else:
             # Load all of the possible combination datasets for each of the different surveys. Each
             # survey may have a different number of datasets so we need to create an index meshgrid.
             data_indices = {}
             for s in survey:
-                data_indices[s] = np.arange(1, self.fit_args_dict["n_datasets"][s] + 1)
+                data_indices[s] = np.arange(1, self.survey_configs[s].n_datasets + 1)
 
             # Create a meshgrid of all possible combinations of dataset indexes across the surveys
             mesh = np.meshgrid(*[data_indices[s] for s in survey], indexing="ij")
             mesh = [m.flatten() for m in mesh]
             for i, s in enumerate(survey):
-                self.fit_args_dict[f"{s}_combined_indices"] = mesh[i]
+                self.survey_configs[s].combined_indices = mesh[i]

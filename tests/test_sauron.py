@@ -656,7 +656,7 @@ def test_cc_decontam():
     for i in range(50):
         index = i+1
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
-        runner.fit_args_dict["z_bins"][survey] = runner.z_bins
+        runner.survey_configs[survey].z_bins = runner.z_bins
         n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
@@ -750,7 +750,7 @@ def test_cc_decontam_small():
         plt.legend()
         plt.savefig(pathlib.Path(__file__).parent / f"test_plots/aaaa_test_cc_decontam_simcounts_{index}_small.png")
 
-        runner.fit_args_dict["z_bins"][survey] = runner.z_bins
+        runner.survey_configs[survey].z_bins = runner.z_bins
         n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
@@ -899,7 +899,7 @@ def test_regression_SDSS():
 #         #plt.yscale("log")
 #         plt.legend()
 
-#         runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+#         runner.survey_configs[survey].z_bins = runner.z_bins
 #         n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
 
 #         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
@@ -1046,7 +1046,7 @@ def test_cc_decontam_SDSS():
     for i in range(50):
         index = i+1
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
-        runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+        runner.survey_configs[survey].z_bins = runner.z_bins
         args.cheat_cc = False
         n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
 
@@ -1089,4 +1089,3 @@ def test_cc_decontam_SDSS():
 
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
-
