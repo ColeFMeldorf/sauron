@@ -56,6 +56,7 @@ def main():
             runner.perform_sanity_checks(survey)
         if not args.skip_cuts:
             runner.apply_cuts(survey)
+            import pdb; pdb.set_trace()
 
         runner.calculate_transfer_matrix(survey)
 

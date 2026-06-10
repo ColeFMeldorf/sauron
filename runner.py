@@ -34,9 +34,10 @@ logger.setLevel(logging.DEBUG)
 
 from dataclasses import dataclass, field
 
+
 @dataclass
 class SurveyConfig:
-    "A class that stores the configuration for a single survey, including paths to data files and fit options."
+    """A class that stores the configuration for a single survey, including paths to data files and fit options."""
     name: str
     z_bins: np.ndarray = None
     z_centers: np.ndarray = None
@@ -509,8 +510,10 @@ class sauron_runner:
 
         logging.warning("This doesn't work for multiple surveys yet!")
 
+        binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+
         if "non_parametric" in self.rate_function_name:
-            self.x0 = np.zeros_like(z_centers) + 1e-8
+            self.x0 = binned_rate
             # self.x0[np.where(z_centers < 1)] = 2.27e-5 * (1 + z_centers[np.where(z_centers < 1)])**1.7
             # self.x0[np.where(z_centers >= 1)] = 7.5e-5 * (1 + z_centers[np.where(z_centers >= 1)])**(-0.1)
             # Start at Fromhaier / Strolger Rate for non-parametric fit, but this should be changed to be more flexible.
@@ -519,7 +522,7 @@ class sauron_runner:
         fJ_0 = self.rate_function(z_centers, self.x0)
 
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
-        binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+
 
         # This is only an approximation of the error, this needs to be rethought
         self.final_counts[survey]["binned_rate_84"] = (n_data + np.sqrt(n_data)) / (np.sum(null_counts * eff_ij * f_norms, axis=0))
@@ -780,11 +783,12 @@ class sauron_runner:
         if not cheat and datasets.get(f"{survey}_DUMP_CC") is not None:
             logger.debug(f"Total counts without scone cut: {np.sum(datasets[f'{survey}_DATA_ALL_{index}'].z_counts(z_bins))}")
             n_data = datasets[f"{survey}_DATA_ALL_{index}"].z_counts(z_bins, prob_thresh=PROB_THRESH)
-            logger.debug(f"Total n_data before bias correction using scone cut: {n_data}")
+
             bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                 datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
             bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
             n_data /= bias_correction
+            import pdb; pdb.set_trace()
             logger.debug(f"Total n_data after bias correction using scone cut: {n_data}")
             if debug:
                 plt.clf()

@@ -24,6 +24,7 @@ def debug_covariance_matrix_plot(reduced_cov, reduced_cov_thresh, reduced_cov_ra
     logging.debug(f"Saving systematic covariance plot to {path}")
     plt.savefig(path)
 
+
 def efficiency_matrix_debug_plot(eff_ij, survey, z_bins):
     LaurenNicePlots()
     plt.clf()
