@@ -618,7 +618,7 @@ class sauron_runner:
             # Redo the above without the cov_sys to determine the systematic_error
             no_sys_result = minimize(
                         scaled_chi2,
-                        x0=self.x0 / scales,
+                        x0=np.array(self.x0) / scales,
                         args=(null_counts, f_norms, z_centers, eff_ij,
                               n_data, self.rate_function, None),
                         method=None
