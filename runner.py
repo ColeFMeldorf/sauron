@@ -136,11 +136,6 @@ class sauron_runner:
         if self.rate_function_name is None:
             raise ValueError("RATE_FUNCTION or RATE_FUNC must be specified in FIT_OPTIONS in the config file.")
         logging.debug(f"RATE_FUNCTION specified in config: {self.rate_function_name}")
-        if self.rate_function_name == "AplusB_cosmicSFH":
-            self.precomputed_AplusB = precompute_AplusB(
-                z_data=np.linspace(0.0, 2.0, 1000),
-                cosmology=cosmo
-            )
         self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
 
         potential_x0 = fit_options.get("X0", None)

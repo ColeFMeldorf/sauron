@@ -9,6 +9,7 @@ from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 from scipy.integrate import quad
+from scipy.integrate import cumulative_trapezoid
 
 logger = logging.getLogger(__name__)
 
@@ -148,13 +149,6 @@ def cosmic_SFR(z,a,b,c,d):
     H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
     return (a + b * z) / (1 + (z / c)**d) * H0 / 100
 
-def CSFR(z):
-    z0 = 1.243
-    A = -0.997
-    B = 0.241
-    C =0.180
-    denom = 10 ** (A * (z - z0)) + 10** (B * (z - z0))
-    return C / denom
 
 def cosmic_SFR_dt_dz(z, a, b, c, d):
     H0 = cosmology.H0  # in km/s/Mpc
@@ -188,9 +182,6 @@ def AplusB_cosmicSFH(z, x):
     rho_integrated_evaluated = vec_rho_integrated(z, a, b, c, d)
     return A * rho_integrated_evaluated + B * rho_dot_evaluated
 
-import numpy as np
-from scipy.integrate import cumulative_trapezoid
-import astropy.units as u
 
 def precompute_AplusB(z_data, cosmology, a=0.0118, b=0.08, c=3.3, d=5.2, R=0.56, z_max=100.0, n_grid=10_000):
     """ Pre-computes the SFR terms for fixed cosmology and SFH shape, returning a
@@ -253,18 +244,7 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
         total_counts = N_gen / fJ
         return total_counts
 
-    # Method 2, harder but more robust method, actually calculate directly from survey parameters.
-    logging.info("Calculating null counts via direct integration...")
-    logging.info(f"Using time: {time}, solid angle: {solid_angle}")
-    logging.info(f"N_gen: {N_gen}")
-    if all(v is not None for v in [time, solid_angle]):
-        total_counts = []
-        for i in range(len(z_centers)):
-            z_min = z_bins[i]
-            z_max = z_bins[i+1]
-            count_sum = SNcount_model(z_min, z_max, RATEPAR={}, genz_wgt=lambda z, par: 1,
-                                      HzFUN_INFO=None, SOLID_ANGLE=solid_angle, GENRANGE_PEAKMJD=time, cosmo=cosmo)
-            total_counts.append(count_sum.value)
+
 
     return np.array(total_counts)
 
