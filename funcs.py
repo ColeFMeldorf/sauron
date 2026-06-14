@@ -144,41 +144,6 @@ import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
-# def cosmic_SFR(z, a, b, c, d):
-#     H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
-#     return (a + b * z) / (1 + (z / c)**d) * H0 / 100
-
-
-# def cosmic_SFR_dt_dz(z, a, b, c, d):
-#     H0 = cosmology.H0  # in km/s/Mpc
-#     Om0 = cosmology.Om0
-#     Ode0 = cosmology.Ode0
-#     dt_dz = 1 / H0 / (1 + z) / np.sqrt(Ode0 + Om0 * (1 + z)**3)  # in Gyr per unit redshift
-#     dt_dz = dt_dz.to("yr").value  # convert to years
-
-#     return cosmic_SFR(z, a, b, c, d) * dt_dz
-
-
-# def cosmic_SFR_integrated(z, a, b, c, d):
-#     return quad(cosmic_SFR_dt_dz, 0, z, args=(a, b, c, d))[0]
-
-
-# def AplusB_cosmicSFH(z, x):
-#     """ A + B model with cosmic star formation history """
-#     # Currently using values from Dilday 2008 but should be updated.
-#     a = 0.0118
-#     b = 0.08
-#     c = 3.3
-#     d = 5.2
-
-#     A, B = x
-
-#     rho_dot_evaluated = cosmic_SFR(z, a, b, c, d)
-#     vec_rho_integrated = np.vectorize(cosmic_SFR_integrated)
-#     rho_integrated_evaluated = vec_rho_integrated(z, a, b, c, d)
-#     return A * rho_integrated_evaluated + B * rho_dot_evaluated
-
-
 def cosmic_SFR(z,a,b,c,d):
     H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
     return (a + b * z) / (1 + (z / c)**d) * H0 / 100
@@ -302,77 +267,6 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
             total_counts.append(count_sum.value)
 
     return np.array(total_counts)
-
-
-
-def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRANGE_PEAKMJD, cosmo):
-    """Python translation of the C function SNcount_model.
-    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT)
-    based on the provided C code and documentation,
-    which was then modified by Cole, because Cole has not used C since middle school.
-     However, testing it against the SNANA it seems to give consistent results
-    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA.
-    Since those are slightly stochastic, this is
-    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue
-    when we want to measure rates to
-    that precision. But for now, this should be sufficient for testing and development purposes.
-
-    Computes the expected number of SNe between redshifts zMIN and zMAX.
-
-    Parameters
-    ----------
-    zMIN, zMAX : float
-        Redshift integration bounds.
-
-    RATEPAR : object or dict
-        Parameters needed by genz_wgt(z, RATEPAR).
-
-    dVdz : callable
-        Function dVdz(z, HzFUN_INFO) returning comoving volume element per unit redshift.
-
-    genz_wgt : callable
-        Function genz_wgt(z, RATEPAR) giving rate * reweighting factor.
-
-    SOLID_ANGLE : float
-        Survey solid angle (same as INPUTS.SOLID_ANGLE in C).
-
-    GENRANGE_PEAKMJD : array-like of length 2
-        [MJD_min, MJD_max] — time window.
-
-    Returns
-    -------
-    float
-        Expected number of supernovae.
-    """
-
-    # number of integration bins
-    NBZ = int((zMAX - zMIN) * 1000.0)
-    if NBZ < 10:
-        NBZ = 10
-
-    dz = (zMAX - zMIN) / NBZ
-    SNsum = 0.0
-
-    # Integration loop (midpoint rule)
-    for iz in range(1, NBZ + 1):
-        ztmp = zMIN + dz * (iz - 0.5)
-
-        dVdz = cosmo.differential_comoving_volume(ztmp).to(u.Mpc**3 / u.sr).value
-
-        vtmp = dVdz
-        rtmp = genz_wgt(ztmp, RATEPAR)
-
-        tmp = rtmp * vtmp / (1.0 + ztmp)
-        SNsum += tmp
-
-    # Solid angle and time window
-    dOmega = SOLID_ANGLE
-    delMJD = GENRANGE_PEAKMJD[1] - GENRANGE_PEAKMJD[0]
-    Tyear = delMJD / 365.0
-
-    SNsum *= (dOmega * Tyear * dz)
-
-    return SNsum
 
 
 def chi2_to_sigma(chi2_diff, dof):

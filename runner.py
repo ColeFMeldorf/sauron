@@ -91,7 +91,7 @@ default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
-    "AplusB_cosmicSFH": (5e-14, 9.3e-4)
+    "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
 }
 
 default_parameter_name_dictionary = {
@@ -701,7 +701,7 @@ class sauron_runner:
         # Estimate errors on Ei
 
         logging.debug(f"Estimating errors on Ei...")
-        n_draws = 10
+        n_draws = 100
         samples = np.random.multivariate_normal(fit_params, cov_x, n_draws)
         fJ_draws = np.array([self.rate_function(z_centers, sample) for sample in samples]).T
         null_counts_draws = null_counts[:, np.newaxis]  # for broadcasting
@@ -715,23 +715,23 @@ class sauron_runner:
         Ei_16, Ei_84 = np.percentile(Ei_draws, [16, 84], axis=1)
         Ei_50 = np.percentile(Ei_draws, 50, axis=1)
 
-        plt.figure(figsize=(8, 6))
-        plt.plot(z_centers, n_data, 'o', label='Data', ms=5)
-        plt.plot(z_centers, Ei, label='Best Fit', ms=5)
-        plt.plot(z_centers, Ei_16, label='16th Percentile', linestyle='--', color='orange')
-        plt.plot(z_centers, Ei_84, label='84th Percentile', linestyle='--', color='orange')
-        plt.plot(z_centers, Ei_50, label='Median', linestyle='-.', color='green')
-        for i in range(n_draws):
-            plt.plot(z_centers, Ei_draws[:, i], color='gray', alpha=0.03)
+        # plt.figure(figsize=(8, 6))
+        # plt.plot(z_centers, n_data, 'o', label='Data', ms=5)
+        # plt.plot(z_centers, Ei, label='Best Fit', ms=5)
+        # plt.plot(z_centers, Ei_16, label='16th Percentile', linestyle='--', color='orange')
+        # plt.plot(z_centers, Ei_84, label='84th Percentile', linestyle='--', color='orange')
+        # plt.plot(z_centers, Ei_50, label='Median', linestyle='-.', color='green')
+        # for i in range(n_draws):
+        #     plt.plot(z_centers, Ei_draws[:, i], color='gray', alpha=0.03)
 
-        #plt.plot(z_centers, Ei_high, label='High Parameters Fit', color='red')
-        #plt.plot(z_centers, Ei_low, label='Low Parameters Fit', color='blue')
+        # #plt.plot(z_centers, Ei_high, label='High Parameters Fit', color='red')
+        # #plt.plot(z_centers, Ei_low, label='Low Parameters Fit', color='blue')
 
-        plt.xlabel("Redshift")
-        plt.ylabel("Counts")
-        plt.title(f"Fit and Parameter Draws for {survey}")
-        plt.legend()
-        plt.savefig(f"fit_and_draws_{survey}.png")
+        # plt.xlabel("Redshift")
+        # plt.ylabel("Counts")
+        # plt.title(f"Fit and Parameter Draws for {survey}")
+        # plt.legend()
+        # plt.savefig(f"fit_and_draws_{survey}.png")
 
         self.final_counts[survey]["predicted_counts"] = Ei
         self.final_counts[survey]["x0_counts"] = x0_counts
