@@ -9,6 +9,7 @@ from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 from scipy.integrate import quad
+from scipy.integrate import cumulative_trapezoid
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
-def cosmic_SFR(z, a, b, c, d):
+def cosmic_SFR(z,a,b,c,d):
     H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
     return (a + b * z) / (1 + (z / c)**d) * H0 / 100
 
@@ -153,14 +154,18 @@ def cosmic_SFR_dt_dz(z, a, b, c, d):
     H0 = cosmology.H0  # in km/s/Mpc
     Om0 = cosmology.Om0
     Ode0 = cosmology.Ode0
-    dt_dz = 1 / H0 / (1 + z) / np.sqrt(Ode0 + Om0 * (1 + z)**3)  # in Gyr per unit redshift
-    dt_dz = dt_dz.to("yr").value  # convert to years
+    #dt_dz = 1 / H0 / (1 + z) / np.sqrt(Ode0 + Om0 * (1 + z)**3)  # in Gyr per unit redshift
+    dt_dz = (H0 * (1 + z) * np.sqrt(Ode0 + Om0 * (1 + z)**3))**-1
+    dt_dz = dt_dz.to("yr")  # convert to years
 
-    return cosmic_SFR(z, a, b, c, d) * dt_dz
+    return (cosmic_SFR(z, a, b, c, d) * dt_dz).value
 
 
 def cosmic_SFR_integrated(z, a, b, c, d):
-    return quad(cosmic_SFR_dt_dz, 0, z, args=(a, b, c, d))[0]
+    R = 0.56
+    # *
+    result = (1 - R) * quad(cosmic_SFR_dt_dz, z, 100, args=(a, b, c, d))[0]
+    return result
 
 
 def AplusB_cosmicSFH(z, x):
@@ -171,12 +176,62 @@ def AplusB_cosmicSFH(z, x):
     c = 3.3
     d = 5.2
 
-    A, B = x
-
+    A,B = x
     rho_dot_evaluated = cosmic_SFR(z, a, b, c, d)
     vec_rho_integrated = np.vectorize(cosmic_SFR_integrated)
     rho_integrated_evaluated = vec_rho_integrated(z, a, b, c, d)
     return A * rho_integrated_evaluated + B * rho_dot_evaluated
+
+
+def precompute_AplusB(z_data, cosmology, a=0.0118, b=0.08, c=3.3, d=5.2, R=0.56, z_max=100.0, n_grid=10_000):
+    """ Pre-computes the SFR terms for fixed cosmology and SFH shape, returning a
+    fast callable for fitting. Call this ONCE before fitting.
+
+    The returned function signature matches AplusB_cosmicSFH(z, x) where x = [A, B].
+    """
+    z_data = np.asarray(z_data)
+
+    # --- Pull everything out of astropy ONCE ---
+    H0_val    = cosmology.H0.to("km/s/Mpc").value
+    Mpc_in_km = (1 * u.Mpc).to(u.km).value   # 3.0857e19
+    yr_in_s   = (1 * u.yr ).to(u.s  ).value   # 3.1557e7
+    H0_per_yr = H0_val / Mpc_in_km * yr_in_s  # H0 expressed in yr^-1
+    Om0       = float(cosmology.Om0)
+    Ode0      = float(cosmology.Ode0)
+
+    # --- Pure-numpy integrand (fully vectorized, no astropy) ---
+    def _sfr(z_):
+        return (a + b * z_) / (1 + (z_ / c) ** d) * (H0_val / 100.0)
+
+    def _sfr_dt_dz(z_):
+        E_z   = np.sqrt(Ode0 + Om0 * (1 + z_) ** 3)   # dimensionless Hubble factor E(z)
+        dt_dz = 1.0 / (H0_per_yr * (1 + z_) * E_z)    # yr per unit redshift
+        return _sfr(z_) * dt_dz
+
+    # --- One cumulative integration pass replaces N separate quad calls ---
+    # Instead of integrating from each z_i to 100 independently, we compute
+    # the cumulative integral from 0 → z_max once on a fine grid, then
+    # use the identity:
+    #   integral(z_i → z_max) = total - integral(0 → z_i)
+    # and interpolate at the actual data z values.
+
+    z_grid    = np.linspace(0.0, z_max, n_grid)
+    cumul     = cumulative_trapezoid(_sfr_dt_dz(z_grid), z_grid, initial=0.0)
+    total     = cumul[-1]
+
+    rho_integrated = (1 - R) * (total - np.interp(z_data, z_grid, cumul))
+    rho_dot        = _sfr(z_data)
+
+    # --- This is all that runs during fitting: two multiplications ---
+    def AplusB_fast(z, x):
+        A, B = x
+        return A * rho_integrated + B * rho_dot
+
+    def AplusB_fast_interp(z, x):
+        f = np.interp(z, z_data, AplusB_fast(z_data, x))
+        return f
+
+    return AplusB_fast_interp
 
 
 def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None, rate_params=None,
@@ -189,91 +244,9 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
         total_counts = N_gen / fJ
         return total_counts
 
-    # Method 2, harder but more robust method, actually calculate directly from survey parameters.
-    logging.info("Calculating null counts via direct integration...")
-    logging.info(f"Using time: {time}, solid angle: {solid_angle}")
-    logging.info(f"N_gen: {N_gen}")
-    if all(v is not None for v in [time, solid_angle]):
-        total_counts = []
-        for i in range(len(z_centers)):
-            z_min = z_bins[i]
-            z_max = z_bins[i+1]
-            count_sum = SNcount_model(z_min, z_max, RATEPAR={}, genz_wgt=lambda z, par: 1,
-                                      HzFUN_INFO=None, SOLID_ANGLE=solid_angle, GENRANGE_PEAKMJD=time, cosmo=cosmo)
-            total_counts.append(count_sum.value)
+
 
     return np.array(total_counts)
-
-
-
-def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRANGE_PEAKMJD, cosmo):
-    """Python translation of the C function SNcount_model.
-    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT) 
-    based on the provided C code and documentation,
-    which was then modified by Cole, because Cole has not used C since middle school.
-     However, testing it against the SNANA it seems to give consistent results
-    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA. 
-    Since those are slightly stochastic, this is 
-    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue 
-    when we want to measure rates to
-    that precision. But for now, this should be sufficient for testing and development purposes.
-
-    Computes the expected number of SNe between redshifts zMIN and zMAX.
-
-    Parameters
-    ----------
-    zMIN, zMAX : float
-        Redshift integration bounds.
-
-    RATEPAR : object or dict
-        Parameters needed by genz_wgt(z, RATEPAR).
-
-    dVdz : callable
-        Function dVdz(z, HzFUN_INFO) returning comoving volume element per unit redshift.
-
-    genz_wgt : callable
-        Function genz_wgt(z, RATEPAR) giving rate * reweighting factor.
-
-    SOLID_ANGLE : float
-        Survey solid angle (same as INPUTS.SOLID_ANGLE in C).
-
-    GENRANGE_PEAKMJD : array-like of length 2
-        [MJD_min, MJD_max] — time window.
-
-    Returns
-    -------
-    float
-        Expected number of supernovae.
-    """
-
-    # number of integration bins
-    NBZ = int((zMAX - zMIN) * 1000.0)
-    if NBZ < 10:
-        NBZ = 10
-
-    dz = (zMAX - zMIN) / NBZ
-    SNsum = 0.0
-
-    # Integration loop (midpoint rule)
-    for iz in range(1, NBZ + 1):
-        ztmp = zMIN + dz * (iz - 0.5)
-
-        dVdz = cosmo.differential_comoving_volume(ztmp).to(u.Mpc**3 / u.sr).value
-
-        vtmp = dVdz
-        rtmp = genz_wgt(ztmp, RATEPAR)
-
-        tmp = rtmp * vtmp / (1.0 + ztmp)
-        SNsum += tmp
-
-    # Solid angle and time window
-    dOmega = SOLID_ANGLE
-    delMJD = GENRANGE_PEAKMJD[1] - GENRANGE_PEAKMJD[0]
-    Tyear = delMJD / 365.0
-
-    SNsum *= (dOmega * Tyear * dz)
-
-    return SNsum
 
 
 def chi2_to_sigma(chi2_diff, dof):

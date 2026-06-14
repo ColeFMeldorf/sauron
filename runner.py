@@ -19,7 +19,7 @@ from astropy.cosmology import LambdaCDM
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, AplusB_cosmicSFH, chi2, turnover_power_law_forced_cty,
-                   non_parametric_histogram)
+                   non_parametric_histogram, precompute_AplusB)
 from SN_dataset import SN_dataset
 
 # Get the matplotlib logger
@@ -457,6 +457,13 @@ class sauron_runner:
 
         z_centers = np.array(z_centers)
 
+        if self.rate_function_name == "AplusB_cosmicSFH":
+            self.rate_function = precompute_AplusB(
+                z_data=z_centers,
+                cosmology=cosmo
+            )
+            logging.debug("Precomputed AplusB function for rate fitting.")
+
         # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
             n_data = np.concatenate([self.fit_args_dict["n_data"][s][index] for s in survey])
@@ -509,9 +516,10 @@ class sauron_runner:
             self.results[survey] = [] if self.results.get(survey) is None else self.results[survey]
 
         logging.warning("This doesn't work for multiple surveys yet!")
-
+        binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
         if "non_parametric" in self.rate_function_name:
-            self.x0 = np.zeros_like(z_centers) + 1e-8
+            self.x0 = binned_rate + 1e-5
+            #self.x0 = np.zeros_like(z_centers) + 1e-8
             # self.x0[np.where(z_centers < 1)] = 2.27e-5 * (1 + z_centers[np.where(z_centers < 1)])**1.7
             # self.x0[np.where(z_centers >= 1)] = 7.5e-5 * (1 + z_centers[np.where(z_centers >= 1)])**(-0.1)
             # Start at Fromhaier / Strolger Rate for non-parametric fit, but this should be changed to be more flexible.
@@ -520,7 +528,7 @@ class sauron_runner:
         fJ_0 = self.rate_function(z_centers, self.x0)
 
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
-        binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+
 
         # This is only an approximation of the error, this needs to be rethought
         self.final_counts[survey]["binned_rate_84"] = (n_data + np.sqrt(n_data)) / (np.sum(null_counts * eff_ij * f_norms, axis=0))
@@ -577,9 +585,11 @@ class sauron_runner:
             fit_params = result.x
 
         elif fit_method == "minimize":
-
+            logging.debug(self.rate_function_name)
             if self.rate_function_name == "power_law":
                 scales = np.array([1e-5, 1])
+            elif self.rate_function_name == "AplusB_cosmicSFH":
+                scales = np.array([1e-14, 1e-3])
             else:
                 logging.debug("No information about relative parameter scales, using 1 for all parameters. This may cause issues with convergence or covariance calculation.")
                 scales = np.ones_like(self.x0)
@@ -607,15 +617,15 @@ class sauron_runner:
 
             # Redo the above without the cov_sys to determine the systematic_error
             no_sys_result = minimize(
-                        chi2,
-                        x0=self.x0,
+                        scaled_chi2,
+                        x0=np.array(self.x0) / scales,
                         args=(null_counts, f_norms, z_centers, eff_ij,
                               n_data, self.rate_function, None),
                         method=None
                     )
-            no_sys_fit_params = no_sys_result.x
+            no_sys_fit_params = no_sys_result.x * scales
             logging.debug(f"Minimize Result without sys cov: {no_sys_fit_params}")
-            no_sys_cov_x = no_sys_result.hess_inv * 2
+            no_sys_cov_x = no_sys_result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
             logging.debug(f"Standard errors without sys cov: {np.sqrt(np.diag(no_sys_cov_x))}")
             no_sys_chi_squared = no_sys_result.fun
             logging.debug(f"chi_squared minimize without sys cov: {no_sys_chi_squared}")
@@ -685,10 +695,12 @@ class sauron_runner:
 
         # Estimate errors on Ei
 
-        samples = np.random.multivariate_normal(fit_params, cov_x, 1000)
+        logging.debug(f"Estimating errors on Ei...")
+        n_draws = 100
+        samples = np.random.multivariate_normal(fit_params, cov_x, n_draws)
         fJ_draws = np.array([self.rate_function(z_centers, sample) for sample in samples]).T
         null_counts_draws = null_counts[:, np.newaxis]  # for broadcasting
-        eff_ij_draws = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
+        eff_ij_draws = np.repeat(eff_ij[:, :, np.newaxis], n_draws, axis=2)
         f_norms_draws = np.atleast_1d(f_norms)
         f_norms_draws = f_norms_draws[:, np.newaxis]  # for broadcasting
 
@@ -704,7 +716,7 @@ class sauron_runner:
         # plt.plot(z_centers, Ei_16, label='16th Percentile', linestyle='--', color='orange')
         # plt.plot(z_centers, Ei_84, label='84th Percentile', linestyle='--', color='orange')
         # plt.plot(z_centers, Ei_50, label='Median', linestyle='-.', color='green')
-        # for i in range(1000):
+        # for i in range(n_draws):
         #     plt.plot(z_centers, Ei_draws[:, i], color='gray', alpha=0.03)
 
         # #plt.plot(z_centers, Ei_high, label='High Parameters Fit', color='red')
@@ -1035,7 +1047,10 @@ class sauron_runner:
 
                 z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
                 rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
-                ax1.plot(z_centers_fine, rate_fine, label="Best Fit Rate Function ", color = "k")
+                if "non_parametric" not in self.rate_function_name:
+                    ax1.plot(z_centers_fine, rate_fine, label="Best Fit Rate Function ", color = "k")
+                else:
+                    ax1.plot(z_centers, rate_fine, label="Best Fit Rate Function ", color = "k")
                 ax1.fill_between(z_centers, self.final_counts[survey]["predicted_rate_16"], self.final_counts[survey]["predicted_rate_84"], color="gray", alpha=0.5, label="1 sigma confidence region")
 
                 chi_2 = self.final_counts[survey]["chi"]
@@ -1047,52 +1062,92 @@ class sauron_runner:
 
                 ax1.legend()
 
-                if "combined" in surveys:
-                    non_combined_datasets = [survey for survey in surveys if survey != "combined"]
-                    label = "+".join(non_combined_datasets)
-                else:
-                    label = survey
+                if "non_parametric" not in self.rate_function_name:
 
-                extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
-                             df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
-                logger.debug(extent_chi)
-                chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1) # this needs to be fixed
-                # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-                chi2_map -= np.min(chi2_map)
+                    if "combined" in surveys:
+                        non_combined_datasets = [survey for survey in surveys if survey != "combined"]
+                        label = "+".join(non_combined_datasets)
+                    else:
+                        label = survey
 
-                # sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-                sigma_map = chi2_map
 
-                im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
-                # ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-                # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-                ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
-                plt.colorbar(im, ax=ax2, label="Δχ²")
-                # ax2.axhline(2.27e-5, color='black', linestyle='--')
-                # ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-                ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt="o",
-                            color="white", ms=10, label=f"Fit results {label}")
-                ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
-                ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
-                ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt="o", ms=10, label="Dilday (2010)")
-                ax2.set_xlabel("$\\beta$")
-                ax2.set_ylabel("$\\alpha$")
-                ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
-                ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
-                ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-                ax2.set_xlim(extent_chi[0], extent_chi[1])
-                ax2.set_ylim(extent_chi[2], extent_chi[3])
 
-                # Adaptively define the ticks
-                y_limits = extent_chi[2], extent_chi[3]
-                y_range = y_limits[1] - y_limits[0]
-                y_tick_spacing = y_range / 5  # Aim for around 5 ticks
-                y_tick_spacing = max(y_tick_spacing, 1e-6)  # Set a minimum spacing to avoid too many ticks
-                y_tick_spacing = min(y_tick_spacing, 1e-5)  # Set a maximum spacing to avoid too few ticks
-                y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
-                ax2.set_yticks(y_ticks)
-                ax2.set_yticklabels([f"{y_tick*1e5:.1f}" for y_tick in y_ticks])
-                ax2.legend(loc = "lower left", fontsize=9)
+                    param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+                    extent_chi = [df[param_names[1]][0] - 3 * df[f"{param_names[1]}_error"][0], df[param_names[1]][0] + 3 * df[f"{param_names[1]}_error"][0],
+                                df[param_names[0]][0] - 3 * df[f"{param_names[0]}_error"][0], df[param_names[0]][0] + 3 * df[f"{param_names[0]}_error"][0]]
+                    logger.debug(extent_chi)
+                    chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1) # this needs to be fixed
+                    # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
+                    chi2_map -= np.min(chi2_map)
+
+                    # sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
+                    sigma_map = chi2_map
+
+                    im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
+                    # ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
+                    # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                    ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
+                    plt.colorbar(im, ax=ax2, label="Δχ²")
+                    # ax2.axhline(2.27e-5, color='black', linestyle='--')
+                    # ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
+                    ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
+                                color="white", ms=10, label=f"Fit results {label}")
+                    if self.rate_function_name == "power_law":
+                        ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
+                        ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
+                        ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt="o", ms=10, label="Dilday (2010)")
+                    if self.rate_function_name == "AplusB_cosmicSFH":
+                        ax2.errorbar(9.3e-4, 2.8e-14, xerr=3.1e-4,
+                                    yerr=1.2e-14, color="magenta", fmt="o", ms=10, label="Dilday (2008)")
+                    latex = True if "alpha" in param_names[1] else False
+                    if latex:
+                        ax2.set_xlabel(f"$\\{param_names[1]}$")
+                        ax2.set_ylabel(f"$\\{param_names[0]}$")
+                    else:
+                        ax2.set_xlabel(param_names[1])
+                        ax2.set_ylabel(param_names[0])
+
+                    #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
+                    #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
+                    #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
+                    ax2.set_xlim(extent_chi[0], extent_chi[1])
+                    ax2.set_ylim(extent_chi[2], extent_chi[3])
+
+                    # Adaptively define the ticks
+                    y_limits = extent_chi[2], extent_chi[3]
+                    y_range = y_limits[1] - y_limits[0]
+                    y_tick_spacing = y_range / 5  # Aim for around 5 ticks
+                    y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
+                    ax2.set_yticks(y_ticks)
+
+                    log_norm = np.floor(np.log10(max(y_ticks)))
+                    norm = 10**log_norm
+                    log_norm = int(log_norm)
+                    # get current y label
+                    current_ylabel = ax2.get_ylabel()
+                    # update the y label to include the normalization factor
+                    ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+
+                    ax2.set_yticklabels([f"{y_tick/norm:.1f}" for y_tick in y_ticks])
+
+                    # Do the same for x ticks
+                    x_limits = extent_chi[0], extent_chi[1]
+                    x_range = x_limits[1] - x_limits[0]
+                    x_tick_spacing = x_range / 5  # Aim for around 5 ticks
+                    x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
+                    ax2.set_xticks(x_ticks)
+
+                    log_norm = np.floor(np.log10(max(x_ticks)))
+                    norm = 10**log_norm
+                    log_norm = int(log_norm)
+                    # get current x label
+                    current_xlabel = ax2.get_xlabel()
+                    # update the x label to include the normalization factor
+                    ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+
+                    ax2.set_xticklabels([f"{x_tick/norm:.1f}" for x_tick in x_ticks])
+
+                    ax2.legend(loc = "lower left", fontsize=9)
 
         fig.savefig("summary_plot.png")
 
@@ -1259,7 +1314,7 @@ class sauron_runner:
         The cuts are determined by the CUTS field for each survey in the config file,
         of the form:
         CUTS:
-          parameter_name: min_value, max_value      
+          parameter_name: min_value, max_value
         For example:
         DES:
           CUTS:
@@ -1273,8 +1328,8 @@ class sauron_runner:
             Name of the survey.
         subset_version : bool
             Sometimes you only want to fit the rate to a portion of a dataset. E.g., the pilot survey for Roman,
-            or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the 
-            DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets, 
+            or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the
+            DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets,
             including DUMP datasets, and the cuts will be fetched from the SUBSET category in the config file
             instead of the CUTS category. If False, cuts will only be applied to the SIM and DATA datasets only, and
             the cuts will be fetched from the CUTS category in the config file.
