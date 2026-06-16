@@ -22,7 +22,7 @@ from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_te
                    non_parametric_histogram, precompute_AplusB)
 from SN_dataset import SN_dataset
 
-from dtd_functions import dtd_rate, power_law_DTD, binned_DTD
+from dtd_functions import dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary
 
 # Get the matplotlib logger
 matplotlib_logger = logging.getLogger("matplotlib")
@@ -130,6 +130,11 @@ class sauron_runner:
         self.fit_args_dict["rate_params"] = {}
         self.results = {}
         self.final_counts = {}
+        # CSFR bookkeeping. Stays at these defaults ("no CSFR") unless a DTD is specified in
+        # FIT_OPTIONS, in which case parse_dtd_options fills them in for real.
+        self.csfr_names = [None]
+        self.rate_functions = {}
+        self.multiple_csfrs = False
 
     def parse_global_fit_options(self):
         """ Parse global fit options (I.e. those that apply to all surveys) from the config file."""
@@ -170,36 +175,80 @@ class sauron_runner:
         else:
             self.x0 = [float(i) for i in potential_x0.split(",")]
 
-    def parse_dtd_options(self, fit_options):
-        self.rate_function_name = fit_options.get("DTD")
-        dtd_func = dtd_func_name_dictionary.get(self.rate_function_name, None)
+def parse_dtd_options(self, fit_options):
+    self.rate_function_name = fit_options.get("DTD")
+    dtd_func = dtd_func_name_dictionary.get(self.rate_function_name, None)
+    if dtd_func is None:
+        dtd_func = dtd_func_name_dictionary.get(self.rate_function_name + "_dtd", None)
+        self.rate_function_name = fit_options.get("DTD") + "_dtd"
         if dtd_func is None:
-            dtd_func = dtd_func_name_dictionary.get(self.rate_function_name + "_dtd", None)
-            self.rate_function_name = fit_options.get("DTD") + "_dtd"
-            if dtd_func is None:
-                raise ValueError(f"Unknown DTD function: {self.rate_function_name}")
-        if not self.rate_function_name.endswith("_dtd"):
-            self.rate_function_name += "_dtd"
+            raise ValueError(f"Unknown DTD function: {self.rate_function_name}")
+    if not self.rate_function_name.endswith("_dtd"):
+        self.rate_function_name += "_dtd"
 
 
-        if self.rate_function_name == "binned_dtd":
-            bins = fit_options.get("BINS")
-            if bins is None:
-                logging.warning(
-                    "No BINS specified for binned_dtd. Using default bins (3 bins between 0 and 14 Gyr)."
-                )
-                bins = np.array([0.0, 0.42, 2.4, 14.0])
-                self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
-            else:
-                bins = np.asarray(bins, dtype=float)
-                self.x0 = np.full(len(bins) - 1, 1e-5)
-
-            self.rate_function = dtd_rate(dtd_func, kwargs={"bins": bins})
-            self.dtd_bins = bins
-
+    if self.rate_function_name == "binned_dtd":
+        bins = fit_options.get("BINS")
+        if bins is None:
+            logging.warning(
+                "No BINS specified for binned_dtd. Using default bins (3 bins between 0 and 14 Gyr)."
+            )
+            bins = np.array([0.0, 0.42, 2.4, 14.0])
+            self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
         else:
-            self.rate_function = dtd_rate(dtd_func)
+            bins = np.asarray(bins, dtype=float)
+            self.x0 = np.full(len(bins) - 1, 1e-5)
+        dtd_kwargs = {"bins": bins}
+        self.dtd_bins = bins
+    else:
+        dtd_kwargs = None
 
+    # Figure out which CSFR(s) to convolve the DTD with. This used to be hardcoded inside
+    # dtd_functions.py; now it's chosen by name from FIT_OPTIONS.CSFR in the config file. If CSFR
+    # is given as a list (e.g. two names), this DTD gets fit once per CSFR, all the way through
+    # sauron.py's main loop, with each fit's results tagged by which CSFR produced it.
+    self.csfr_names = self._resolve_csfr_names(fit_options)
+    self.multiple_csfrs = len(self.csfr_names) > 1
+
+    self.rate_functions = {
+        csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
+        for csfr_name in self.csfr_names
+    }
+    # self.rate_function is the "currently active" rate function — everything downstream
+    # (fit_rate, summary_plot, etc.) keeps reading this one attribute. sauron.py is responsible for
+    # pointing it at a different entry of self.rate_functions before each fit when
+    # self.multiple_csfrs is True.
+    self.rate_function = self.rate_functions[self.csfr_names[0]]
+
+def _resolve_csfr_names(self, fit_options):
+    """Parse and validate the CSFR field of FIT_OPTIONS into a list of one or more CSFR names.
+
+    CSFR can be given as a single name (string) or a list of names (e.g. to fit the same DTD
+    against two different assumed star formation histories). If it's omitted entirely, we fall
+    back to 'double_power_law', which is the CSFR that used to be hardcoded.
+    """
+    csfr_option = fit_options.get("CSFR", None)
+    if csfr_option is None:
+        logging.warning(
+            "No CSFR specified in FIT_OPTIONS. Defaulting to the 'double_power_law' CSFR "
+            "(the form that used to be hardcoded)."
+        )
+        csfr_names = ["double_power_law"]
+    elif isinstance(csfr_option, list):
+        csfr_names = csfr_option
+    else:
+        csfr_names = [csfr_option]
+
+    if len(csfr_names) == 0:
+        raise ValueError("CSFR was specified as an empty list in FIT_OPTIONS. Provide at least one CSFR name.")
+
+    unknown = [name for name in csfr_names if name not in csfr_func_name_dictionary]
+    if unknown:
+        raise ValueError(
+            f"Unknown CSFR function(s): {unknown}. Available options: {list(csfr_func_name_dictionary.keys())}"
+        )
+
+    return csfr_names
 
     def parse_survey_fit_options(self, args_dict, survey):
         """ Parse survey-specific fit options from the config file.
@@ -1337,7 +1386,7 @@ class sauron_runner:
 
         return f_norm
 
-    def add_results(self, survey, index=None):
+def add_results(self, survey, index=None, csfr_name=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
         Inputs
         ------
@@ -1345,6 +1394,10 @@ class sauron_runner:
             Name of the survey.
         index : int
             Dataset index.
+        csfr_name : str, optional
+            Name of the CSFR used to produce this fit (only meaningful when fitting a DTD; see
+            parse_dtd_options). If given, it's recorded as a 'csfr' column so results from different
+            assumed CSFRs can be told apart after saving.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # This needs to be updated for more parameters later
@@ -1377,6 +1430,8 @@ class sauron_runner:
 
         result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names)) # oops this should be z center
         result_to_add["survey"] = survey_name
+        if csfr_name is not None:
+            result_to_add["csfr"] = csfr_name
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
 
