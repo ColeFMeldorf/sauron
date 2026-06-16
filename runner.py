@@ -185,12 +185,16 @@ class sauron_runner:
         if self.rate_function_name == "binned_dtd":
             bins = fit_options.get("BINS")
             if bins is None:
-                logging.warning("No BINS specified for binned_dtd. Using default bins. 5 bins btw 0 and 10 Gyr.")
-                bins = np.array([0, 0.42, 2.4, 14])
+                logging.warning(
+                    "No BINS specified for binned_dtd. Using default bins (3 bins between 0 and 14 Gyr)."
+                )
+                bins = np.array([0.0, 0.42, 2.4, 14.0])
+                self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
+            else:
+                bins = np.asarray(bins, dtype=float)
+                self.x0 = np.full(len(bins) - 1, 1e-5)
+
             self.rate_function = dtd_rate(dtd_func, kwargs={"bins": bins})
-            bin_centers = (bins[1:] + bins[:-1]) / 2
-            #self.x0 = (bin_centers ** -1) * 1e-3
-            self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
             self.dtd_bins = bins
 
         else:
@@ -1122,10 +1126,10 @@ class sauron_runner:
 
 
                     param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
-                    param_names = [p.replace("$", "") for p in param_names]
-                    param_names = [p.replace("\\", "") for p in param_names]
                     if param_names is None:
                         param_names = ["param_" + str(i) for i in range(len(self.final_counts[survey]["result"]))]
+                    param_names = [p.replace("$", "") for p in param_names]
+                    param_names = [p.replace("\\", "") for p in param_names]
                     extent_chi = [df[param_names[1]][0] - 3 * df[f"{param_names[1]}_error"][0], df[param_names[1]][0] + 3 * df[f"{param_names[1]}_error"][0],
                                 df[param_names[0]][0] - 3 * df[f"{param_names[0]}_error"][0], df[param_names[0]][0] + 3 * df[f"{param_names[0]}_error"][0]]
                     logger.debug(extent_chi)
@@ -1158,6 +1162,8 @@ class sauron_runner:
 
 
                     label_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+                    if label_names is None:
+                        label_names = param_names
                     ax2.set_xlabel(label_names[1])
                     ax2.set_ylabel(label_names[0])
 

@@ -1,17 +1,11 @@
+import logging
+
 import numpy as np
 import scipy
-import astropy.units as u
 
 from astropy.cosmology import Planck18 as cosmology
-from astropy.cosmology import z_at_value
-from astropy import units as u
 
-import logging
 logger = logging.getLogger(__name__)
-
-H0 = cosmology.H0.to("km/s*Mpc") # in km/s/M
-Om0 = cosmology.Om0
-Ode0 = cosmology.Ode0
 
 
 # ── 1. PRECOMPUTE COSMOLOGY LOOKUPS (do once, not per z) ──────────────────────
@@ -94,22 +88,22 @@ def dtd_rate_vec(z_array, dtd_func, args, kwargs, n_steps=1000, csfh_unc = None,
     N = len(z_array)
 
     # --- integration bounds (all N redshifts at once) ---
-    t_now  = fast_age(z_array)                               # (N,)  Gyr
-    t_low  = np.maximum(t_now - 10.0, 1.0)                  # (N,)  Gyr
+    t_now = fast_age(z_array)  # (N,)  Gyr
 
+    # Enforce a minimum delay of 0.04 Gyr (40 Myr) and ensure the integration lower bound is always earlier than t_now.
+    t_high = t_now - 0.04
+    t_low = np.maximum(t_high - 10.0, 0.0)
 
     # --- 2-D time grid: shape (N, n_steps) ---
-    # Row i spans  t_now[i] → t_low[i]  (decreasing in time = increasing in z)
-    alpha  = np.linspace(0, 1, n_steps)                      # (n_steps,)
-    t_grid = t_now[:, None] + alpha[None, :] * (t_low[:, None] - t_now[:, None]) - 0.04
-    # shape (N, n_steps),  Gyr
+    # Row i spans  t_high[i] → t_low[i]  (decreasing in time = increasing in z)
+    alpha = np.linspace(0, 1, n_steps)  # (n_steps,)
+    t_grid = t_high[:, None] + alpha[None, :] * (t_low[:, None] - t_high[:, None])
 
     # --- corresponding redshifts  (single vectorised call) ---
     z_grid = fast_z_at_age(t_grid.ravel()).reshape(N, n_steps)
 
     # --- delay times Δt = t_now − t′  (N, n_steps) ---
-    delta_t = t_now[:, None] - t_grid                        # Gyr, ≥ 0.04 (40 Myr, min WD formation time)
-
+    delta_t = t_now[:, None] - t_grid  # Gyr, ≥ 0.04
 
     # --- evaluate the three factors ---
     csfr    = _CSFR(z_grid, uncertainty=csfh_unc, uncertainty_mode=csfh_unc_mode)  # (N, n_steps)
@@ -138,27 +132,11 @@ def arbitrary_DTD(func, t_gyr, args, kwargs):
 
 # All DTD functions must have arguments in the form: (t_gyr, parameters to be fit (pos), set parameters (kwd))
 
-def power_law_DTD(t_gyr, beta, eff, cutoff = 0.01):
-    max_t = np.max(t_gyr)
-    min_t = np.min(t_gyr)
-
-    original_min_t = min_t
-    if min_t < cutoff:
-        min_t = cutoff
-
-
-    #upper = max_t**(beta + 1.0) / (beta + 1.0)
-    #lower = min_t**(beta + 1.0) / (beta + 1.0)
-    #constant_zone = (cutoff**beta) * (cutoff - original_min_t)
-
-    #area_under_curve = constant_zone + upper - lower
-
-
-    rate = t_gyr**beta
-    #rate[np.where(t_gyr < cutoff)] = cutoff**beta
-    #rate /= area_under_curve
-
-
+def power_law_DTD(t_gyr, beta, eff, cutoff=0.01):
+    # Enforce a minimum delay time to avoid divergences at small t.
+    t = np.asarray(t_gyr, dtype=float)
+    t = np.maximum(t, cutoff)
+    rate = t**beta
     return rate * eff
 
 

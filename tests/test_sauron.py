@@ -1101,7 +1101,7 @@ def test_regression_power_law_DTD():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_DTD.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
-    result = subprocess.run(cmd, capture_output=False, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -1131,7 +1131,7 @@ def test_regression_binned_DTD():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_DTD_binned.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
-    result = subprocess.run(cmd, capture_output=False, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
