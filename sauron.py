@@ -78,7 +78,9 @@ def main():
             logging.info("Fitting only one combined dataset across all surveys.")
             indices = [0]
         else:
+            # NEW
             total_possible_indexes = math.prod([runner.fit_args_dict["n_datasets"][s] for s in surveys])
+            #total_possible_indexes = min(runner.fit_args_dict["n_datasets"][s] for s in surveys)
             indices = range(1, total_possible_indexes + 1)
 
         runner.fit_args_dict["n_datasets"]["combined"] = len(indices)  # Update the number of datasets for the combined survey to reflect the number of combinations of datasets across surveys.
