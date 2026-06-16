@@ -1111,7 +1111,7 @@ def test_regression_power_law_DTD():
 
     results = pd.read_csv(outpath)
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_DTD_regression.csv")
-    for i, col in enumerate([r"$\beta$", r"$\epsilon$", r"$\beta$_error", r"$\epsilon$_error", r"cov_$\beta$_$\epsilon$", "reduced_chi_squared"]):
+    for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
         try:
             np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
         except AssertionError as e:
