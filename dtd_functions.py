@@ -59,6 +59,19 @@ def csfr_double_power_law(z, uncertainty=None, uncertainty_mode="upper"):
             raise ValueError("Invalid uncertainty_mode. Use 'upper' or 'lower'.")
     return sfh
 
+def _rational_dbl_pwr_law(z, A, B, C, D):
+
+    numerator = A * (1+z) ** C
+    denominator = (((1 + z)/B)**D) + 1
+    return numerator / denominator
+
+def strolger_CSFR(z, uncertainty=None, uncertainty_mode="upper"):
+    h = 0.70
+    AFUVz = _rational_dbl_pwr_law(z, A=1.4, B=3.5, C=0.7, D=4.3)
+    dust_correction = (1 + 10 ** (0.4 * AFUVz)) * h**3
+    uncorrected_csfr = _rational_dbl_pwr_law(z, A=0.0134, B=2.55, C=3.3, D=6.1)
+
+    return uncorrected_csfr * dust_correction
 
 # Registry of selectable CSFR functions — same idea as dtd_func_name_dictionary / func_name_dictionary
 # in runner.py. To add a new CSFR functional form: write a function with the same signature as
@@ -66,6 +79,7 @@ def csfr_double_power_law(z, uncertainty=None, uncertainty_mode="upper"):
 # name you want to refer to it by in the config file's CSFR field.
 csfr_func_name_dictionary = {
     "double_power_law": csfr_double_power_law,
+    "strolger": strolger_CSFR
 }
 
 

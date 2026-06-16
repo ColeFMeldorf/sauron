@@ -175,80 +175,80 @@ class sauron_runner:
         else:
             self.x0 = [float(i) for i in potential_x0.split(",")]
 
-def parse_dtd_options(self, fit_options):
-    self.rate_function_name = fit_options.get("DTD")
-    dtd_func = dtd_func_name_dictionary.get(self.rate_function_name, None)
-    if dtd_func is None:
-        dtd_func = dtd_func_name_dictionary.get(self.rate_function_name + "_dtd", None)
-        self.rate_function_name = fit_options.get("DTD") + "_dtd"
+    def parse_dtd_options(self, fit_options):
+        self.rate_function_name = fit_options.get("DTD")
+        dtd_func = dtd_func_name_dictionary.get(self.rate_function_name, None)
         if dtd_func is None:
-            raise ValueError(f"Unknown DTD function: {self.rate_function_name}")
-    if not self.rate_function_name.endswith("_dtd"):
-        self.rate_function_name += "_dtd"
+            dtd_func = dtd_func_name_dictionary.get(self.rate_function_name + "_dtd", None)
+            self.rate_function_name = fit_options.get("DTD") + "_dtd"
+            if dtd_func is None:
+                raise ValueError(f"Unknown DTD function: {self.rate_function_name}")
+        if not self.rate_function_name.endswith("_dtd"):
+            self.rate_function_name += "_dtd"
 
 
-    if self.rate_function_name == "binned_dtd":
-        bins = fit_options.get("BINS")
-        if bins is None:
-            logging.warning(
-                "No BINS specified for binned_dtd. Using default bins (3 bins between 0 and 14 Gyr)."
-            )
-            bins = np.array([0.0, 0.42, 2.4, 14.0])
-            self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
+        if self.rate_function_name == "binned_dtd":
+            bins = fit_options.get("BINS")
+            if bins is None:
+                logging.warning(
+                    "No BINS specified for binned_dtd. Using default bins (3 bins between 0 and 14 Gyr)."
+                )
+                bins = np.array([0.0, 0.42, 2.4, 14.0])
+                self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
+            else:
+                bins = np.asarray(bins, dtype=float)
+                self.x0 = np.full(len(bins) - 1, 1e-5)
+            dtd_kwargs = {"bins": bins}
+            self.dtd_bins = bins
         else:
-            bins = np.asarray(bins, dtype=float)
-            self.x0 = np.full(len(bins) - 1, 1e-5)
-        dtd_kwargs = {"bins": bins}
-        self.dtd_bins = bins
-    else:
-        dtd_kwargs = None
+            dtd_kwargs = None
 
-    # Figure out which CSFR(s) to convolve the DTD with. This used to be hardcoded inside
-    # dtd_functions.py; now it's chosen by name from FIT_OPTIONS.CSFR in the config file. If CSFR
-    # is given as a list (e.g. two names), this DTD gets fit once per CSFR, all the way through
-    # sauron.py's main loop, with each fit's results tagged by which CSFR produced it.
-    self.csfr_names = self._resolve_csfr_names(fit_options)
-    self.multiple_csfrs = len(self.csfr_names) > 1
+        # Figure out which CSFR(s) to convolve the DTD with. This used to be hardcoded inside
+        # dtd_functions.py; now it's chosen by name from FIT_OPTIONS.CSFR in the config file. If CSFR
+        # is given as a list (e.g. two names), this DTD gets fit once per CSFR, all the way through
+        # sauron.py's main loop, with each fit's results tagged by which CSFR produced it.
+        self.csfr_names = self._resolve_csfr_names(fit_options)
+        self.multiple_csfrs = len(self.csfr_names) > 1
 
-    self.rate_functions = {
-        csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
-        for csfr_name in self.csfr_names
-    }
-    # self.rate_function is the "currently active" rate function — everything downstream
-    # (fit_rate, summary_plot, etc.) keeps reading this one attribute. sauron.py is responsible for
-    # pointing it at a different entry of self.rate_functions before each fit when
-    # self.multiple_csfrs is True.
-    self.rate_function = self.rate_functions[self.csfr_names[0]]
+        self.rate_functions = {
+            csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
+            for csfr_name in self.csfr_names
+        }
+        # self.rate_function is the "currently active" rate function — everything downstream
+        # (fit_rate, summary_plot, etc.) keeps reading this one attribute. sauron.py is responsible for
+        # pointing it at a different entry of self.rate_functions before each fit when
+        # self.multiple_csfrs is True.
+        self.rate_function = self.rate_functions[self.csfr_names[0]]
 
-def _resolve_csfr_names(self, fit_options):
-    """Parse and validate the CSFR field of FIT_OPTIONS into a list of one or more CSFR names.
+    def _resolve_csfr_names(self, fit_options):
+        """Parse and validate the CSFR field of FIT_OPTIONS into a list of one or more CSFR names.
 
-    CSFR can be given as a single name (string) or a list of names (e.g. to fit the same DTD
-    against two different assumed star formation histories). If it's omitted entirely, we fall
-    back to 'double_power_law', which is the CSFR that used to be hardcoded.
-    """
-    csfr_option = fit_options.get("CSFR", None)
-    if csfr_option is None:
-        logging.warning(
-            "No CSFR specified in FIT_OPTIONS. Defaulting to the 'double_power_law' CSFR "
-            "(the form that used to be hardcoded)."
-        )
-        csfr_names = ["double_power_law"]
-    elif isinstance(csfr_option, list):
-        csfr_names = csfr_option
-    else:
-        csfr_names = [csfr_option]
+        CSFR can be given as a single name (string) or a list of names (e.g. to fit the same DTD
+        against two different assumed star formation histories). If it's omitted entirely, we fall
+        back to 'double_power_law', which is the CSFR that used to be hardcoded.
+        """
+        csfr_option = fit_options.get("CSFR", None)
+        if csfr_option is None:
+            logging.warning(
+                "No CSFR specified in FIT_OPTIONS. Defaulting to the 'double_power_law' CSFR "
+                "(the form that used to be hardcoded)."
+            )
+            csfr_names = ["double_power_law"]
+        elif isinstance(csfr_option, list):
+            csfr_names = csfr_option
+        else:
+            csfr_names = [csfr_option]
 
-    if len(csfr_names) == 0:
-        raise ValueError("CSFR was specified as an empty list in FIT_OPTIONS. Provide at least one CSFR name.")
+        if len(csfr_names) == 0:
+            raise ValueError("CSFR was specified as an empty list in FIT_OPTIONS. Provide at least one CSFR name.")
 
-    unknown = [name for name in csfr_names if name not in csfr_func_name_dictionary]
-    if unknown:
-        raise ValueError(
-            f"Unknown CSFR function(s): {unknown}. Available options: {list(csfr_func_name_dictionary.keys())}"
-        )
+        unknown = [name for name in csfr_names if name not in csfr_func_name_dictionary]
+        if unknown:
+            raise ValueError(
+                f"Unknown CSFR function(s): {unknown}. Available options: {list(csfr_func_name_dictionary.keys())}"
+            )
 
-    return csfr_names
+        return csfr_names
 
     def parse_survey_fit_options(self, args_dict, survey):
         """ Parse survey-specific fit options from the config file.
@@ -831,6 +831,7 @@ def _resolve_csfr_names(self, fit_options):
         # plt.legend()
         # plt.savefig(f"fit_and_draws_{survey}.png")
 
+
         self.final_counts[survey]["predicted_counts"] = Ei
         self.final_counts[survey]["x0_counts"] = x0_counts
         self.final_counts[survey]["binned_rate"] = binned_rate
@@ -1038,7 +1039,7 @@ def _resolve_csfr_names(self, fit_options):
 
         return n_data
 
-    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
+    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5], csfr = None):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -1061,6 +1062,9 @@ def _resolve_csfr_names(self, fit_options):
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(self.x0))]
 
+
+        rate_function = self.rate_function if csfr is None else self.rate_functions[csfr]
+
         for i, a in enumerate(np.linspace(extent[2], extent[3], n_samples)):
             for j, b in enumerate(np.linspace(extent[0], extent[1], n_samples)):
 
@@ -1076,7 +1080,7 @@ def _resolve_csfr_names(self, fit_options):
                                    z_centers,
                                    fit_args_dict["eff_ij"][survey],
                                    n_data,
-                                   self.rate_function,
+                                   rate_function,
                                    fit_args_dict["cov_sys"][survey])
                 # Note this is now unsquared
                 chi2_map[i][j] = np.sum(chi2_result)
@@ -1105,18 +1109,6 @@ def _resolve_csfr_names(self, fit_options):
             if survey != "combined":
                 # ax1 = ax[0]
                 z_centers = np.array(self.fit_args_dict["z_centers"][survey])
-
-                # yerr=self.final_counts[survey]["predicted_counts_err"]
-                # ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
-                #              yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                #              label=f" {survey} Sauron Prediction ", ms = 5)
-                # ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
-                #              fmt='o', label=f" {survey} Data", ms = 5)
-                # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                #              fmt='o', label=f" {survey} Initial Prediction ", ms=5)
-
 
                 yerr = np.array([self.final_counts[survey]["binned_rate_84"] - self.final_counts[survey]["binned_rate"],
                     self.final_counts[survey]["binned_rate"] - self.final_counts[survey]["binned_rate_16"]])
@@ -1182,25 +1174,44 @@ def _resolve_csfr_names(self, fit_options):
                     extent_chi = [df[param_names[1]][0] - 3 * df[f"{param_names[1]}_error"][0], df[param_names[1]][0] + 3 * df[f"{param_names[1]}_error"][0],
                                 df[param_names[0]][0] - 3 * df[f"{param_names[0]}_error"][0], df[param_names[0]][0] + 3 * df[f"{param_names[0]}_error"][0]]
                     logger.debug(extent_chi)
-                    chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1) # this needs to be fixed
-                    # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-                    chi2_map -= np.min(chi2_map)
-
-                    # sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-                    sigma_map = chi2_map
-
-                    # Reload param names with Latex included this time.
 
 
-                    im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
-                    # ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-                    # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-                    ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
-                    plt.colorbar(im, ax=ax2, label="Δχ²")
-                    # ax2.axhline(2.27e-5, color='black', linestyle='--')
-                    # ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-                    ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
-                                color="white", ms=10, label=f"Fit results {label}")
+
+
+
+                    df_list = self.results[s]
+
+                    if self.multiple_csfrs:
+                        csfrs = [d["csfr"].values[0] for d in df_list]
+                    else:
+                        csfrs = [None]
+
+
+                    for i, c in enumerate(csfrs):
+                        logging.debug(f"Processing CSFR: {c}")
+                        df = df_list[i]
+                        logging.debug(f"current df {df}")
+                        chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
+                        chi2_map -= np.min(chi2_map)
+
+                        sigma_map = chi2_map
+
+                        # Reload param names with Latex included this time.
+
+                        if not self.multiple_csfrs:
+                            # Can't do this with multiple rates from multiple CSFRs being plotted, as which would get to
+                            # be the color map? Instead, just plot contours.
+                            im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
+                            plt.colorbar(im, ax=ax2, label="Δχ²")
+                        # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                        ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
+                        logging.debug(f"Scatter plotting the following values: {df[param_names[1]]}, {df[param_names[0]]}")
+
+                        chi_plot_label = f"Fit results {label}"
+                        if self.multiple_csfrs:
+                            chi_plot_label += f" ({c} CSFR)"
+                        ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
+                                     ms=10, label=chi_plot_label)
                     if self.rate_function_name == "power_law":
                         ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
                         ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
@@ -1219,50 +1230,50 @@ def _resolve_csfr_names(self, fit_options):
                     #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
                     #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
                     #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-                    ax2.set_xlim(extent_chi[0], extent_chi[1])
-                    ax2.set_ylim(extent_chi[2], extent_chi[3])
+                    #ax2.set_xlim(extent_chi[0], extent_chi[1])
+                    #ax2.set_ylim(extent_chi[2], extent_chi[3])
 
                     # Adaptively define the ticks
-                    y_limits = extent_chi[2], extent_chi[3]
-                    y_range = y_limits[1] - y_limits[0]
-                    y_tick_spacing = y_range / 5  # Aim for around 5 ticks
-                    y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
-                    ax2.set_yticks(y_ticks)
-                    logging.debug(f"Y ticks: {y_ticks}")
+                    # y_limits = extent_chi[2], extent_chi[3]
+                    # y_range = y_limits[1] - y_limits[0]
+                    # y_tick_spacing = y_range / 5  # Aim for around 5 ticks
+                    # y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
+                    # ax2.set_yticks(y_ticks)
+                    # logging.debug(f"Y ticks: {y_ticks}")
 
 
-                    log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
-                    logging.debug(f"Log norm: {log_norm}")
-                    norm = 10**log_norm
-                    log_norm = int(log_norm)
-                    # get current y label
+                    # log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
+                    # logging.debug(f"Log norm: {log_norm}")
+                    # norm = 10**log_norm
+                    # log_norm = int(log_norm)
+                    # # get current y label
 
-                    if log_norm < -1 or log_norm > 1:
-                        current_ylabel = ax2.get_ylabel()
-                        # update the y label to include the normalization factor
-                        ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
-                    else:
-                        norm = 1
-                    ax2.set_yticklabels([f"{y_tick/norm:.1f}" for y_tick in y_ticks])
+                    # if log_norm < -1 or log_norm > 1:
+                    #     current_ylabel = ax2.get_ylabel()
+                    #     # update the y label to include the normalization factor
+                    #     ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                    # else:
+                    #     norm = 1
+                    # ax2.set_yticklabels([f"{y_tick/norm:.1f}" for y_tick in y_ticks])
 
-                    # Do the same for x ticks
-                    x_limits = extent_chi[0], extent_chi[1]
-                    x_range = x_limits[1] - x_limits[0]
-                    x_tick_spacing = x_range / 5  # Aim for around 5 ticks
-                    x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
-                    ax2.set_xticks(x_ticks)
+                    # # Do the same for x ticks
+                    # x_limits = extent_chi[0], extent_chi[1]
+                    # x_range = x_limits[1] - x_limits[0]
+                    # x_tick_spacing = x_range / 5  # Aim for around 5 ticks
+                    # x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
+                    # ax2.set_xticks(x_ticks)
 
-                    log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
-                    norm = 10**log_norm
-                    log_norm = int(log_norm)
-                    if log_norm < -1 or log_norm > 1:
-                        # get current x label
-                        current_xlabel = ax2.get_xlabel()
-                        # update the x label to include the normalization factor
-                        ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
-                    else:
-                        norm = 1
-                    ax2.set_xticklabels([f"{x_tick/norm:.1f}" for x_tick in x_ticks])
+                    # log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
+                    # norm = 10**log_norm
+                    # log_norm = int(log_norm)
+                    # if log_norm < -1 or log_norm > 1:
+                    #     # get current x label
+                    #     current_xlabel = ax2.get_xlabel()
+                    #     # update the x label to include the normalization factor
+                    #     ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                    # else:
+                    #     norm = 1
+                    # ax2.set_xticklabels([f"{x_tick/norm:.1f}" for x_tick in x_ticks])
 
                     ax2.legend(loc = "lower left", fontsize=9)
 
@@ -1386,7 +1397,7 @@ def _resolve_csfr_names(self, fit_options):
 
         return f_norm
 
-def add_results(self, survey, index=None, csfr_name=None):
+    def add_results(self, survey, index=None, csfr_name=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
         Inputs
         ------

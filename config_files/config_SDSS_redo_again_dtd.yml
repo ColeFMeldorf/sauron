@@ -2,8 +2,8 @@
 # The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
 
 FIT_OPTIONS:
-  DTD: binned
-  CSFR: default
+  DTD: power_law
+  CSFR: [strolger, double_power_law]
 SDSS:
   FIT_OPTIONS:
     RATE_FUNC: power_law
