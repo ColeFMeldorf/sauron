@@ -22,6 +22,8 @@ from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_te
                    non_parametric_histogram, precompute_AplusB)
 from SN_dataset import SN_dataset
 
+from dtd_functions import dtd_rate, power_law_DTD, binned_DTD
+
 # Get the matplotlib logger
 matplotlib_logger = logging.getLogger("matplotlib")
 
@@ -86,6 +88,10 @@ func_name_dictionary = {
     "non_parametric_histogram": non_parametric_histogram
 }
 
+dtd_func_name_dictionary = {
+    "power_law_dtd": power_law_DTD,
+    "binned_dtd": binned_DTD
+}
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
@@ -95,9 +101,10 @@ default_x0_dictionary = {
 }
 
 default_parameter_name_dictionary = {
-    "power_law": ["alpha", "beta"],
+    "power_law": ["$\\alpha$", "$\\beta$"],
     "AplusB_cosmicSFH": ["A", "B"],
-    "turnover_power_law": ["alpha", "beta1", "alpha2", "beta2"]}
+    "turnover_power_law": ["$\\alpha$", "$\\beta_1$", "$\\alpha_2$", "$\\beta_2$"],
+    "power_law_dtd": ["$\\beta$", "$R_1$"]}
 
 default_bounds_dictionary = {
     "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
@@ -130,18 +137,31 @@ class sauron_runner:
             files_input = yaml.safe_load(f)
 
         fit_options = files_input.get("FIT_OPTIONS", {})
-        self.rate_function_name = fit_options.get("RATE_FUNCTION")
-        if self.rate_function_name is None:
-            self.rate_function_name = fit_options.get("RATE_FUNC")
-        if self.rate_function_name is None:
-            raise ValueError("RATE_FUNCTION or RATE_FUNC must be specified in FIT_OPTIONS in the config file.")
-        logging.debug(f"RATE_FUNCTION specified in config: {self.rate_function_name}")
-        self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
+
+
+
+        rate_func = fit_options.get("RATE_FUNC")
+        self.rate_function_name = fit_options.get("RATE_FUNCTION") if rate_func is None else rate_func
+        dtd = fit_options.get("DTD")
+        if dtd is not None and self.rate_function_name is not None:
+            raise ValueError("Both DTD and RATE_FUNCTION cannot be specified simultaneously.")
+        if self.rate_function_name is None and dtd is None:
+            raise ValueError("RATE_FUNCTION (or RATE_FUNC) or DTD must be specified in FIT_OPTIONS in the config file.")
+
+        if dtd is not None:
+            logging.debug(f"DTD specified in config: {dtd}")
+            self.parse_dtd_options(fit_options)
+
+        else:
+            logging.debug(f"RATE_FUNCTION specified in config: {self.rate_function_name}")
+            self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
 
         potential_x0 = fit_options.get("X0", None)
         if potential_x0 is None:
             if "non_parametric" in self.rate_function_name:
                 self.x0 = "non_param_x0_placeholder"
+            elif "binned" in self.rate_function_name:
+                pass
             else:
                 logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess "
                 f"for {self.rate_function_name}: {default_x0_dictionary.get(self.rate_function_name, (2.27e-5, 1.7))}")
@@ -149,6 +169,36 @@ class sauron_runner:
              # The above should probably be changed.
         else:
             self.x0 = [float(i) for i in potential_x0.split(",")]
+
+    def parse_dtd_options(self, fit_options):
+        self.rate_function_name = fit_options.get("DTD")
+        dtd_func = dtd_func_name_dictionary.get(self.rate_function_name, None)
+        if dtd_func is None:
+            dtd_func = dtd_func_name_dictionary.get(self.rate_function_name + "_dtd", None)
+            self.rate_function_name = fit_options.get("DTD") + "_dtd"
+            if dtd_func is None:
+                raise ValueError(f"Unknown DTD function: {self.rate_function_name}")
+        if not self.rate_function_name.endswith("_dtd"):
+            self.rate_function_name += "_dtd"
+
+
+        if self.rate_function_name == "binned_dtd":
+            bins = fit_options.get("BINS")
+            if bins is None:
+                logging.warning(
+                    "No BINS specified for binned_dtd. Using default bins (3 bins between 0 and 14 Gyr)."
+                )
+                bins = np.array([0.0, 0.42, 2.4, 14.0])
+                self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
+            else:
+                bins = np.asarray(bins, dtype=float)
+                self.x0 = np.full(len(bins) - 1, 1e-5)
+
+            self.rate_function = dtd_rate(dtd_func, kwargs={"bins": bins})
+            self.dtd_bins = bins
+
+        else:
+            self.rate_function = dtd_rate(dtd_func)
 
 
     def parse_survey_fit_options(self, args_dict, survey):
@@ -586,7 +636,11 @@ class sauron_runner:
 
         elif fit_method == "minimize":
             logging.debug(self.rate_function_name)
-            if self.rate_function_name == "power_law":
+            if "binned" in self.rate_function_name:
+                bounds = None
+                scales = self.x0
+                logging.debug(f"Using bounds: {bounds}")
+            elif self.rate_function_name == "power_law":
                 scales = np.array([1e-5, 1])
             elif self.rate_function_name == "AplusB_cosmicSFH":
                 scales = np.array([1e-14, 1e-3])
@@ -1071,8 +1125,11 @@ class sauron_runner:
                         label = survey
 
 
-
                     param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+                    if param_names is None:
+                        param_names = ["param_" + str(i) for i in range(len(self.final_counts[survey]["result"]))]
+                    param_names = [p.replace("$", "") for p in param_names]
+                    param_names = [p.replace("\\", "") for p in param_names]
                     extent_chi = [df[param_names[1]][0] - 3 * df[f"{param_names[1]}_error"][0], df[param_names[1]][0] + 3 * df[f"{param_names[1]}_error"][0],
                                 df[param_names[0]][0] - 3 * df[f"{param_names[0]}_error"][0], df[param_names[0]][0] + 3 * df[f"{param_names[0]}_error"][0]]
                     logger.debug(extent_chi)
@@ -1082,6 +1139,9 @@ class sauron_runner:
 
                     # sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
                     sigma_map = chi2_map
+
+                    # Reload param names with Latex included this time.
+
 
                     im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
                     # ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
@@ -1099,13 +1159,13 @@ class sauron_runner:
                     if self.rate_function_name == "AplusB_cosmicSFH":
                         ax2.errorbar(9.3e-4, 2.8e-14, xerr=3.1e-4,
                                     yerr=1.2e-14, color="magenta", fmt="o", ms=10, label="Dilday (2008)")
-                    latex = True if "alpha" in param_names[1] else False
-                    if latex:
-                        ax2.set_xlabel(f"$\\{param_names[1]}$")
-                        ax2.set_ylabel(f"$\\{param_names[0]}$")
-                    else:
-                        ax2.set_xlabel(param_names[1])
-                        ax2.set_ylabel(param_names[0])
+
+
+                    label_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+                    if label_names is None:
+                        label_names = param_names
+                    ax2.set_xlabel(label_names[1])
+                    ax2.set_ylabel(label_names[0])
 
                     #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
                     #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
@@ -1119,15 +1179,21 @@ class sauron_runner:
                     y_tick_spacing = y_range / 5  # Aim for around 5 ticks
                     y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
                     ax2.set_yticks(y_ticks)
+                    logging.debug(f"Y ticks: {y_ticks}")
 
-                    log_norm = np.floor(np.log10(max(y_ticks)))
+
+                    log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
+                    logging.debug(f"Log norm: {log_norm}")
                     norm = 10**log_norm
                     log_norm = int(log_norm)
                     # get current y label
-                    current_ylabel = ax2.get_ylabel()
-                    # update the y label to include the normalization factor
-                    ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
 
+                    if log_norm < -1 or log_norm > 1:
+                        current_ylabel = ax2.get_ylabel()
+                        # update the y label to include the normalization factor
+                        ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                    else:
+                        norm = 1
                     ax2.set_yticklabels([f"{y_tick/norm:.1f}" for y_tick in y_ticks])
 
                     # Do the same for x ticks
@@ -1137,14 +1203,16 @@ class sauron_runner:
                     x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
                     ax2.set_xticks(x_ticks)
 
-                    log_norm = np.floor(np.log10(max(x_ticks)))
+                    log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
                     norm = 10**log_norm
                     log_norm = int(log_norm)
-                    # get current x label
-                    current_xlabel = ax2.get_xlabel()
-                    # update the x label to include the normalization factor
-                    ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
-
+                    if log_norm < -1 or log_norm > 1:
+                        # get current x label
+                        current_xlabel = ax2.get_xlabel()
+                        # update the x label to include the normalization factor
+                        ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                    else:
+                        norm = 1
                     ax2.set_xticklabels([f"{x_tick/norm:.1f}" for x_tick in x_ticks])
 
                     ax2.legend(loc = "lower left", fontsize=9)
@@ -1293,6 +1361,9 @@ class sauron_runner:
         param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(result))]
+
+        param_names = [p.replace("$", "") for p in param_names]
+        param_names = [p.replace("\\", "") for p in param_names]
 
         result_to_add = {}
         for i, p in enumerate(param_names):
