@@ -3,7 +3,7 @@
 
 FIT_OPTIONS:
   DTD: binned
-  CSFR: default
+  CSFR: B13
 SDSS:
   FIT_OPTIONS:
     RATE_FUNC: power_law

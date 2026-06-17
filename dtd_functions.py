@@ -77,9 +77,10 @@ def strolger_CSFR(z, uncertainty=None, uncertainty_mode="upper"):
 # in runner.py. To add a new CSFR functional form: write a function with the same signature as
 # csfr_double_power_law (z, uncertainty=None, uncertainty_mode="upper") and add it here under whatever
 # name you want to refer to it by in the config file's CSFR field.
+
 csfr_func_name_dictionary = {
-    "double_power_law": csfr_double_power_law,
-    "strolger": strolger_CSFR
+    "B13": csfr_double_power_law,
+    "S20": strolger_CSFR
 }
 
 

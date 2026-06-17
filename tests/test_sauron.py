@@ -1149,3 +1149,46 @@ def test_regression_binned_DTD():
                            f"Please check if this is expected. ")
             logger.warning(str(e))
         np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+
+
+def test_regression_CSFR_list():
+    """In this test, we check the CSFR list functionality. This functions as a regression test, AND, the results for the
+    B13 CSFR should be equivalent to the power law CSFR test, as that one uses B13.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_output/test_CSFR_list_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_DTD_CSFR_list.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    results = pd.read_csv(outpath)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_CSFR_list_regression.csv")
+    for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+
+    # Now check it matches the other test
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_DTD_regression.csv")
+    results = results.loc[results["csfr"] == "B13"]
+    for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
+        logging.debug(f"Checking {col}")
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)

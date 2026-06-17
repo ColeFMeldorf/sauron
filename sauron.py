@@ -96,6 +96,7 @@ def main():
                 if runner.multiple_csfrs:
                     logging.info(f"  ...assuming CSFR: {csfr_name}")
                     runner.rate_function = runner.rate_functions[csfr_name]
+                    runner.current_csfr = csfr_name
 
                 runner.fit_rate(surveys, index=index, PROB_THRESH=PROB_THRESH)
                 runner.add_results("combined", index=index, csfr_name=csfr_name)
