@@ -1524,7 +1524,7 @@ class sauron_runner:
                 if i < j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
 
-        result_to_add["reduced_chi_squared"] = chi / ((len(z_bins) - 1) - len(param_names))  # use number of bins, not edges
+        result_to_add["reduced_chi_squared"] = chi / ((len(z_bins)) - len(param_names))  # This needs to be fixed!
         result_to_add["survey"] = survey_name
         if csfr_name is not None:
             result_to_add["csfr"] = csfr_name
