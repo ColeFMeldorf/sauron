@@ -230,10 +230,10 @@ class sauron_runner:
         csfr_option = fit_options.get("CSFR", None)
         if csfr_option is None:
             logging.warning(
-                "No CSFR specified in FIT_OPTIONS. Defaulting to the 'double_power_law' CSFR "
+                "No CSFR specified in FIT_OPTIONS. Defaulting to the 'B13' CSFR "
                 "(the form that used to be hardcoded)."
             )
-            csfr_names = ["double_power_law"]
+            csfr_names = ["B13"]
         elif isinstance(csfr_option, list):
             csfr_names = csfr_option
         else:
@@ -853,26 +853,25 @@ class sauron_runner:
 
         if getattr(self, "rates_to_plot", None) is None:
             self.rates_to_plot = {}
-        else:
-            if self.rates_to_plot.get(survey) is None:
-                self.rates_to_plot[survey] = []
-            z_bins = self.fit_args_dict["z_bins"][survey]
-            z_centers = self.fit_args_dict["z_centers"][survey]
-            z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
-            rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
-            new_plot = {
-                "type": "model",
-                "index": index,
-                "csfr_name": getattr(self, "current_csfr", None),
-                "predicted_rate_16": Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
-                "predicted_rate_84": Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
-                "z_centers": z_centers,
-                "z_centers_fine": z_centers_fine,
-                "predicted_rate": rate_fine,
-                "chi": chi_squared
-            }
-            self.rates_to_plot[survey].append(new_plot)
 
+        if self.rates_to_plot.get(survey) is None:
+            self.rates_to_plot[survey] = []
+
+        z_centers = self.fit_args_dict["z_centers"][survey]
+        z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
+        rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
+        new_plot = {
+            "type": "model",
+            "index": index,
+            "csfr_name": getattr(self, "current_csfr", None),
+            "predicted_rate_16": Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
+            "predicted_rate_84": Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
+            "z_centers": z_centers,
+            "z_centers_fine": z_centers_fine,
+            "predicted_rate": rate_fine,
+            "chi": chi_squared,
+        }
+        self.rates_to_plot[survey].append(new_plot)
         if survey != "combined":
             logging.debug(f"Calculating binned redshift errors for dataset {survey}...")
             if self.fit_args_dict.get("z_centers_err", None) is None:
@@ -1525,7 +1524,7 @@ class sauron_runner:
                 if i < j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
 
-        result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names)) # oops this should be z center
+        result_to_add["reduced_chi_squared"] = chi / ((len(z_bins) - 1) - len(param_names))  # use number of bins, not edges
         result_to_add["survey"] = survey_name
         if csfr_name is not None:
             result_to_add["csfr"] = csfr_name

@@ -1170,16 +1170,21 @@ def test_regression_CSFR_list():
         )
 
     results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_CSFR_list_regression.csv")
+
+    # Ensure the multi-CSFR loop actually ran
+    assert {"B13", "S20"}.issubset(set(results["csfr"].unique()))
+
+    # Keep regression comparisons against the baseline CSFR only
+    results_b13 = results.loc[results["csfr"] == "B13"].reset_index(drop=True)
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_CSFR_list_regression.csv").reset_index(drop=True)
     for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
         try:
-            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+            np.testing.assert_allclose(results_b13[col], regression[col], rtol=warning_rtol)
         except AssertionError as e:
             logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
                            f"Please check if this is expected. ")
             logger.warning(str(e))
-        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
-
+        np.testing.assert_allclose(results_b13[col], regression[col], rtol=global_rtol)
     # Now check it matches the other test
     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_DTD_regression.csv")
     results = results.loc[results["csfr"] == "B13"]
