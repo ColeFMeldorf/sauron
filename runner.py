@@ -22,7 +22,7 @@ from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_te
                    non_parametric_histogram, precompute_AplusB)
 from SN_dataset import SN_dataset
 
-from dtd_functions import dtd_rate, power_law_DTD, binned_DTD
+from dtd_functions import dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary
 
 # Get the matplotlib logger
 matplotlib_logger = logging.getLogger("matplotlib")
@@ -130,6 +130,11 @@ class sauron_runner:
         self.fit_args_dict["rate_params"] = {}
         self.results = {}
         self.final_counts = {}
+        # CSFR bookkeeping. Stays at these defaults ("no CSFR") unless a DTD is specified in
+        # FIT_OPTIONS, in which case parse_dtd_options fills them in for real.
+        self.csfr_names = [None]
+        self.rate_functions = {}
+        self.multiple_csfrs = False
 
     def parse_global_fit_options(self):
         """ Parse global fit options (I.e. those that apply to all surveys) from the config file."""
@@ -193,13 +198,57 @@ class sauron_runner:
             else:
                 bins = np.asarray(bins, dtype=float)
                 self.x0 = np.full(len(bins) - 1, 1e-5)
-
-            self.rate_function = dtd_rate(dtd_func, kwargs={"bins": bins})
+            dtd_kwargs = {"bins": bins}
             self.dtd_bins = bins
-
         else:
-            self.rate_function = dtd_rate(dtd_func)
+            dtd_kwargs = None
 
+        # Figure out which CSFR(s) to convolve the DTD with. This used to be hardcoded inside
+        # dtd_functions.py; now it's chosen by name from FIT_OPTIONS.CSFR in the config file. If CSFR
+        # is given as a list (e.g. two names), this DTD gets fit once per CSFR, all the way through
+        # sauron.py's main loop, with each fit's results tagged by which CSFR produced it.
+        self.csfr_names = self._resolve_csfr_names(fit_options)
+        self.multiple_csfrs = len(self.csfr_names) > 1
+
+        self.rate_functions = {
+            csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
+            for csfr_name in self.csfr_names
+        }
+        # self.rate_function is the "currently active" rate function — everything downstream
+        # (fit_rate, summary_plot, etc.) keeps reading this one attribute. sauron.py is responsible for
+        # pointing it at a different entry of self.rate_functions before each fit when
+        # self.multiple_csfrs is True.
+        self.rate_function = self.rate_functions[self.csfr_names[0]]
+
+    def _resolve_csfr_names(self, fit_options):
+        """Parse and validate the CSFR field of FIT_OPTIONS into a list of one or more CSFR names.
+
+        CSFR can be given as a single name (string) or a list of names (e.g. to fit the same DTD
+        against two different assumed star formation histories). If it's omitted entirely, we fall
+        back to 'double_power_law', which is the CSFR that used to be hardcoded.
+        """
+        csfr_option = fit_options.get("CSFR", None)
+        if csfr_option is None:
+            logging.warning(
+                "No CSFR specified in FIT_OPTIONS. Defaulting to the 'B13' CSFR "
+                "(the form that used to be hardcoded)."
+            )
+            csfr_names = ["B13"]
+        elif isinstance(csfr_option, list):
+            csfr_names = csfr_option
+        else:
+            csfr_names = [csfr_option]
+
+        if len(csfr_names) == 0:
+            raise ValueError("CSFR was specified as an empty list in FIT_OPTIONS. Provide at least one CSFR name.")
+
+        unknown = [name for name in csfr_names if name not in csfr_func_name_dictionary]
+        if unknown:
+            raise ValueError(
+                f"Unknown CSFR function(s): {unknown}. Available options: {list(csfr_func_name_dictionary.keys())}"
+            )
+
+        return csfr_names
 
     def parse_survey_fit_options(self, args_dict, survey):
         """ Parse survey-specific fit options from the config file.
@@ -782,6 +831,7 @@ class sauron_runner:
         # plt.legend()
         # plt.savefig(f"fit_and_draws_{survey}.png")
 
+
         self.final_counts[survey]["predicted_counts"] = Ei
         self.final_counts[survey]["x0_counts"] = x0_counts
         self.final_counts[survey]["binned_rate"] = binned_rate
@@ -793,12 +843,35 @@ class sauron_runner:
 
         self.final_counts[survey]["predicted_rate_16"] = Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
         self.final_counts[survey]["predicted_rate_84"] = Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+
+
         self.n_data = n_data
 
         self.final_counts[survey]["result"] = fit_params
         self.final_counts[survey]["covariance"] = cov_x
         self.final_counts[survey]["chi"] = chi_squared
 
+        if getattr(self, "rates_to_plot", None) is None:
+            self.rates_to_plot = {}
+
+        if self.rates_to_plot.get(survey) is None:
+            self.rates_to_plot[survey] = []
+
+        z_centers = self.fit_args_dict["z_centers"][survey]
+        z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
+        rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
+        new_plot = {
+            "type": "model",
+            "index": index,
+            "csfr_name": getattr(self, "current_csfr", None),
+            "predicted_rate_16": Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
+            "predicted_rate_84": Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
+            "z_centers": z_centers,
+            "z_centers_fine": z_centers_fine,
+            "predicted_rate": rate_fine,
+            "chi": chi_squared,
+        }
+        self.rates_to_plot[survey].append(new_plot)
         if survey != "combined":
             logging.debug(f"Calculating binned redshift errors for dataset {survey}...")
             if self.fit_args_dict.get("z_centers_err", None) is None:
@@ -989,7 +1062,7 @@ class sauron_runner:
 
         return n_data
 
-    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
+    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5], csfr = None):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -1012,6 +1085,9 @@ class sauron_runner:
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(self.x0))]
 
+
+        rate_function = self.rate_function if csfr is None else self.rate_functions[csfr]
+
         for i, a in enumerate(np.linspace(extent[2], extent[3], n_samples)):
             for j, b in enumerate(np.linspace(extent[0], extent[1], n_samples)):
 
@@ -1027,7 +1103,7 @@ class sauron_runner:
                                    z_centers,
                                    fit_args_dict["eff_ij"][survey],
                                    n_data,
-                                   self.rate_function,
+                                   rate_function,
                                    fit_args_dict["cov_sys"][survey])
                 # Note this is now unsquared
                 chi2_map[i][j] = np.sum(chi2_result)
@@ -1057,18 +1133,6 @@ class sauron_runner:
                 # ax1 = ax[0]
                 z_centers = np.array(self.fit_args_dict["z_centers"][survey])
 
-                # yerr=self.final_counts[survey]["predicted_counts_err"]
-                # ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
-                #              yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                #              label=f" {survey} Sauron Prediction ", ms = 5)
-                # ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
-                #              fmt='o', label=f" {survey} Data", ms = 5)
-                # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                #              fmt='o', label=f" {survey} Initial Prediction ", ms=5)
-
-
                 yerr = np.array([self.final_counts[survey]["binned_rate_84"] - self.final_counts[survey]["binned_rate"],
                     self.final_counts[survey]["binned_rate"] - self.final_counts[survey]["binned_rate_16"]])
                 index = -1
@@ -1095,23 +1159,48 @@ class sauron_runner:
                 extraplot_survey = surveys[-1]
 
             if survey == extraplot_survey:
+                smallest_x = np.inf
+                biggest_x = -np.inf
+                smallest_y = np.inf
+                biggest_y = -np.inf
+                things_to_plot = self.rates_to_plot[survey]
+                for ii, item in enumerate(things_to_plot):
+                    rate_fine = item["predicted_rate"]
+                    z_centers_fine = item["z_centers_fine"]
+                    z_centers = item["z_centers"]
+                    predicted_rate_16 = item["predicted_rate_16"]
+                    predicted_rate_84 = item["predicted_rate_84"]
 
-                z_bins = self.fit_args_dict["z_bins"][survey]
-                z_centers = self.fit_args_dict["z_centers"][survey]
 
-                z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
-                rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
-                if "non_parametric" not in self.rate_function_name:
-                    ax1.plot(z_centers_fine, rate_fine, label="Best Fit Rate Function ", color = "k")
-                else:
-                    ax1.plot(z_centers, rate_fine, label="Best Fit Rate Function ", color = "k")
-                ax1.fill_between(z_centers, self.final_counts[survey]["predicted_rate_16"], self.final_counts[survey]["predicted_rate_84"], color="gray", alpha=0.5, label="1 sigma confidence region")
+                    if item["csfr_name"] is not None:
+                        csfr_label = item["csfr_name"]
+                        csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
+                        # Loop through and capitalize first letter of each word
+                        for i, letter in enumerate(csfr_label):
+                            if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
+                                csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
 
-                chi_2 = self.final_counts[survey]["chi"]
-                reduced_chi_2 = chi_2 / (len(z_centers) - len(self.final_counts[survey]["result"]))
-                props = dict(boxstyle="round", facecolor="white", alpha=0.8)
-                ax1.text(-0.9, 0.7, "$\\chi^2$ = {:.2f}\nReduced $\\chi^2$ = {:.2f}".format(np.sum(chi_2), np.sum(reduced_chi_2)),
-                          transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom", horizontalalignment="right", bbox=props)
+                        label = f"Best Fit Rate ({csfr_label} CSFR)"
+                    else:
+                        label = "Best Fit Rate "
+
+                    chi_2 = item["chi"]
+                    reduced_chi_2 = chi_2 / (len(z_centers) - len(self.final_counts[survey]["result"]))
+
+                    #label += "\n $\\chi^2_{reduced}$ " + f"= {reduced_chi_2:.2f}"
+
+                    color_index = ii + len(surveys) -1
+                    if "non_parametric" not in self.rate_function_name:
+                        ax1.plot(z_centers_fine, rate_fine, label=label, color = "C"+str(color_index))
+                    else:
+                        ax1.plot(z_centers, rate_fine, label=label, color = "C"+str(color_index))
+                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color="C"+str(color_index), alpha=0.5)
+                    # , label="1 sigma confidence region"
+
+                    # if ii == 0:
+                    #     props = dict(boxstyle="round", facecolor="white", alpha=0.8)
+                    # ax1.text(-0.9, 0.7, "Reduced $\\chi^2$ = {:.2f}".format(reduced_chi_2),
+                    #        transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom", horizontalalignment="right", bbox=props)
 
 
                 ax1.legend()
@@ -1130,28 +1219,73 @@ class sauron_runner:
                         param_names = ["param_" + str(i) for i in range(len(self.final_counts[survey]["result"]))]
                     param_names = [p.replace("$", "") for p in param_names]
                     param_names = [p.replace("\\", "") for p in param_names]
-                    extent_chi = [df[param_names[1]][0] - 3 * df[f"{param_names[1]}_error"][0], df[param_names[1]][0] + 3 * df[f"{param_names[1]}_error"][0],
-                                df[param_names[0]][0] - 3 * df[f"{param_names[0]}_error"][0], df[param_names[0]][0] + 3 * df[f"{param_names[0]}_error"][0]]
-                    logger.debug(extent_chi)
-                    chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1) # this needs to be fixed
-                    # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-                    chi2_map -= np.min(chi2_map)
-
-                    # sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-                    sigma_map = chi2_map
-
-                    # Reload param names with Latex included this time.
 
 
-                    im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
-                    # ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-                    # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-                    ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
-                    plt.colorbar(im, ax=ax2, label="Δχ²")
-                    # ax2.axhline(2.27e-5, color='black', linestyle='--')
-                    # ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-                    ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
-                                color="white", ms=10, label=f"Fit results {label}")
+                    df_list = self.results[s]
+
+                    if self.multiple_csfrs:
+                        csfrs = [d["csfr"].values[0] for d in df_list]
+                    else:
+                        csfrs = [None]
+
+                    extent_chi_0s = []
+                    extent_chi_1s = []
+                    extent_chi_2s = []
+                    extent_chi_3s = []
+                    for i, c in enumerate(csfrs):
+                        logging.debug(f"Processing CSFR: {c}")
+                        df = df_list[i]
+                        stretch = 5
+                        extent_chi = [df[param_names[1]][0] - stretch * df[f"{param_names[1]}_error"][0], df[param_names[1]][0] + stretch * df[f"{param_names[1]}_error"][0],
+                                df[param_names[0]][0] - stretch * df[f"{param_names[0]}_error"][0], df[param_names[0]][0] + stretch * df[f"{param_names[0]}_error"][0]]
+
+                        extent_chi_0s.append(extent_chi[0])
+                        extent_chi_1s.append(extent_chi[1])
+                        extent_chi_2s.append(extent_chi[2])
+                        extent_chi_3s.append(extent_chi[3])
+                        logging.debug(f"current df {df}")
+                        chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
+                        chi2_map -= np.min(chi2_map)
+
+                        sigma_map = chi2_map
+
+                        # Reload param names with Latex included this time.
+
+                        if not self.multiple_csfrs:
+                            # Can't do this with multiple rates from multiple CSFRs being plotted, as which would get to
+                            # be the color map? Instead, just plot contours.
+                            im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
+                            plt.colorbar(im, ax=ax2, label="Δχ²")
+                        # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                        cs = ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
+                        contour_level = cs.allsegs[0]
+                        segment = contour_level[0]  # This is a NumPy array of shape (N, 2)
+
+                        x_coords = segment[:, 0]
+                        min_x = np.min(x_coords)
+                        if min_x < smallest_x or smallest_x is None:
+                            smallest_x = min_x
+                        if min_x > biggest_x or biggest_x is None:
+                            biggest_x = min_x
+                        y_coords = segment[:, 1]
+                        min_y = np.min(y_coords)
+                        if min_y < smallest_y or smallest_y is None:
+                            smallest_y = min_y
+                        if min_y > biggest_y or biggest_y is None:
+                            biggest_y = min_y
+                        logging.debug(f"Scatter plotting the following values: {df[param_names[1]]}, {df[param_names[0]]}")
+
+                        chi_plot_label = f"Fit results {label}"
+                        if self.multiple_csfrs:
+                            csfr_label = c
+                            csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
+                            # Loop through and capitalize first letter of each word
+                            for i, letter in enumerate(csfr_label):
+                                if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
+                                    csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
+                            chi_plot_label += f" ({csfr_label} CSFR)"
+                        ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
+                                     ms=10, label=chi_plot_label)
                     if self.rate_function_name == "power_law":
                         ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
                         ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
@@ -1170,52 +1304,63 @@ class sauron_runner:
                     #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
                     #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
                     #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-                    ax2.set_xlim(extent_chi[0], extent_chi[1])
-                    ax2.set_ylim(extent_chi[2], extent_chi[3])
-
-                    # Adaptively define the ticks
-                    y_limits = extent_chi[2], extent_chi[3]
-                    y_range = y_limits[1] - y_limits[0]
-                    y_tick_spacing = y_range / 5  # Aim for around 5 ticks
-                    y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
-                    ax2.set_yticks(y_ticks)
-                    logging.debug(f"Y ticks: {y_ticks}")
 
 
-                    log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
-                    logging.debug(f"Log norm: {log_norm}")
-                    norm = 10**log_norm
-                    log_norm = int(log_norm)
-                    # get current y label
+                # Adaptively define the ticks
+                extent_chi_0s = np.array(extent_chi_0s)
+                extent_chi_1s = np.array(extent_chi_1s)
+                extent_chi_2s = np.array(extent_chi_2s)
+                extent_chi_3s = np.array(extent_chi_3s)
 
-                    if log_norm < -1 or log_norm > 1:
-                        current_ylabel = ax2.get_ylabel()
-                        # update the y label to include the normalization factor
-                        ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
-                    else:
-                        norm = 1
-                    ax2.set_yticklabels([f"{y_tick/norm:.1f}" for y_tick in y_ticks])
+                smallest_x = np.min(extent_chi_0s)
+                biggest_x = np.max(extent_chi_1s)
+                smallest_y = np.min(extent_chi_2s)
+                biggest_y = np.max(extent_chi_3s)
 
-                    # Do the same for x ticks
-                    x_limits = extent_chi[0], extent_chi[1]
-                    x_range = x_limits[1] - x_limits[0]
-                    x_tick_spacing = x_range / 5  # Aim for around 5 ticks
-                    x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
-                    ax2.set_xticks(x_ticks)
+                ax2.set_xlim(smallest_x, biggest_x )
+                ax2.set_ylim(smallest_y, biggest_y)
+                y_limits = smallest_y, biggest_y
+                y_range = y_limits[1] - y_limits[0]
+                y_tick_spacing = y_range / 5  # Aim for around 5 ticks
+                y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
+                ax2.set_yticks(y_ticks)
+                logging.debug(f"Y ticks: {y_ticks}")
 
-                    log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
-                    norm = 10**log_norm
-                    log_norm = int(log_norm)
-                    if log_norm < -1 or log_norm > 1:
-                        # get current x label
-                        current_xlabel = ax2.get_xlabel()
-                        # update the x label to include the normalization factor
-                        ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
-                    else:
-                        norm = 1
-                    ax2.set_xticklabels([f"{x_tick/norm:.1f}" for x_tick in x_ticks])
 
-                    ax2.legend(loc = "lower left", fontsize=9)
+                log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
+                logging.debug(f"Log norm: {log_norm}")
+                norm = 10**log_norm
+                log_norm = int(log_norm)
+                # get current y label
+
+                if log_norm < -1 or log_norm > 1:
+                    current_ylabel = ax2.get_ylabel()
+                    # update the y label to include the normalization factor
+                    ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                else:
+                    norm = 1
+                ax2.set_yticklabels([f"{y_tick/norm:.1f}" for y_tick in y_ticks])
+
+                # Do the same for x ticks
+                x_limits = smallest_x, biggest_x
+                x_range = x_limits[1] - x_limits[0]
+                x_tick_spacing = x_range / 5  # Aim for around 5 ticks
+                x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
+                ax2.set_xticks(x_ticks)
+
+                log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
+                norm = 10**log_norm
+                log_norm = int(log_norm)
+                if log_norm < -1 or log_norm > 1:
+                    # get current x label
+                    current_xlabel = ax2.get_xlabel()
+                    # update the x label to include the normalization factor
+                    ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                else:
+                    norm = 1
+                ax2.set_xticklabels([f"{x_tick/norm:.1f}" for x_tick in x_ticks])
+
+                ax2.legend(loc = "lower left", fontsize=8)
 
         fig.savefig("summary_plot.png")
 
@@ -1337,7 +1482,7 @@ class sauron_runner:
 
         return f_norm
 
-    def add_results(self, survey, index=None):
+    def add_results(self, survey, index=None, csfr_name=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
         Inputs
         ------
@@ -1345,6 +1490,10 @@ class sauron_runner:
             Name of the survey.
         index : int
             Dataset index.
+        csfr_name : str, optional
+            Name of the CSFR used to produce this fit (only meaningful when fitting a DTD; see
+            parse_dtd_options). If given, it's recorded as a 'csfr' column so results from different
+            assumed CSFRs can be told apart after saving.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # This needs to be updated for more parameters later
@@ -1375,8 +1524,10 @@ class sauron_runner:
                 if i < j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
 
-        result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names)) # oops this should be z center
+        result_to_add["reduced_chi_squared"] = chi / ((len(z_bins)) - len(param_names))  # This needs to be fixed!
         result_to_add["survey"] = survey_name
+        if csfr_name is not None:
+            result_to_add["csfr"] = csfr_name
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
 

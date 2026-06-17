@@ -66,8 +66,15 @@ def main():
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
 
-            runner.fit_rate(survey, index, PROB_THRESH=PROB_THRESH)
-            runner.add_results(survey, index)
+            # If FIT_OPTIONS.CSFR in the config was a list of more than one CSFR, this loop runs once
+            # per CSFR; otherwise it runs once, exactly as before.
+            for csfr_name in runner.csfr_names:
+                if runner.multiple_csfrs:
+                    logging.info(f"  ...assuming CSFR: {csfr_name}")
+                    runner.rate_function = runner.rate_functions[csfr_name]
+
+                runner.fit_rate(survey, index, PROB_THRESH=PROB_THRESH)
+                runner.add_results(survey, index, csfr_name=csfr_name)
 
     # Fit all surveys together
 
@@ -85,8 +92,14 @@ def main():
 
         for index in indices:
             logging.info(f"Fitting index {index} -----------------------")
-            runner.fit_rate(surveys, index=index, PROB_THRESH=PROB_THRESH)
-            runner.add_results("combined", index=index)
+            for csfr_name in runner.csfr_names:
+                if runner.multiple_csfrs:
+                    logging.info(f"  ...assuming CSFR: {csfr_name}")
+                    runner.rate_function = runner.rate_functions[csfr_name]
+                    runner.current_csfr = csfr_name
+
+                runner.fit_rate(surveys, index=index, PROB_THRESH=PROB_THRESH)
+                runner.add_results("combined", index=index, csfr_name=csfr_name)
         surveys.extend(["combined"])
 
     if args.plot:
