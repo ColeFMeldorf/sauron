@@ -19,10 +19,10 @@ from astropy.cosmology import LambdaCDM
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, AplusB_cosmicSFH, chi2, turnover_power_law_forced_cty,
-                   non_parametric_histogram, precompute_AplusB)
+                   non_parametric_histogram)
 from SN_dataset import SN_dataset
 
-from dtd_functions import dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary
+from dtd_functions import dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary, precompute_AplusB
 
 # Get the matplotlib logger
 matplotlib_logger = logging.getLogger("matplotlib")
@@ -66,7 +66,8 @@ def LaurenNicePlots():
     update_rcParams("lines.markeredgewidth", 1.0)
     update_rcParams("lines.markeredgecolor", "auto")
 
-    cycle_colors = ["navy", "maroon", "darkorange", "darkorchid", "darkturquoise", "darkmagenta", "6FADFA", "7D7D7D", "black"]
+    cycle_colors = ["navy", "maroon", "56B4E9", "E69F00", "009E73"]
+    # "darkorchid", "darkturquoise", "darkmagenta", "6FADFA", "7D7D7D", "black"]
     # cycle_colors = ['9F6CE6','FF984A','538050','6FADFA','7D7D7D','black']
     cycle_markers = ["o", "^", "*", "s", "X", "d", "1", "2", "3"]
     # cycle_colors = ['darkorchid','darkorange','darkturquoise']
@@ -90,24 +91,26 @@ func_name_dictionary = {
 
 dtd_func_name_dictionary = {
     "power_law_dtd": power_law_DTD,
-    "binned_dtd": binned_DTD
+    "binned_dtd": binned_DTD,
+    "AplusB_dtd": "placeholder"
 }
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
-    "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
+    "AplusB_dtd": (2.8e-14, 9.3e-4),
+    "power_law_dtd": (-1.001, 1e-13)
 }
 
 default_parameter_name_dictionary = {
     "power_law": ["$\\alpha$", "$\\beta$"],
-    "AplusB_cosmicSFH": ["A", "B"],
+    "AplusB_dtd": ["A", "B"],
     "turnover_power_law": ["$\\alpha$", "$\\beta_1$", "$\\alpha_2$", "$\\beta_2$"],
     "power_law_dtd": ["$\\beta$", "$R_1$"]}
 
 default_bounds_dictionary = {
-    "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
+    "AplusB_cosmicSFH": ((-np.inf, -np.inf), (np.inf, np.inf)),
 }
 
 
@@ -179,13 +182,13 @@ class sauron_runner:
         self.rate_function_name = fit_options.get("DTD")
         dtd_func = dtd_func_name_dictionary.get(self.rate_function_name, None)
         if dtd_func is None:
+            logging.debug("dict: " + str(dtd_func_name_dictionary))
             dtd_func = dtd_func_name_dictionary.get(self.rate_function_name + "_dtd", None)
             self.rate_function_name = fit_options.get("DTD") + "_dtd"
             if dtd_func is None:
                 raise ValueError(f"Unknown DTD function: {self.rate_function_name}")
         if not self.rate_function_name.endswith("_dtd"):
             self.rate_function_name += "_dtd"
-
 
         if self.rate_function_name == "binned_dtd":
             bins = fit_options.get("BINS")
@@ -210,10 +213,26 @@ class sauron_runner:
         self.csfr_names = self._resolve_csfr_names(fit_options)
         self.multiple_csfrs = len(self.csfr_names) > 1
 
-        self.rate_functions = {
-            csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
-            for csfr_name in self.csfr_names
-        }
+        if self.rate_function_name == "AplusB_dtd":
+
+            # A plus B DTD involves an integral and hence gets a special precomputation step.
+
+            logging.debug("Using AplusB DTD precomputation for CSFRs " + ", ".join(self.csfr_names))
+            logging.debug("Using a z grid of 100 points from 0 to 5.")
+
+            self.rate_functions = {
+                csfr_name: precompute_AplusB( z_data=np.linspace(0, 5, 100),
+                cosmology=cosmo, csfr=csfr_name) for csfr_name in self.csfr_names
+
+            }
+
+        else:
+            # All of the other DTDs can be turned into rate functions directly in the same
+            # way by convolution with the CSFR
+            self.rate_functions = {
+                csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
+                for csfr_name in self.csfr_names
+            }
         # self.rate_function is the "currently active" rate function — everything downstream
         # (fit_rate, summary_plot, etc.) keeps reading this one attribute. sauron.py is responsible for
         # pointing it at a different entry of self.rate_functions before each fit when
@@ -555,13 +574,13 @@ class sauron_runner:
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
 
         z_centers = np.array(z_centers)
-
         if self.rate_function_name == "AplusB_cosmicSFH":
             self.rate_function = precompute_AplusB(
                 z_data=z_centers,
-                cosmology=cosmo
+                cosmology=cosmo,
+                csfr_func=csfr_func_name_dictionary[self.current_csfr]
             )
-            logging.debug("Precomputed AplusB function for rate fitting.")
+            logging.debug(f"Precomputed AplusB function for rate fitting using CSFR {self.current_csfr}.")
 
         # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
@@ -689,6 +708,8 @@ class sauron_runner:
                 bounds = None
                 scales = self.x0
                 logging.debug(f"Using bounds: {bounds}")
+            elif self.rate_function_name == "power_law_dtd":
+                scales = np.array([0.1, 1e-13])
             elif self.rate_function_name == "power_law":
                 scales = np.array([1e-5, 1])
             elif self.rate_function_name == "AplusB_cosmicSFH":
@@ -1195,6 +1216,7 @@ class sauron_runner:
                     else:
                         ax1.plot(z_centers, rate_fine, label=label, color = "C"+str(color_index))
                     ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color="C"+str(color_index), alpha=0.5)
+
                     # , label="1 sigma confidence region"
 
                     # if ii == 0:
@@ -1232,9 +1254,9 @@ class sauron_runner:
                     extent_chi_1s = []
                     extent_chi_2s = []
                     extent_chi_3s = []
-                    for i, c in enumerate(csfrs):
+                    for ii, c in enumerate(csfrs):
                         logging.debug(f"Processing CSFR: {c}")
-                        df = df_list[i]
+                        df = df_list[ii]
                         stretch = 5
                         extent_chi = [df[param_names[1]][0] - stretch * df[f"{param_names[1]}_error"][0], df[param_names[1]][0] + stretch * df[f"{param_names[1]}_error"][0],
                                 df[param_names[0]][0] - stretch * df[f"{param_names[0]}_error"][0], df[param_names[0]][0] + stretch * df[f"{param_names[0]}_error"][0]]
@@ -1257,7 +1279,21 @@ class sauron_runner:
                             im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
                             plt.colorbar(im, ax=ax2, label="Δχ²")
                         # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-                        cs = ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
+
+                        logging.debug(f"Scatter plotting the following values: {df[param_names[1]]}, {df[param_names[0]]}")
+
+                        chi_plot_label = f"Fit results {label}"
+                        if self.multiple_csfrs:
+                            csfr_label = c
+                            csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
+                            # Loop through and capitalize first letter of each word
+                            for iii, letter in enumerate(csfr_label):
+                                if letter.isalpha() and (iii == 0 or csfr_label[iii-1] == " "):
+                                    csfr_label = csfr_label[:iii] + csfr_label[iii].upper() + csfr_label[iii+1:]
+                            chi_plot_label += f" ({csfr_label} CSFR)"
+                        color_index = ii + len(surveys) - 1
+                        cs = ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi,
+                         colors="C" + str(color_index), linewidths=1)
                         contour_level = cs.allsegs[0]
                         segment = contour_level[0]  # This is a NumPy array of shape (N, 2)
 
@@ -1273,19 +1309,8 @@ class sauron_runner:
                             smallest_y = min_y
                         if min_y > biggest_y or biggest_y is None:
                             biggest_y = min_y
-                        logging.debug(f"Scatter plotting the following values: {df[param_names[1]]}, {df[param_names[0]]}")
-
-                        chi_plot_label = f"Fit results {label}"
-                        if self.multiple_csfrs:
-                            csfr_label = c
-                            csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
-                            # Loop through and capitalize first letter of each word
-                            for i, letter in enumerate(csfr_label):
-                                if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
-                                    csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
-                            chi_plot_label += f" ({csfr_label} CSFR)"
                         ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
-                                     ms=10, label=chi_plot_label)
+                                     ms=10, label=chi_plot_label, color = "C" + str(color_index) )
                     if self.rate_function_name == "power_law":
                         ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
                         ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
@@ -1317,6 +1342,8 @@ class sauron_runner:
                 smallest_y = np.min(extent_chi_2s)
                 biggest_y = np.max(extent_chi_3s)
 
+                #smallest_y = -1.3
+                #biggest_y = -0.7
                 ax2.set_xlim(smallest_x, biggest_x )
                 ax2.set_ylim(smallest_y, biggest_y)
                 y_limits = smallest_y, biggest_y
