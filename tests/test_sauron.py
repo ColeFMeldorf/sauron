@@ -1225,9 +1225,10 @@ def test_regression_AplusB():
 
     regression = (
         pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_AplusB_DTD_regression.csv")
-        .sort_values(["survey", "csfr"]) 
+        .sort_values(["survey", "csfr"])
         .reset_index(drop=True)
     )
+    for i, col in enumerate([r"A", r"B", r"A_error", r"B_error", r"cov_A_B", "reduced_chi_squared"]):
         try:
             np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
         except AssertionError as e:
