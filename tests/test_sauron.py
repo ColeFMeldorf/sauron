@@ -29,12 +29,13 @@ warning_rtol = 1e-6
 # but I do want a warning if it changed even a little bit.
 
 
-# Configure the basic logging setup
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
-    datefmt="%H:%M:%S"
-)
+# # Configure the basic logging setup
+# logging.basicConfig(
+#     level=logging.DEBUG,
+#     format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
+#     datefmt="%H:%M:%S",
+#     force = True
+# )
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -1048,7 +1049,7 @@ def test_cc_decontam_SDSS():
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
         runner.fit_args_dict['z_bins'][survey] = runner.z_bins
         args.cheat_cc = False
-        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=True)
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
         n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
         residual = n_true - n_calc
@@ -1101,7 +1102,7 @@ def test_regression_power_law_DTD():
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_DTD.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -1158,10 +1159,58 @@ def test_regression_CSFR_list():
     outpath = pathlib.Path(__file__).parent / "test_output/test_CSFR_list_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
+    assert not os.path.exists(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_DTD_CSFR_list.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+
+
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    results = pd.read_csv(outpath)
+
+    # Ensure the multi-CSFR loop actually ran
+    assert {"B13", "S20"}.issubset(set(results["csfr"].unique()))
+
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_CSFR_list_regression.csv").reset_index(drop=True)
+    for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+    # Now check it matches the other test
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_DTD_regression.csv")
+    results = results.loc[results["csfr"] == "B13"]
+    for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
+        logger.debug(f"Checking {col}")
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+
+
+def test_regression_AplusB():
+    """In this test, we check the AplusB DTD regresses."""
+    outpath = pathlib.Path(__file__).parent / "test_output/test_AplusB_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_AplusB_DTD.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -1175,21 +1224,8 @@ def test_regression_CSFR_list():
     assert {"B13", "S20"}.issubset(set(results["csfr"].unique()))
 
     # Keep regression comparisons against the baseline CSFR only
-    results_b13 = results.loc[results["csfr"] == "B13"].reset_index(drop=True)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_CSFR_list_regression.csv").reset_index(drop=True)
-    for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
-        try:
-            np.testing.assert_allclose(results_b13[col], regression[col], rtol=warning_rtol)
-        except AssertionError as e:
-            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
-                           f"Please check if this is expected. ")
-            logger.warning(str(e))
-        np.testing.assert_allclose(results_b13[col], regression[col], rtol=global_rtol)
-    # Now check it matches the other test
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_DTD_regression.csv")
-    results = results.loc[results["csfr"] == "B13"]
-    for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
-        logging.debug(f"Checking {col}")
+    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_AplusB_DTD_regression.csv").reset_index(drop=True)
+    for i, col in enumerate([r"A", r"B", r"A_error", r"B_error", r"cov_A_B", "reduced_chi_squared"]):
         try:
             np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
         except AssertionError as e:

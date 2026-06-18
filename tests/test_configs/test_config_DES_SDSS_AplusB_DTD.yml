@@ -3,7 +3,7 @@
 
 FIT_OPTIONS:
   DTD: AplusB
-  CSFR: [S20, B13]
+  CSFR: [B13, S20]
 SDSS:
   FIT_OPTIONS:
     RATE_FUNC: power_law
