@@ -574,17 +574,6 @@ class sauron_runner:
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
 
         z_centers = np.array(z_centers)
-
-        # if self.rate_function_name == "AplusB_dtd":
-        #     from dtd_functions import csfr_double_power_law, strolger_CSFR, csfr_func_name_dictionary
-
-        #     self.rate_function = precompute_AplusB(
-        #         z_data=np.linspace(0, 5, 100),
-        #         cosmology=cosmo,
-        #         csfr=csfr_double_power_law
-        #     )
-        #     logging.debug("Precomputed AplusB function for rate fitting.")
-
         # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
             n_data = np.concatenate([self.fit_args_dict["n_data"][s][index] for s in survey])
