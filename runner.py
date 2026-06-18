@@ -18,18 +18,18 @@ from astropy.cosmology import LambdaCDM
 
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
-                   calculate_null_counts, AplusB_cosmicSFH, chi2, turnover_power_law_forced_cty,
-                   non_parametric_histogram, precompute_AplusB)
+                   calculate_null_counts, chi2, turnover_power_law_forced_cty,
+                   non_parametric_histogram)
 from SN_dataset import SN_dataset
 
-from dtd_functions import dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary
+from dtd_functions import dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary, precompute_AplusB
 
 # Get the matplotlib logger
 matplotlib_logger = logging.getLogger("matplotlib")
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
-# logger = logging.getLogger(__name__)
+# Logging is configured by the CLI entrypoint (sauron.py). Avoid configuring global logging on import.
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -83,31 +83,32 @@ func_name_dictionary = {
     "power_law": power_law,
     "turnover_power_law": turnover_power_law,
     "dual_power_law": turnover_power_law,
-    "AplusB_cosmicSFH": AplusB_cosmicSFH,
     "turnover_power_law_forced_cty": turnover_power_law_forced_cty,
     "non_parametric_histogram": non_parametric_histogram
 }
 
 dtd_func_name_dictionary = {
     "power_law_dtd": power_law_DTD,
-    "binned_dtd": binned_DTD
+    "binned_dtd": binned_DTD,
+    "AplusB_dtd": "placeholder"
 }
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
-    "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
+    "AplusB_dtd": (2.8e-14, 9.3e-4),
+    "power_law_dtd": (-1, 1e-3)
 }
 
 default_parameter_name_dictionary = {
     "power_law": ["$\\alpha$", "$\\beta$"],
-    "AplusB_cosmicSFH": ["A", "B"],
+    "AplusB_dtd": ["A", "B"],
     "turnover_power_law": ["$\\alpha$", "$\\beta_1$", "$\\alpha_2$", "$\\beta_2$"],
     "power_law_dtd": ["$\\beta$", "$R_1$"]}
 
 default_bounds_dictionary = {
-    "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
+    "AplusB_dtd": ((0, 0), (np.inf, np.inf)),
 }
 
 
@@ -168,9 +169,13 @@ class sauron_runner:
             elif "binned" in self.rate_function_name:
                 pass
             else:
-                logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess "
-                f"for {self.rate_function_name}: {default_x0_dictionary.get(self.rate_function_name, (2.27e-5, 1.7))}")
-                self.x0 = default_x0_dictionary.get(self.rate_function_name, (2.27e-5, 1.7))
+                self.x0 = default_x0_dictionary.get(self.rate_function_name, None)
+                if self.x0 is None:
+                    raise ValueError(f"No default X0 found for rate function: {self.rate_function_name}. Please specify X0 in FIT_OPTIONS.")
+                else:
+                    logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess "
+                    f"for {self.rate_function_name}: {self.x0}")
+
              # The above should probably be changed.
         else:
             self.x0 = [float(i) for i in potential_x0.split(",")]
@@ -210,10 +215,18 @@ class sauron_runner:
         self.csfr_names = self._resolve_csfr_names(fit_options)
         self.multiple_csfrs = len(self.csfr_names) > 1
 
-        self.rate_functions = {
-            csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
-            for csfr_name in self.csfr_names
-        }
+        if self.rate_function_name == "AplusB_dtd":
+            self.rate_functions = {csfr_name: precompute_AplusB(
+                z_data=np.linspace(0, 5, 100),
+                cosmology=cosmo,
+                csfr=csfr_func_name_dictionary[csfr_name]
+            ) for csfr_name in self.csfr_names}
+            logging.debug("Precomputed AplusB function for rate fitting up here!")
+        else:
+            self.rate_functions = {
+                csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
+                for csfr_name in self.csfr_names
+            }
         # self.rate_function is the "currently active" rate function — everything downstream
         # (fit_rate, summary_plot, etc.) keeps reading this one attribute. sauron.py is responsible for
         # pointing it at a different entry of self.rate_functions before each fit when
@@ -555,14 +568,6 @@ class sauron_runner:
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
 
         z_centers = np.array(z_centers)
-
-        if self.rate_function_name == "AplusB_cosmicSFH":
-            self.rate_function = precompute_AplusB(
-                z_data=z_centers,
-                cosmology=cosmo
-            )
-            logging.debug("Precomputed AplusB function for rate fitting.")
-
         # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
             n_data = np.concatenate([self.fit_args_dict["n_data"][s][index] for s in survey])
@@ -691,7 +696,7 @@ class sauron_runner:
                 logging.debug(f"Using bounds: {bounds}")
             elif self.rate_function_name == "power_law":
                 scales = np.array([1e-5, 1])
-            elif self.rate_function_name == "AplusB_cosmicSFH":
+            elif self.rate_function_name == "AplusB_dtd":
                 scales = np.array([1e-14, 1e-3])
             else:
                 logging.debug("No information about relative parameter scales, using 1 for all parameters. This may cause issues with convergence or covariance calculation.")

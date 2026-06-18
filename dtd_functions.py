@@ -5,12 +5,16 @@ import scipy
 
 from astropy.cosmology import Planck18 as cosmology
 
+from astropy import units as u
+from scipy.integrate import cumulative_trapezoid
+
 logger = logging.getLogger(__name__)
 
 
 # ── 1. PRECOMPUTE COSMOLOGY LOOKUPS (do once, not per z) ──────────────────────
 _z_grid = np.linspace(0, 15, 10_000)
 _t_grid = cosmology.age(_z_grid).to("Gyr").value          # Gyr, decreasing with z
+
 
 def fast_age(z):
     """Interpolated age in Gyr — replaces cosmology.age()."""
@@ -59,19 +63,63 @@ def csfr_double_power_law(z, uncertainty=None, uncertainty_mode="upper"):
             raise ValueError("Invalid uncertainty_mode. Use 'upper' or 'lower'.")
     return sfh
 
+
 def _rational_dbl_pwr_law(z, A, B, C, D):
 
     numerator = A * (1+z) ** C
     denominator = (((1 + z)/B)**D) + 1
     return numerator / denominator
 
-def strolger_CSFR(z, uncertainty=None, uncertainty_mode="upper"):
-    h = 0.70
-    AFUVz = _rational_dbl_pwr_law(z, A=1.4, B=3.5, C=0.7, D=4.3)
-    dust_correction = (1 + 10 ** (0.4 * AFUVz)) * h**3
-    uncorrected_csfr = _rational_dbl_pwr_law(z, A=0.0134, B=2.55, C=3.3, D=6.1)
 
-    return uncorrected_csfr * dust_correction
+def strolger_CSFR(z, uncertainty=None, uncertainty_mode="upper"):
+    return _rational_dbl_pwr_law(z, A=0.0134, B=2.55, C=3.3, D=6.1)
+
+
+def precompute_AplusB(z_data, csfr, cosmology, a=0.0118, b=0.08, c=3.3, d=5.2, R=0.56, z_max=100.0, n_grid=10_000):
+    """ Pre-computes the SFR terms for fixed cosmology and SFH shape, returning a
+    fast callable for fitting. Call this ONCE before fitting.
+
+    The returned function signature matches AplusB_cosmicSFH(z, x) where x = [A, B].
+    """
+    z_data = np.asarray(z_data)
+
+    # --- Pull everything out of astropy ONCE ---
+    H0_val    = cosmology.H0.to("km/s/Mpc").value
+    Mpc_in_km = (1 * u.Mpc).to(u.km).value   # 3.0857e19
+    yr_in_s   = (1 * u.yr ).to(u.s  ).value   # 3.1557e7
+    H0_per_yr = H0_val / Mpc_in_km * yr_in_s  # H0 expressed in yr^-1
+    Om0       = float(cosmology.Om0)
+    Ode0      = float(cosmology.Ode0)
+
+    def _sfr_dt_dz(z_):
+        E_z   = np.sqrt(Ode0 + Om0 * (1 + z_) ** 3)   # dimensionless Hubble factor E(z)
+        dt_dz = 1.0 / (H0_per_yr * (1 + z_) * E_z)    # yr per unit redshift
+        return csfr(z_) * dt_dz
+
+    # --- One cumulative integration pass replaces N separate quad calls ---
+    # Instead of integrating from each z_i to 100 independently, we compute
+    # the cumulative integral from 0 → z_max once on a fine grid, then
+    # use the identity:
+    #   integral(z_i → z_max) = total - integral(0 → z_i)
+    # and interpolate at the actual data z values.
+
+    z_grid    = np.linspace(0.0, z_max, n_grid)
+    cumul     = cumulative_trapezoid(_sfr_dt_dz(z_grid), z_grid, initial=0.0)
+    total     = cumul[-1]
+
+    rho_integrated = (1 - R) * (total - np.interp(z_data, z_grid, cumul))
+    rho_dot        = csfr(z_data)
+
+    # --- This is all that runs during fitting: two multiplications ---
+    def AplusB_fast(z, x):
+        A, B = x
+        return A * rho_integrated + B * rho_dot
+
+    def AplusB_fast_interp(z, x):
+        f = np.interp(z, z_data, AplusB_fast(z_data, x))
+        return f
+
+    return AplusB_fast_interp
 
 # Registry of selectable CSFR functions — same idea as dtd_func_name_dictionary / func_name_dictionary
 # in runner.py. To add a new CSFR functional form: write a function with the same signature as
@@ -180,19 +228,6 @@ def power_law_DTD(t_gyr, beta, eff, cutoff=0.01):
     rate = t**beta
     return rate * eff
 
-
-# def binned_DTD(t_gyr, vals, eff, bins = None):
-#     indices = np.digitize(t_gyr, bins) - 1
-
-#     indices = np.clip(indices, 0, len(vals) - 1)
-
-#     rate = vals[indices]
-
-#     area_under_curve = np.sum(vals * np.diff(bins))
-
-#     rate /= area_under_curve
-#     rate *= eff
-#     return rate
 
 def binned_DTD(t_gyr, *vals, bins = np.linspace(0, 5, 11)):
     indices = np.digitize(t_gyr, bins) - 1
