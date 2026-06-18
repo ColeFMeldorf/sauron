@@ -169,7 +169,7 @@ def dtd_rate_vec(z_array, dtd_func, args, kwargs, n_steps=1000, csfh_unc=None, c
     rates : ndarray shape (N,)  in yr⁻² Mpc⁻³
     """
     if csfr_func is None:
-        raise ValueError("No CSFR function provided.")
+        csfr_func = csfr_double_power_law
 
     z_array = np.asarray(z_array, dtype=float)
     N = len(z_array)
