@@ -29,13 +29,7 @@ matplotlib_logger = logging.getLogger("matplotlib")
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
-# # Configure the basic logging setup
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
-    datefmt="%H:%M:%S",
-    force = True
-)
+# Logging is configured by the CLI entrypoint (sauron.py). Avoid configuring global logging on import.
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -1806,8 +1800,3 @@ class sauron_runner:
             mesh = [m.flatten() for m in mesh]
             for i, s in enumerate(survey):
                 self.fit_args_dict[f"{s}_combined_indices"] = mesh[i]
-    def test_method(self):
-        logger.debug("This is a debug message from test_method")
-
-def test_function():
-    logger.debug("This is a debug message from test_function")

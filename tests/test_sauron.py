@@ -1218,14 +1218,16 @@ def test_regression_AplusB():
             f"stderr:\n{result.stderr}"
         )
 
-    results = pd.read_csv(outpath)
+    results = pd.read_csv(outpath).sort_values(["survey", "csfr"]).reset_index(drop=True)
 
     # Ensure the multi-CSFR loop actually ran
     assert {"B13", "S20"}.issubset(set(results["csfr"].unique()))
 
-    # Keep regression comparisons against the baseline CSFR only
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_AplusB_DTD_regression.csv").reset_index(drop=True)
-    for i, col in enumerate([r"A", r"B", r"A_error", r"B_error", r"cov_A_B", "reduced_chi_squared"]):
+    regression = (
+        pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_AplusB_DTD_regression.csv")
+        .sort_values(["survey", "csfr"]) 
+        .reset_index(drop=True)
+    )
         try:
             np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
         except AssertionError as e:
