@@ -9,17 +9,13 @@ import math
 # Sauron modules
 from runner import sauron_runner
 
-
-
-# # Configure the basic logging setup
+# Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
     datefmt="%H:%M:%S"
 )
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def main():
     parser = argparse.ArgumentParser(description="SAURON: Survey-Agnostic volUmetric Rate Of superNovae")
@@ -76,8 +72,6 @@ def main():
                 if runner.multiple_csfrs:
                     logging.info(f"  ...assuming CSFR: {csfr_name}")
                     runner.rate_function = runner.rate_functions[csfr_name]
-                    logging.debug(f"Using rate function for CSFR: {runner.rate_function}")
-                    runner.current_csfr = csfr_name
 
                 runner.fit_rate(survey, index, PROB_THRESH=PROB_THRESH)
                 runner.add_results(survey, index, csfr_name=csfr_name)

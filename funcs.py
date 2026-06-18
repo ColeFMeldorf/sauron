@@ -5,8 +5,11 @@ import pandas as pd
 import numpy as np
 import logging
 from scipy.stats import binned_statistic as binstat
+from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
+from scipy.integrate import quad
+from scipy.integrate import cumulative_trapezoid
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +143,95 @@ def non_parametric_histogram(z, x):
 
 import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
+
+
+def cosmic_SFR(z,a,b,c,d):
+    H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
+    return (a + b * z) / (1 + (z / c)**d) * H0 / 100
+
+
+def cosmic_SFR_dt_dz(z, a, b, c, d):
+    H0 = cosmology.H0  # in km/s/Mpc
+    Om0 = cosmology.Om0
+    Ode0 = cosmology.Ode0
+    #dt_dz = 1 / H0 / (1 + z) / np.sqrt(Ode0 + Om0 * (1 + z)**3)  # in Gyr per unit redshift
+    dt_dz = (H0 * (1 + z) * np.sqrt(Ode0 + Om0 * (1 + z)**3))**-1
+    dt_dz = dt_dz.to("yr")  # convert to years
+
+    return (cosmic_SFR(z, a, b, c, d) * dt_dz).value
+
+
+def cosmic_SFR_integrated(z, a, b, c, d):
+    R = 0.56
+    # *
+    result = (1 - R) * quad(cosmic_SFR_dt_dz, z, 100, args=(a, b, c, d))[0]
+    return result
+
+
+def AplusB_cosmicSFH(z, x):
+    """ A + B model with cosmic star formation history """
+    # Currently using values from Dilday 2008 but should be updated.
+    a = 0.0118
+    b = 0.08
+    c = 3.3
+    d = 5.2
+
+    A,B = x
+    rho_dot_evaluated = cosmic_SFR(z, a, b, c, d)
+    vec_rho_integrated = np.vectorize(cosmic_SFR_integrated)
+    rho_integrated_evaluated = vec_rho_integrated(z, a, b, c, d)
+    return A * rho_integrated_evaluated + B * rho_dot_evaluated
+
+
+def precompute_AplusB(z_data, cosmology, a=0.0118, b=0.08, c=3.3, d=5.2, R=0.56, z_max=100.0, n_grid=10_000):
+    """ Pre-computes the SFR terms for fixed cosmology and SFH shape, returning a
+    fast callable for fitting. Call this ONCE before fitting.
+
+    The returned function signature matches AplusB_cosmicSFH(z, x) where x = [A, B].
+    """
+    z_data = np.asarray(z_data)
+
+    # --- Pull everything out of astropy ONCE ---
+    H0_val    = cosmology.H0.to("km/s/Mpc").value
+    Mpc_in_km = (1 * u.Mpc).to(u.km).value   # 3.0857e19
+    yr_in_s   = (1 * u.yr ).to(u.s  ).value   # 3.1557e7
+    H0_per_yr = H0_val / Mpc_in_km * yr_in_s  # H0 expressed in yr^-1
+    Om0       = float(cosmology.Om0)
+    Ode0      = float(cosmology.Ode0)
+
+    # --- Pure-numpy integrand (fully vectorized, no astropy) ---
+    def _sfr(z_):
+        return (a + b * z_) / (1 + (z_ / c) ** d) * (H0_val / 100.0)
+
+    def _sfr_dt_dz(z_):
+        E_z   = np.sqrt(Ode0 + Om0 * (1 + z_) ** 3)   # dimensionless Hubble factor E(z)
+        dt_dz = 1.0 / (H0_per_yr * (1 + z_) * E_z)    # yr per unit redshift
+        return _sfr(z_) * dt_dz
+
+    # --- One cumulative integration pass replaces N separate quad calls ---
+    # Instead of integrating from each z_i to 100 independently, we compute
+    # the cumulative integral from 0 → z_max once on a fine grid, then
+    # use the identity:
+    #   integral(z_i → z_max) = total - integral(0 → z_i)
+    # and interpolate at the actual data z values.
+
+    z_grid    = np.linspace(0.0, z_max, n_grid)
+    cumul     = cumulative_trapezoid(_sfr_dt_dz(z_grid), z_grid, initial=0.0)
+    total     = cumul[-1]
+
+    rho_integrated = (1 - R) * (total - np.interp(z_data, z_grid, cumul))
+    rho_dot        = _sfr(z_data)
+
+    # --- This is all that runs during fitting: two multiplications ---
+    def AplusB_fast(z, x):
+        A, B = x
+        return A * rho_integrated + B * rho_dot
+
+    def AplusB_fast_interp(z, x):
+        f = np.interp(z, z_data, AplusB_fast(z_data, x))
+        return f
+
+    return AplusB_fast_interp
 
 
 def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None, rate_params=None,
