@@ -3,7 +3,7 @@
 
 FIT_OPTIONS:
   DTD: power_law
-  CSFR: B13
+  CSFR: B13_uncorrected
 SDSS:
   FIT_OPTIONS:
     RATE_FUNC: power_law

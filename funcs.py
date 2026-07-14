@@ -147,14 +147,22 @@ def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None
     """Calculate the number of expected counts for 1 SN / Mpc^3 / yr over the survey volume and time."""
 
     # Method 1, stupid method, divide N_gen by true rate.
+    logging.debug("Ngen is {}, true_rate_function is {}, rate_params is {}".format(N_gen, true_rate_function, rate_params))
     if all(v is not None for v in [N_gen, true_rate_function, rate_params]):
-        fJ = true_rate_function(z_centers, rate_params)
+        # check if rate_params is a string (file path) or not
+
+        logging.debug(f"Calculating null counts using N_gen and true_rate_function with rate_params: {rate_params}")
+        if not isinstance(rate_params, str):
+            logging.debug(f"Using rate parameters directly: {rate_params}")
+            fJ = true_rate_function(z_centers, rate_params)
+        else:
+            # open the file
+            logging.debug(f"Reading rate parameters from file: {rate_params}")
+            df = pd.read_csv(rate_params, delim_whitespace=True, comment="#", header = None, names=["z", "rate"])
+            fJ = np.interp(z_centers, df["z"], df["rate"])
         total_counts = N_gen / fJ
-        return total_counts
 
-
-
-    return np.array(total_counts)
+        return np.array(total_counts)
 
 
 def chi2_to_sigma(chi2_diff, dof):

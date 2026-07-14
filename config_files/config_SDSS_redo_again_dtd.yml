@@ -2,8 +2,8 @@
 # The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
 
 FIT_OPTIONS:
-  DTD: AplusB
-  CSFR: [S20, B13]
+  DTD: power_law
+  CSFR: [S20, B13, L08]
 SDSS:
   FIT_OPTIONS:
     RATE_FUNC: power_law
