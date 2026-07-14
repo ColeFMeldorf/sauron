@@ -72,12 +72,13 @@ def main():
 
             # If FIT_OPTIONS.CSFR in the config was a list of more than one CSFR, this loop runs once
             # per CSFR; otherwise it runs once, exactly as before.
+            logging.debug("ALL RATE FUNCTIONS: " + str(runner.rate_functions))
             for csfr_name in runner.csfr_names:
-                if runner.multiple_csfrs:
-                    logging.info(f"  ...assuming CSFR: {csfr_name}")
-                    runner.rate_function = runner.rate_functions[csfr_name]
-                    logging.debug(f"Using rate function for CSFR: {runner.rate_function}")
-                    runner.current_csfr = csfr_name
+                logging.info(f"  ...assuming CSFR: {csfr_name}")
+                logging.debug(f"runner.dtd_func: {runner.dtd_func}, runner.rate_function: {runner.rate_function}, runner.rate_functions: {runner.rate_functions}")
+                runner.rate_function = runner.rate_functions[csfr_name] if runner.dtd_func else runner.rate_function
+                logging.debug(f"Using rate function for CSFR: {runner.rate_function}")
+                runner.current_csfr = csfr_name
 
                 runner.fit_rate(survey, index, PROB_THRESH=PROB_THRESH)
                 runner.add_results(survey, index, csfr_name=csfr_name)
@@ -99,10 +100,11 @@ def main():
         for index in indices:
             logging.info(f"Fitting index {index} -----------------------")
             for csfr_name in runner.csfr_names:
-                if runner.multiple_csfrs:
-                    logging.info(f"  ...assuming CSFR: {csfr_name}")
-                    runner.rate_function = runner.rate_functions[csfr_name]
-                    runner.current_csfr = csfr_name
+
+                logging.info(f"  ...assuming CSFR: {csfr_name}")
+
+                runner.rate_function = runner.rate_functions[csfr_name] if runner.dtd_func else runner.rate_function
+                runner.current_csfr = csfr_name
 
                 runner.fit_rate(surveys, index=index, PROB_THRESH=PROB_THRESH)
                 runner.add_results("combined", index=index, csfr_name=csfr_name)
