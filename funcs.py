@@ -138,10 +138,6 @@ def non_parametric_histogram(z, x):
     return x
 
 
-import astropy.cosmology as cosmo
-cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
-
-
 def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None, rate_params=None,
                           time=None, solid_angle=None, cosmo=None):
     """Calculate the number of expected counts for 1 SN / Mpc^3 / yr over the survey volume and time."""

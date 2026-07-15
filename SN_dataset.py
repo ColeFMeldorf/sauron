@@ -298,16 +298,7 @@ class SN_dataset:
 
         return dataframe
 
-    def determine_needed_columns(self, path, zcol, subset_cols = None):
-        logger.debug(f"Determining needed columns for {self.data_name} using file {path}")
-        logger.debug(f"Specified zcol: {zcol}")
-        # Only load the columns needed. This is important for memory management, especially for large datasets.
-        if path is not None:
-            test_dataframe = self.open_dataset(path, nrows=1)
-            all_cols = test_dataframe.columns
-        else:
-            all_cols = []
-
+    def _determine_needed_z_col(self, all_cols, zcol):
         # Find the appropriate recovered redshift column.
         if zcol is not None:
             possible_z_cols = [zcol]
@@ -333,6 +324,7 @@ class SN_dataset:
                 raise ValueError(f"Couldn't find any valid zcol in dataframe for {self.data_name}!"
                                  f" I checked: {possible_z_cols}.")
 
+    def _determine_needed_z_err_col(self, all_cols):
         # Determine the redshift error column
         if (self.z_col is not None) and ("GEN" not in self.z_col) and ("DUMP" not in self.data_name):
             possible_extensions = ["_ERR", "ERR"]
@@ -349,12 +341,12 @@ class SN_dataset:
             logging.debug(f"z_col {self.z_col} for {self.data_name} looks like a true z column, so not looking for a z error column.")
             self.z_err_col = None
 
+    def _determine_needed_scone_col(self, all_cols, path):
         # Find the appropriate SCONE probability column, if it exists.
         scone_col = []
         for c in all_cols:
             if "PROB_SCONE" in c or "SCONE_pred" in c:
                 scone_col.append(c)
-        #
                 # Determine or validate the dataset-level SCONE column across files.
         existing_scone_col = getattr(self, "scone_col", None)
         if existing_scone_col is None:
@@ -393,19 +385,21 @@ class SN_dataset:
                         f"previous files used '{existing_scone_col}', but file {path} has '{current_scone_col}'."
                     )
         logging.debug(f"Determined scone col for {self.data_name}: {self.scone_col}")
-        if self.data_name is not None and "DATA" not in self.data_name:
-            # If it's not real data, it should  have a true z column. Try to find it if it isn't specified.
-            if self._true_z_col is None:
-                possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
-                cols_in_df = [col for col in possible_true_z_cols if
-                              col in all_cols]
-                if len(cols_in_df) > 1:
-                    raise ValueError(f"Multiple possible true z cols found for {self.data_name}: {cols_in_df}. "
-                                      "Please specify TRUEZCOL in config file.")
-                elif len(cols_in_df) == 1:
-                    self._true_z_col = cols_in_df[0]
-                    logging.info(f"Auto-setting true z col for {self.data_name} to {cols_in_df[0]}")
 
+    def _determine_needed_true_z_col(self, all_cols):
+        # If it's not real data, it should  have a true z column. Try to find it if it isn't specified.
+        if self._true_z_col is None:
+            possible_true_z_cols = ["GENZ", "TRUEZ", "SIMZ", "SIM_ZCMB"]
+            cols_in_df = [col for col in possible_true_z_cols if
+                            col in all_cols]
+            if len(cols_in_df) > 1:
+                raise ValueError(f"Multiple possible true z cols found for {self.data_name}: {cols_in_df}. "
+                                    "Please specify TRUEZCOL in config file.")
+            elif len(cols_in_df) == 1:
+                self._true_z_col = cols_in_df[0]
+                logging.info(f"Auto-setting true z col for {self.data_name} to {cols_in_df[0]}")
+
+    def _determine_good_subset_cols(self, all_cols, subset_cols):
         # Sometimes the columns used for subsetting have different names in different datasets. Like PKMJD and
         # SIM_PKMJD. This checks for close matches.
         all_good_subset_cols = []
@@ -422,6 +416,28 @@ class SN_dataset:
             return all_good_subset_cols
         else:
             return []
+
+    def determine_needed_columns(self, path, zcol, subset_cols = None):
+        logger.debug(f"Determining needed columns for {self.data_name} using file {path}")
+        logger.debug(f"Specified zcol: {zcol}")
+        # Only load the columns needed. This is important for memory management, especially for large datasets.
+        if path is not None:
+            test_dataframe = self.open_dataset(path, nrows=1)
+            all_cols = test_dataframe.columns
+        else:
+            all_cols = []
+
+        self._determine_needed_z_col(all_cols, zcol)
+        self._determine_needed_z_err_col(all_cols)
+        self._determine_needed_scone_col(all_cols, path)
+
+        if self.data_name is not None and "DATA" not in self.data_name:
+            self._determine_needed_true_z_col(all_cols)
+
+        # Sometimes the columns used for subsetting have different names in different datasets. Like PKMJD and
+        # SIM_PKMJD. This checks for close matches.
+        return self._determine_good_subset_cols(all_cols, subset_cols)
+
 
     def split_into_IA_and_CC(self, sntype_col, ia_vals):
         """ Split the Dataset in two, returning two new SN_datasets. Only works for datasets with a valid sntypecol."""

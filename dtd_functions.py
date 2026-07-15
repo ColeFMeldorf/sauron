@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import scipy
 
+#from astropy.cosmology import LambdaCDM
+#cosmology = LambdaCDM(H0=70, Om0=0.315, Ode0=0.685)
 from astropy.cosmology import Planck18 as cosmology
 
 from astropy import units as u
@@ -31,6 +33,7 @@ def fast_z_at_age(t_gyr):
 
 # ── 2. UNIT-STRIPPED KERNELS ──────────────────────────────────────────────────
 # Strip astropy units once up-front; add them back on output.
+
 _H0_per_yr  = cosmology.H0.to("1/yr").value          # yr⁻¹
 _Om0        = cosmology.Om0
 _Ode0       = cosmology.Ode0
@@ -40,10 +43,6 @@ _eta_Ia_val = 1.6e-4                                   # (solMass · yr)⁻¹  �
 def csfr_double_power_law_uncorrected(z, uncertainty=None, uncertainty_mode="upper"):
     """The cosmic star formation rate density (CSFR), as a double power-law in log10 space.
     Returns solMass yr⁻¹ Mpc⁻³ (float array).
-
-    This is the form that used to be hardcoded as the only available CSFR (it was previously named
-    `_CSFR`, called directly from dtd_rate_vec). It's now just one entry in
-    `csfr_func_name_dictionary` below, selectable by name from the CSFR field in FIT_OPTIONS.
 
     NOTE THAT UNCERTAINTY IS EXPECTED TO BE IN DEX, LIKE IN BEHROOZI ET AL.
 
@@ -85,6 +84,7 @@ def strolger_CSFR(z, uncertainty=None, uncertainty_mode="upper"):
 def _log_sfr_li(z, a, b):
     log_sfr = a + b * np.log10(1 + z)
     return 10 ** log_sfr
+
 
 def li_piecewise(z, uncertainty=None, uncertainty_mode="upper"):
     """Li piecewise CSFR from Li (2008)"""
@@ -183,13 +183,13 @@ def precompute_AplusB(z_data, csfr, cosmology,  z_max=100.0, n_grid=10_000):
 # csfr_double_power_law (z, uncertainty=None, uncertainty_mode="upper") and add it here under whatever
 # name you want to refer to it by in the config file's CSFR field.
 
+
 csfr_func_name_dictionary = {
     "B13": csfr_double_power_law,
     "B13_uncorrected": csfr_double_power_law_uncorrected,
     "S20": strolger_CSFR,
     "L08": li_piecewise
 }
-
 
 
 
