@@ -58,6 +58,7 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
     var_data = n_data
     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
 
+
     cov_stat = np.diag(var_data + var_predict)
     if cov_sys is None:
         cov_sys = 0
@@ -74,6 +75,8 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
 
     # Now we calculate the Gaussian normalization term.
     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
+    logger.debug(f"x: {x}, x0: {x0}")
+    logger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
     gauss_norm = 0.5 * np.log(np.sqrt(var_predict / var_predict_x0))
     logger.debug(f"gauss_norm: {gauss_norm}")
 
