@@ -11,7 +11,7 @@ from scipy.special import erfinv
 logger = logging.getLogger(__name__)
 
 
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
+def chi2_old(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
@@ -35,6 +35,40 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
     if debug:
         logger.debug(f"Ei: {Ei}")
         logger.debug(f"var_Ei: {var_Ei}")
+        logger.debug(f"var_Si: {var_Si}")
+        logger.debug(f"resid_vector: {resid_vector}")
+        logger.debug(f"cov_stat: {cov_stat}")
+        logger.debug(f"cov_sys: {cov_sys}")
+        logger.debug(f"cov: {cov}")
+        logger.debug(f"Chi-squared: {chi_squared}")
+
+    return
+
+
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
+    zJ = z_centers
+    fJ = rate_function(zJ, x)
+    Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+    var_data = n_data
+    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+
+    cov_stat = np.diag(var_data + var_Si)
+    if cov_sys is None:
+        cov_sys = 0
+    cov = cov_stat + cov_sys
+
+    inv_cov = np.linalg.pinv(cov)
+
+    resid_vector = n_data - Ei
+
+    chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+    # This is the X^2 contribution for each z bin. It has ALREADY been squared.
+    # This is what scipy.optimize.minimize needs.
+
+    if debug:
+        logger.debug(f"Ei: {Ei}")
+        logger.debug(f"var_data: {var_data}")
         logger.debug(f"var_Si: {var_Si}")
         logger.debug(f"resid_vector: {resid_vector}")
         logger.debug(f"cov_stat: {cov_stat}")
