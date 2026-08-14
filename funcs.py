@@ -44,15 +44,21 @@ def chi2_old(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, c
 
     return
 
+def calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function):
+    """Calculate the variance of the predicted counts."""
+    fJ = rate_function(zJ, x)
+    var_predict = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+    return var_predict
 
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
+
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
     var_data = n_data
-    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+    var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
 
-    cov_stat = np.diag(var_data + var_Si)
+    cov_stat = np.diag(var_data + var_predict)
     if cov_sys is None:
         cov_sys = 0
     cov = cov_stat + cov_sys
@@ -66,10 +72,15 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_s
     # This is the X^2 contribution for each z bin. It has ALREADY been squared.
     # This is what scipy.optimize.minimize needs.
 
+    # Now we calculate the Gaussian normalization term.
+    var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
+    gauss_norm = 0.5 * np.log(np.sqrt(var_predict / var_predict_x0))
+    logger.debug(f"gauss_norm: {gauss_norm}")
+
     if debug:
         logger.debug(f"Ei: {Ei}")
         logger.debug(f"var_data: {var_data}")
-        logger.debug(f"var_Si: {var_Si}")
+        logger.debug(f"var_predict: {var_predict}")
         logger.debug(f"resid_vector: {resid_vector}")
         logger.debug(f"cov_stat: {cov_stat}")
         logger.debug(f"cov_sys: {cov_sys}")

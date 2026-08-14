@@ -19,7 +19,7 @@ from astropy.cosmology import LambdaCDM
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, chi2, turnover_power_law_forced_cty,
-                   non_parametric_histogram)
+                   non_parametric_histogram, calc_var_predict)
 from SN_dataset import SN_dataset
 
 from dtd_functions import (dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary, precompute_AplusB, prompt_fraction_DTD,
@@ -721,11 +721,12 @@ class sauron_runner:
         def scaled_chi2(params, *args):
             return chi2(params * scales, *args)
 
+        x0 = np.array(self.x0) / scales
         result = minimize(
                     scaled_chi2,
-                    x0=np.array(self.x0) / scales,
+                    x0=x0,
                     args=(null_counts, f_norms, z_centers, eff_ij,
-                            n_data, self.rate_function, cov_sys),
+                            n_data, self.rate_function, cov_sys, x0),
                     method=None,
                     bounds=bounds,
                 )
@@ -745,9 +746,9 @@ class sauron_runner:
         # Redo the above without the cov_sys to determine the systematic_error
         no_sys_result = minimize(
                     scaled_chi2,
-                    x0=np.array(self.x0) / scales,
+                    x0=x0,
                     args=(null_counts, f_norms, z_centers, eff_ij,
-                            n_data, self.rate_function, None),
+                            n_data, self.rate_function, None, x0),
                     method=None,
                     bounds=bounds,
                 )
