@@ -573,10 +573,11 @@ class sauron_runner:
                        extent=[z_bins[0], z_bins[-1], z_bins[0], z_bins[-1]],
                        vmin=0, vmax=np.max(eff_ij)
                        )
-            plt.colorbar(label=r"Efficiency (n$_{\mathrm{obs}}$ / n$_{\mathrm{sim}}$)")
-            plt.title(f"Efficiency Matrix for {survey}")
-            plt.ylabel("Recovered Redshift")
-            plt.xlabel("True Redshift")
+            fontsize = 18
+            plt.colorbar().set_label(label=r"$\epsilon_{iJ}$", size=fontsize*1.5)
+            plt.title(f"Efficiency Matrix for {survey}", fontsize=fontsize)
+            plt.ylabel("Recovered Redshift", fontsize=fontsize)
+            plt.xlabel("True Redshift", fontsize=fontsize)
             path = f"plots/efficiency_matrix_{survey}.png"
             logging.debug(f"Saving efficiency matrix plot to {path}")
             plt.savefig(path)
