@@ -2,8 +2,9 @@
 # The subscript indicates the SN type (e.g., IA, CC, etc.) ALL indicates a mixture of SN types.
 
 FIT_OPTIONS:
-  RATE_FUNCTION: AplusB_cosmicSFH
+  RATE_FUNCTION: power_law
 SDSS:
+
   FIT_OPTIONS:
     RATE_FUNC: power_law
     RATE_PARAMS: 2.27E-5, 1.7
@@ -12,6 +13,7 @@ SDSS:
     MAX_Z: 0.35
     CC_ARE_SEPARATE: false
     F_NORM: 0.0416666
+    AREA_FRAC: 0.93
   CUTS:
     x1: -3, 3
     c: -0.3, 0.3
@@ -34,6 +36,7 @@ SDSS:
 
 
 DES:
+
   FIT_OPTIONS:
     RATE_FUNC: power_law
     RATE_PARAMS: 2.27E-5, 1.7
@@ -41,6 +44,7 @@ DES:
     MIN_Z: 0.1
     MAX_Z: 0.9
     F_NORM: 0.02
+    AREA_FRAC: 0.826
 
   CUTS:
     x1: -3, 3

@@ -294,6 +294,55 @@ class sauron_runner:
 
         return csfr_names
 
+    def _get_area_correction(self, args_dict, survey):
+        area_correction = args_dict.get("AREA_FRAC", None)
+        logging.debug(args_dict)
+        if area_correction is None:
+            logging.warning(f"AREA_FRAC not specified in FIT_OPTIONS for {survey}."
+                             " Defaulting to 1.0 (no area correction).")
+            area_correction = 1.0
+        if self.fit_args_dict.get("area_frac") is None:
+            self.fit_args_dict["area_frac"] = {}
+        return area_correction
+
+    def _get_f_norm(self, args_dict, survey):
+        raw_f_norm = args_dict.get("F_NORM", None)
+        if raw_f_norm is None:
+            return None
+        else:
+            try:
+                f_norm = float(raw_f_norm)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float; got {raw_f_norm!r}."
+                )
+            if f_norm <= 0:
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float greater than zero; got {f_norm!r}."
+                )
+
+        return f_norm
+
+    def _get_z_bins(self, args_dict, survey):
+        zbins = np.arange(0.0, 1.4, 0.1)
+        if "Z_BINS" in args_dict:
+            if isinstance(args_dict["Z_BINS"], list):
+                zbins = np.array(args_dict["Z_BINS"])
+            elif isinstance(args_dict["Z_BINS"], int):
+                if "MIN_Z" not in args_dict or "MAX_Z" not in args_dict:
+                    logging.warning("When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
+                                    " Defaulting to MIN_Z=0 and MAX_Z=1.4")
+                min_z = args_dict.get("MIN_Z", 0)
+                max_z = args_dict.get("MAX_Z", 1.4)
+                zbins = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
+            logging.debug(f"Using z_bin edges for {survey}: {zbins}")
+
+        else:
+            logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
+
+        return zbins
+
+
     def parse_survey_fit_options(self, args_dict, survey):
         """ Parse survey-specific fit options from the config file.
 
@@ -306,41 +355,14 @@ class sauron_runner:
             Name of the survey.
         """
 
-        raw_f_norm = args_dict.get("F_NORM", None)
-        if raw_f_norm is None:
-            self.fit_args_dict["f_norm"][survey] = None
-        else:
-            try:
-                f_norm = float(raw_f_norm)
-            except (TypeError, ValueError):
-                raise ValueError(
-                    f"F_NORM for survey {survey} must be a positive float; got {raw_f_norm!r}."
-                )
-            if f_norm <= 0:
-                raise ValueError(
-                    f"F_NORM for survey {survey} must be a positive float greater than zero; got {f_norm!r}."
-                )
-            self.fit_args_dict["f_norm"][survey] = f_norm
+        self.fit_args_dict["area_frac"][survey] = self._get_area_correction(args_dict, survey)
+        self.fit_args_dict["f_norm"][survey] = self._get_f_norm(args_dict, survey)
 
 
         self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
         logging.debug(f"Setting CC_ARE_SEPARATE for {survey} to {args_dict.get('CC_ARE_SEPARATE', None)}")
-        self.fit_args_dict["z_bins"][survey] = np.arange(0.0, 1.4, 0.1)
-        if "Z_BINS" in args_dict:
-            if isinstance(args_dict["Z_BINS"], list):
-                self.fit_args_dict["z_bins"][survey] = np.array(args_dict["Z_BINS"])
-            elif isinstance(args_dict["Z_BINS"], int):
-                if "MIN_Z" not in args_dict or "MAX_Z" not in args_dict:
-                    logging.warning("When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
-                                    " Defaulting to MIN_Z=0 and MAX_Z=1.4")
-                min_z = args_dict.get("MIN_Z", 0)
-                max_z = args_dict.get("MAX_Z", 1.4)
-                self.fit_args_dict["z_bins"][survey] = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
-            logging.debug(f"Using z_bin edges for {survey}: {self.fit_args_dict['z_bins'][survey]}")
 
-        else:
-            logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
-
+        self.fit_args_dict["z_bins"][survey] = self._get_z_bins(args_dict, survey)
         self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] +
                                                    self.fit_args_dict["z_bins"][survey][:-1]) / 2
 
@@ -562,6 +584,12 @@ class sauron_runner:
             logging.warning("Specifically, these are the bin edges of the zero count bins:", z_bins[unique_bad_bins])
 
         eff_ij = num/dump_counts
+
+        area_frac = self.fit_args_dict["area_frac"][survey]
+        logging.debug(f"Applying area fraction correction for {survey}: {area_frac}")
+        eff_ij *= self.fit_args_dict["area_frac"][survey] # Account for pixel-level losses not included in the
+        # simulation: masked pixels, dead CCDs, overlap, etc.
+
 
         self.fit_args_dict["eff_ij"][survey] = eff_ij
 
