@@ -8,9 +8,6 @@ import math
 
 # Sauron modules
 from runner import sauron_runner
-from plotting import summary_plot
-
-
 
 
 
@@ -114,7 +111,7 @@ def main():
         surveys.extend(["combined"])
 
     if args.plot:
-        summary_plot(runner)
+        runner.summary_plot()
     runner.save_results()
 
 
