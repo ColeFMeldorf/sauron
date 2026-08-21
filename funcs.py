@@ -7,7 +7,7 @@ import logging
 from scipy.stats import binned_statistic as binstat
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
-
+from dtd_functions import (power_law_DTD, binned_DTD, prompt_fraction_DTD)
 logger = logging.getLogger(__name__)
 
 
@@ -179,3 +179,40 @@ def chi2_to_sigma(chi2_diff, dof):
 
     sigma = np.sqrt(2) * erfinv(1 - 2 * p_value)
     return sigma
+
+
+func_name_dictionary = {
+    "power_law": power_law,
+    "turnover_power_law": turnover_power_law,
+    "dual_power_law": turnover_power_law,
+    "turnover_power_law_forced_cty": turnover_power_law_forced_cty,
+    "non_parametric_histogram": non_parametric_histogram,
+    "file": "file"
+}
+
+dtd_func_name_dictionary = {
+    "power_law_dtd": power_law_DTD,
+    "binned_dtd": binned_DTD,
+    "AplusB_dtd": "placeholder",
+    "prompt_fraction_dtd": prompt_fraction_DTD
+}
+
+default_x0_dictionary = {
+    "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
+    "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
+    "dual_power_law": (1, 0, 1, -2),
+    "AplusB_dtd": (2.8e-14, 9.3e-4),
+    "power_law_dtd": (-1, 1e-14),
+    "prompt_fraction_dtd": (1.5e-4, 0.5)
+}
+
+default_parameter_name_dictionary = {
+    "power_law": ["$\\alpha$", "$\\beta$"],
+    "AplusB_dtd": ["A", "B"],
+    "turnover_power_law": ["$\\alpha$", "$\\beta_1$", "$\\alpha_2$", "$\\beta_2$"],
+    "power_law_dtd": ["$\\beta$", "$R_1$"],
+    "prompt_fraction_dtd": ["$\\eta_{Ia}$", "$f_P$"]}
+
+default_bounds_dictionary = {
+    "AplusB_dtd": ((0, 0), (np.inf, np.inf)),
+}
