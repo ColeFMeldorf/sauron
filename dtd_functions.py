@@ -29,6 +29,7 @@ def fast_z_at_age(t_gyr):
     # _t_grid is *decreasing*, so flip both arrays for np.interp
     return np.interp(t_gyr, _t_grid[::-1], _z_grid[::-1])
 
+
 # ── 2. UNIT-STRIPPED KERNELS ──────────────────────────────────────────────────
 # Strip astropy units once up-front; add them back on output.
 _H0_per_yr  = cosmology.H0.to("1/yr").value          # yr⁻¹
@@ -85,6 +86,7 @@ def strolger_CSFR(z, uncertainty=None, uncertainty_mode="upper"):
 def _log_sfr_li(z, a, b):
     log_sfr = a + b * np.log10(1 + z)
     return 10 ** log_sfr
+
 
 def li_piecewise(z, uncertainty=None, uncertainty_mode="upper"):
     """Li piecewise CSFR from Li (2008)"""
@@ -183,6 +185,7 @@ def precompute_AplusB(z_data, csfr, cosmology,  z_max=100.0, n_grid=10_000):
 # csfr_double_power_law (z, uncertainty=None, uncertainty_mode="upper") and add it here under whatever
 # name you want to refer to it by in the config file's CSFR field.
 
+
 csfr_func_name_dictionary = {
     "B13": csfr_double_power_law,
     "B13_uncorrected": csfr_double_power_law_uncorrected,
@@ -196,6 +199,7 @@ csfr_func_name_dictionary = {
 def _dt_dz(zprime):
     """dt/dz in yr (float array)."""
     return 1.0 / (_H0_per_yr * (1+zprime) * np.sqrt(_Ode0 + _Om0*(1+zprime)**3))
+
 
 # ── 3. FULLY VECTORISED fP_rate ───────────────────────────────────────────────
 def dtd_rate_vec(z_array, dtd_func, args, kwargs, n_steps=10000, csfh_unc=None, csfh_unc_mode="upper",
@@ -288,6 +292,7 @@ def binned_DTD(t_gyr, *vals, bins = np.linspace(0, 5, 11)):
     rate = vals[indices]
     return rate
 
+
 def prompt_fraction_DTD(t, eta_Ia, fP):
     K = 7.132
     # t is measured in Gyr
@@ -372,8 +377,7 @@ def build_response_matrix(z_sn_edges, z_csfr_edges, psi_csfr_peryr, tau_edges_Gy
 # 3. Solve the linear system for Phi (the binned DTD)
 # ----------------------------------------------------------------------
 def recover_dtd(R_sn_peryr, A, nonnegative=True):
-    """
-    R_sn_peryr : array (n_sn,), SN Ia rate in SNe / yr / Mpc^3
+    """R_sn_peryr : array (n_sn,), SN Ia rate in SNe / yr / Mpc^3
     A          : response matrix from build_response_matrix
     Returns Phi in SNe / Msun / Gyr, one value per delay bin.
     """

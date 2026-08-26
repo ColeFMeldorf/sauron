@@ -94,12 +94,13 @@ def summary_plot(runner):
             biggest_y = -np.inf
             things_to_plot = runner.rates_to_plot[survey]
             for ii, item in enumerate(things_to_plot):
-                reduced_chi_2 = _plot_one_rate_function_and_error(ii, item, runner, ax1, survey)
+                reduced_chi_2, csfr_label = _plot_one_rate_function_and_error(ii, item, runner, ax1, survey)
                 if ii == 0:
                     props = dict(boxstyle="round", facecolor="white", alpha=0.8)
 
                 if item["csfr_name"] is not None:
-                    ax1.text(-0.55, 0.9 - ii * 0.1, "Reduced $\\chi^2$ ({} CSFR = {:.2f})".format(csfr_label, reduced_chi_2),
+                    ax1.text(-0.55, 0.9 - ii * 0.1, "Reduced $\\chi^2$ ({} CSFR = {:.2f})".format(csfr_label,
+                                                                                                 reduced_chi_2),
                         transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom",
                             horizontalalignment="right", bbox=props)
                 else:
@@ -153,7 +154,8 @@ def summary_plot(runner):
                     extent_chi_2s.append(extent_chi[2])
                     extent_chi_3s.append(extent_chi[3])
                     logging.debug(f"current df {df}")
-                    chi2_map = generate_chi2_map(runner, s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
+                    chi2_map = generate_chi2_map(runner, s, extent=extent_chi, index =1, csfr = c) # this
+                    # needs to be fixed
                     chi2_map -= np.min(chi2_map)
 
                     sigma_map = chi2_map
@@ -165,7 +167,8 @@ def summary_plot(runner):
                         # be the color map? Instead, just plot contours.
                         im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="viridis")
                         plt.colorbar(im, ax=ax2, label="Δχ²")
-                    # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                    # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions;
+                    #  see Numerical Recipes / χ² tables)
                     cs = ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
                     contour_level = cs.allsegs[0]
                     segment = contour_level[0]  # This is a NumPy array of shape (N, 2)
@@ -194,7 +197,8 @@ def summary_plot(runner):
                                 csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
                         chi_plot_label += f" ({csfr_label} CSFR)"
                     chi_plot_label += " (This Work)"
-                    ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
+                    ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"],
+                                yerr=df[f"{param_names[0]}_error"], fmt="o",
                                     ms=5, label=chi_plot_label, color = "white")
                 _add_literature_values(ax2, runner)
 
@@ -206,9 +210,9 @@ def summary_plot(runner):
                 ax2.set_xlabel(label_names[1])
                 ax2.set_ylabel(label_names[0])
 
-                #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
-                #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
-                #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
+                # ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
+                # ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
+                # ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
 
                 _get_ax2_ticks(ax2, extent_chi_0s, extent_chi_1s, extent_chi_2s, extent_chi_3s)
 
@@ -236,7 +240,7 @@ def _plot_one_rate_function_and_error(ii, item, runner, ax1, survey):
         ax1.plot(z_centers, rate_fine, label=label, color = color)
     ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color=color, alpha=0.5)
     # , label="1 sigma confidence region"
-    return reduced_chi_2
+    return reduced_chi_2, csfr_label
 
 
 def _plot_binned_rate(survey, runner, ax1):
@@ -278,7 +282,8 @@ def _get_ax2_ticks(ax2, extent_chi_0s, extent_chi_1s, extent_chi_2s, extent_chi_
     y_limits = ax2.get_ylim()
     y_range = y_limits[1] - y_limits[0]
     y_tick_spacing = y_range / 5  # Aim for around 5 ticks
-    y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
+    y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing)
+     * y_tick_spacing + y_tick_spacing, y_tick_spacing)
     ax2.set_yticks(y_ticks)
 
 
@@ -306,7 +311,8 @@ def _get_ax2_ticks(ax2, extent_chi_0s, extent_chi_1s, extent_chi_2s, extent_chi_
     # x_limits = ax2.get_xlim()
     # x_range = x_limits[1] - x_limits[0]
     # x_tick_spacing = x_range / 5  # Aim for around 5 ticks
-    # x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
+    # x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing)
+    #  * x_tick_spacing + x_tick_spacing, x_tick_spacing)
     # #ax2.set_xticks(x_ticks)
 
     # log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
@@ -339,13 +345,14 @@ def _two_param_plot_stat_sys(a, a_stat_up, a_stat_low, a_sys_up, a_sys_low,
     a_low_total = np.sqrt(a_stat_low**2 + a_sys_low**2)
     b_up_total = np.sqrt(b_stat_up**2 + b_sys_up**2)
     b_low_total = np.sqrt(b_stat_low**2 + b_sys_low**2)
-    ax.errorbar(a, b, xerr=[[a_low_total], [a_up_total]], yerr=[[b_low_total], [b_up_total]], fmt="o", ms=5, label=label)
+    ax.errorbar(a, b, xerr=[[a_low_total], [a_up_total]], yerr=[[b_low_total], [b_up_total]], fmt="o", ms=5,
+               label=label)
 
 
 def _add_literature_values(ax2, runner):
     """Add literature values to the plot based on the rate function name."""
     if runner.rate_function_name == "power_law":
-        _two_param_plot_stat_sys(2.045, 1.845, 1.96, 2.11, 0.86, 2.005e-5, 5.2e-5, 1.6e-5, 0,0, ax2, label = "O14")
+        _two_param_plot_stat_sys(2.045, 1.845, 1.96, 2.11, 0.86, 2.005e-5, 5.2e-5, 1.6e-5, 0, 0, ax2, label = "O14")
         ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, fmt="o", ms=5, label="L20")
         ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=5, label="F19")
         ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt="o", ms=5, label="D10")
@@ -360,15 +367,14 @@ def _add_literature_values(ax2, runner):
         ax2.errorbar(5.4e-4, 1.5e-14, xerr=2e-4, yerr=0.7e-14, color = "cyan", fmt="o", ms=5, label = "K08")
         ax2.errorbar(3.9e-4, 5.3e-14, xerr=0.7e-4, yerr=1.1e-14, color = "green", fmt="o", ms=5, label = "S06")
     if "power_law_dtd" in runner.rate_function_name:
-        #ax2.errorbar(2.11e-13, -1.13,  yerr=0.05,xerr=.05e-13, label = "Wiseman (2020)", color = "C0", fmt="o", ms=5)
+        # ax2.errorbar(2.11e-13, -1.13,  yerr=0.05,xerr=.05e-13, label = "Wiseman (2020)", color = "C0", fmt="o", ms=5)
         results_dict = {"G11": (-1.1, 0.1),
                         "P12": (-0.98, 0.05),
                         "M12": (-1.12, 0.08),
-                        "W21": (-1.13, 0.05),}
+                        "W21": (-1.13, 0.05), }
         for i, (label, (beta, unc)) in enumerate(results_dict.items()):
-            ax2.axhline(beta, color="C"+str(i + 3), label = label + " $\sigma$ = " + str(unc))
-            xlim = ax2.get_xlim()
-            #ax2.fill_between([xlim[0], xlim[1]], beta - unc, beta + unc, color="C"+str(i), alpha=0.2)
+            ax2.axhline(beta, color="C"+str(i + 3), label = label + r" $\sigma$ = " + str(unc))
+            # ax2.fill_between([xlim[0], xlim[1]], beta - unc, beta + unc, color="C"+str(i), alpha=0.2)
     if "prompt_fraction" in runner.rate_function_name:
         plt.axvline(0.59, color = "white", linestyle = "--", label = "Simulated Value")
         plt.axhline(1.38e-4, color = "white", linestyle = "--")
@@ -410,7 +416,8 @@ def generate_chi2_map(runner, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0
                 n_data = fit_args_dict["n_data"][survey][index]
             values = (a, b)
             if len(param_names) > 2:
-                values = (a, b) + tuple(runner.results[survey][0][param_names[2:]].values[0])  # Keep other params at result value.
+                values = (a, b) + tuple(runner.results[survey][0][param_names[2:]].values[0])  # Keep other params
+                # at result value.
             chi2_result = chi2(values, fit_args_dict["null_counts"][survey],
                                 fit_args_dict["f_norm"][survey],
                                 z_centers,
@@ -434,9 +441,11 @@ def _sanity_plots(survey, runner):
     #         plt.subplot(1, 2, 2)
     #     zcol = runner.datasets[f"{survey}_{surv}"].z_col
     #     try:
-    #         plt.scatter(runner.datasets[f"{survey}_{surv}"].df["SIM_PEAKMJD"], runner.datasets[f"{survey}_{surv}"].df[zcol], alpha=0.5, label=surv)
+    #         plt.scatter(runner.datasets[f"{survey}_{surv}"].df["SIM_PEAKMJD"], runner.datasets[f"{survey}_{surv}"]
+    # .df[zcol], alpha=0.5, label=surv)
     #     except Exception as _:
-    #         plt.scatter(runner.datasets[f"{survey}_{surv}"].df["PEAKMJD"], runner.datasets[f"{survey}_{surv}"].df[zcol], alpha=0.5, label=surv)
+    #         plt.scatter(runner.datasets[f"{survey}_{surv}"].df["PEAKMJD"], runner.datasets[f"{survey}_{surv}"]
+    # .df[zcol], alpha=0.5, label=surv)
     # plt.xlabel("Peak MJD")
     # plt.ylabel("Recovered Redshift")
     # plt.legend()
@@ -449,7 +458,8 @@ def _sanity_plots(survey, runner):
     plt.tight_layout(pad=3.0)
 
     bins = np.linspace(np.min(runner.datasets[f"{survey}_DUMP_ALL"].df[runner.datasets[f"{survey}_DUMP_ALL"].z_col]),
-                        np.max(runner.datasets[f"{survey}_DUMP_ALL"].df[runner.datasets[f"{survey}_DUMP_ALL"].z_col]), 20)
+                        np.max(runner.datasets[f"{survey}_DUMP_ALL"].df[runner.datasets[f"{survey}_DUMP_ALL"].z_col]),
+                         20)
 
     labels = ["Uncut Simulation CC", "Uncut Simulation IA", "Simulated Detected IA", "Simulated Detected CC"]
     for i, ds in enumerate([f"{survey}_DUMP_CC", f"{survey}_DUMP_IA", f"{survey}_SIM_IA", f"{survey}_SIM_CC"]):
@@ -464,7 +474,8 @@ def _sanity_plots(survey, runner):
     plt.subplot(2, 1, 2, sharex=ax1)
 
     bins = np.linspace(np.min(runner.datasets[f"{survey}_DUMP_ALL"].df[runner.datasets[f"{survey}_DUMP_ALL"].z_col]),
-                        np.max(runner.datasets[f"{survey}_DUMP_ALL"].df[runner.datasets[f"{survey}_DUMP_ALL"].z_col]), 10)
+                        np.max(runner.datasets[f"{survey}_DUMP_ALL"].df[runner.datasets[f"{survey}_DUMP_ALL"].z_col]),
+                         10)
 
     labels = ["Uncut Simulation IA+CC", "Simulated Detected IA+CC", f"{survey} Data"]
     for i, ds in enumerate([f"{survey}_DUMP_ALL", f"{survey}_SIM_ALL", f"{survey}_DATA_ALL_1"]):
@@ -505,6 +516,7 @@ def _sanity_plots(survey, runner):
 
     logging.debug(f"Saving sanity check plots {path}")
     plt.savefig(path)
+
 
 def _transfer_matrix_plot(eff_ij, z_bins, survey):
     LaurenNicePlots()
