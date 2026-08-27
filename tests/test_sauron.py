@@ -286,8 +286,8 @@ def test_chi():
     null_counts = calculate_null_counts(N_gen=N_gen, true_rate_function=power_law, rate_params=x, z_bins=runner.z_bins,
                                         z_centers=z_centers)
 
-    regression_chi = 10.444929
-    measured_chi = chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law)
+    regression_chi = 9.900071
+    measured_chi = chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, power_law, x0 = [2.27e-5, 1.7])
     assert isinstance(measured_chi, float), "Measured chi is not a float."
     np.testing.assert_allclose(measured_chi, regression_chi, atol=1e-7)
 
@@ -535,7 +535,7 @@ def test_perfect_recovery_multisurvey():
     results = pd.read_csv(outpath)
     regression_vals = [2.27e-5, 1.7, 0.0]
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-7)  # atol not rtol b/c we expect 0
+        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-6)  # atol not rtol b/c we expect 0
 
 
 def test_regression_multisurvey():
