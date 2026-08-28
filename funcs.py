@@ -33,16 +33,17 @@ def chi2_old(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, c
     # This is what scipy.optimize.minimize needs.
 
     if debug:
-        logger.debug(f"Ei: {Ei}")
+        #logger.debug(f"Ei: {Ei}")
         logger.debug(f"var_Ei: {var_Ei}")
         logger.debug(f"var_Si: {var_Si}")
-        logger.debug(f"resid_vector: {resid_vector}")
-        logger.debug(f"cov_stat: {cov_stat}")
-        logger.debug(f"cov_sys: {cov_sys}")
-        logger.debug(f"cov: {cov}")
-        logger.debug(f"Chi-squared: {chi_squared}")
+        logger.debug(f"cov stat diag: {np.diag(cov_stat)}")
+        # logger.debug(f"resid_vector: {resid_vector}")
+        # logger.debug(f"cov_stat: {cov_stat}")
+        # logger.debug(f"cov_sys: {cov_sys}")
+        # logger.debug(f"cov: {cov}")
+        # logger.debug(f"Chi-squared: {chi_squared}")
 
-    return
+    return chi_squared
 
 def calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function):
     """Calculate the variance of the predicted counts."""
@@ -75,20 +76,21 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
 
     # Now we calculate the Gaussian normalization term.
     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
-    logger.debug(f"x: {x}, x0: {x0}")
-    logger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
+    #logger.debug(f"x: {x}, x0: {x0}")
+    #slogger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
     gauss_norm = 0.5 * np.log(np.sqrt(var_predict / var_predict_x0))
     logger.debug(f"gauss_norm: {gauss_norm}")
 
     if debug:
-        logger.debug(f"Ei: {Ei}")
+        #logger.debug(f"Ei: {Ei}")
         logger.debug(f"var_data: {var_data}")
         logger.debug(f"var_predict: {var_predict}")
-        logger.debug(f"resid_vector: {resid_vector}")
-        logger.debug(f"cov_stat: {cov_stat}")
-        logger.debug(f"cov_sys: {cov_sys}")
-        logger.debug(f"cov: {cov}")
-        logger.debug(f"Chi-squared: {chi_squared}")
+        logger.debug(f"cov stat diag: {np.diag(cov_stat)}")
+        #logger.debug(f"resid_vector: {resid_vector}")
+        #logger.debug(f"cov_stat: {cov_stat}")
+        #logger.debug(f"cov_sys: {cov_sys}")
+        #logger.debug(f"cov: {cov}")
+        #logger.debug(f"Chi-squared: {chi_squared}")
 
     return chi_squared
 

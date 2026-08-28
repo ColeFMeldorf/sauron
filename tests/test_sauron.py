@@ -991,10 +991,13 @@ def test_coverage_SDSS():
     product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
     product_2 = np.einsum("il,il->l", all_pos, product_1)
 
+    for i in range(len(product_2)):
+        logger.debug(f"Product 2 for dataset {i}: {product_2[i]}")
+
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = False
+    plot = True
     if plot:
         import matplotlib.pyplot as plt
 

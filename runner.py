@@ -733,10 +733,37 @@ class sauron_runner:
                     bounds=bounds,
                 )
 
+
+
         np.save("plots/cov_sys.npy", cov_sys)
         logging.debug(f"Minimize Result: {result}")
         fit_params = result.x * scales
         logging.debug(f"Minimize Result: {fit_params}")
+
+        ### Compare new chi2 and old
+        from funcs import chi2_old
+        test_result = result.x * scales
+        logging.debug(f"Test result: {test_result} ########################")
+        chi2_new = chi2(test_result, null_counts, f_norms, z_centers, eff_ij,
+                        n_data, self.rate_function, self.x0, cov_sys, debug=True)
+        logging.debug(f"chi2_new: {chi2_new}")
+        chi2_old_val = chi2_old(test_result, null_counts, f_norms,
+                        z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
+        logging.debug(f"chi2_old: {chi2_old_val}")
+
+        # Save these results for later plotting
+        try:
+            df_old = pd.read_csv(f"plots/chi2_old.csv")
+        except:
+            df_old = pd.DataFrame(columns=["survey", "chi2_old"])
+        try:
+            df_new = pd.read_csv(f"plots/chi2_new.csv")
+        except:
+            df_new = pd.DataFrame(columns=["survey", "chi2_new"])
+        df_old = pd.concat([df_old, pd.DataFrame({"survey": [survey], "chi2_old": [chi2_old_val]})], ignore_index=True)
+        df_new = pd.concat([df_new, pd.DataFrame({"survey": [survey], "chi2_new": [chi2_new]})], ignore_index=True)
+        df_old.to_csv(f"plots/chi2_old.csv", index=False)
+        df_new.to_csv(f"plots/chi2_new.csv", index=False)
 
 
         # This calculation of cov matrix is only valid if minimizing chi2
