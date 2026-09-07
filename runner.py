@@ -719,8 +719,8 @@ class sauron_runner:
             bounds = None
 
         def scaled_chi2(params, *args):
+            print(f"params: {params}, scales: {scales}, params * scales: {params * scales}")
             return chi2(params * scales, *args)
-
 
         logger.debug("cov sys shape: %s", cov_sys.shape)
 

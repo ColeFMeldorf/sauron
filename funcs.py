@@ -75,11 +75,18 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
     # This is what scipy.optimize.minimize needs.
 
     # Now we calculate the Gaussian normalization term.
+    print("var_predict:", var_predict)
+
     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
+    print("var_predict_x0:", var_predict_x0)
     #logger.debug(f"x: {x}, x0: {x0}")
     #slogger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
-    gauss_norm = 0.5 * np.log(np.sqrt(var_predict / var_predict_x0))
-    logger.debug(f"gauss_norm: {gauss_norm}")
+    gauss_norm = 2 * np.log(np.sqrt(var_predict / var_predict_x0))
+    print("chi sq alone:", chi_squared)
+
+    chi_squared += np.sum(gauss_norm)
+    print("chi sq with gauss norm:", chi_squared + np.sum(gauss_norm))
+    import pdb; pdb.set_trace()
 
     if debug:
         #logger.debug(f"Ei: {Ei}")
