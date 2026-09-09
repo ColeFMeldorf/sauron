@@ -719,19 +719,40 @@ class sauron_runner:
             bounds = None
 
         def scaled_chi2(params, *args):
-            print(f"params: {params}, scales: {scales}, params * scales: {params * scales}")
             return chi2(params * scales, *args)
+
+        def scaled_chi2_old(params, *args):
+            return chi2_old(params * scales, *args)
 
         logger.debug("cov sys shape: %s", cov_sys.shape)
 
         result = minimize(
                     scaled_chi2,
-                    x0=self.x0,
+                    x0=self.x0 / scales,
                     args=(null_counts, f_norms, z_centers, eff_ij,
                             n_data, self.rate_function, self.x0, cov_sys),
                     method=None,
                     bounds=bounds,
                 )
+
+        result_old = minimize(
+                    scaled_chi2_old,
+                    x0=self.x0 / scales,
+                    args=(null_counts, f_norms, z_centers, eff_ij,
+                            n_data, self.rate_function, self.x0, cov_sys),
+                    method=None,
+                    bounds=bounds,
+                )
+
+        print("RESULT:", result.x)
+        print("RESULT OLD:", result_old.x)
+        print("HESS_INV:", result.hess_inv)
+        print("HESS_INV OLD:", result_old.hess_inv)
+        cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
+        print("COV_X:", cov_x)
+        print("COV_X OLD:", result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])
+        print("STANDARD ERRORS:", np.sqrt(np.diag(cov_x)))
+        print("STANDARD ERRORS OLD:", np.sqrt(np.diag(result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])))
 
 
 
@@ -775,7 +796,7 @@ class sauron_runner:
         # Redo the above without the cov_sys to determine the systematic_error
         no_sys_result = minimize(
                     scaled_chi2,
-                    x0=self.x0,
+                    x0=self.x0 / scales,
                     args=(null_counts, f_norms, z_centers, eff_ij,
                             n_data, self.rate_function, self.x0, None),
                     method=None,

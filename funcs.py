@@ -75,17 +75,32 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
     # This is what scipy.optimize.minimize needs.
 
     # Now we calculate the Gaussian normalization term.
-    print("var_predict:", var_predict)
-
     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
-    print("var_predict_x0:", var_predict_x0)
     #logger.debug(f"x: {x}, x0: {x0}")
     #slogger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
-    gauss_norm = 2 * np.log(np.sqrt(var_predict / var_predict_x0))
+    #log_argument = np.sqrt(var_predict / var_predict_x0)
+    #log_argument_quadrature_summed = np.sqrt(np.sum(log_argument**2))
+
+    #num = np.sqrt(np.sum(var_predict))
+    #denom = np.sqrt(np.sum(var_predict_x0))
+    #gauss_norm = 2 * np.log(num / denom)
+
+    num = np.sqrt(var_predict)
+    denom = np.sqrt(var_predict_x0)
+    print("###############################################")
+    print("x:", x, "x0:", x0)
+    print("Num / Denom:", num / denom)
+    gauss_norm = 2 * np.log(num / denom)
+    print("gauss_norm:", gauss_norm)
+    gauss_norm = np.sum(gauss_norm)
+    print("gauss_norm summed:", gauss_norm)
+    #sprint("log_argument:", log_argument)
+    #print("log_argument_quadrature_summed:", log_argument_quadrature_summed)
+    #gauss_norm = 2 * np.log(log_argument_quadrature_summed)
     print("chi sq alone:", chi_squared)
 
     chi_squared += np.sum(gauss_norm)
-    print("chi sq with gauss norm:", chi_squared + np.sum(gauss_norm))
+    print("chi sq with gauss norm:", chi_squared )
     import pdb; pdb.set_trace()
 
     if debug:
@@ -101,6 +116,27 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
 
     return chi_squared
 
+# def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
+#     zJ = z_centers
+#     fJ = rate_function(zJ, x)
+#     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+#     var_data = n_data
+#     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+
+#     cov_stat = np.diag(var_data + var_predict)
+#     if cov_sys is None:
+#         cov_sys = 0
+#     cov = cov_stat + cov_sys
+
+#     inv_cov = np.linalg.pinv(cov)
+#     resid_vector = n_data - Ei
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # ln det(Cov(x)) -- correct normalization when Cov itself depends on x
+#     sign, logdet = np.linalg.slogdet(cov)
+#     chi_squared += logdet
+
+#     return chi_squared
 
 def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # Calculate covariance matrix term for a given systematic function and its parameters
