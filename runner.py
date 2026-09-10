@@ -735,12 +735,57 @@ class sauron_runner:
         fit_params = result.x * scales
         logging.debug(f"Minimize Result: {fit_params}")
 
+        from asymmetric_errs import grid_marginalized_errors
+
+
+        grid1 = np.linspace(0e-5, 4e-5, 201)
+        grid2 = np.linspace(0.5, 3.5, 201)
+        grid = [grid1, grid2]  # x is the parameter of interest, y is a nuisance parameter
+
+
+
+        grid_result = grid_marginalized_errors(chi2, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norm,
+                                                            "z_centers": z_centers, "eff_ij": eff_ij,
+                                                            "n_data": n_data, "rate_function": self.rate_function,
+                                                             "cov_sys": cov_sys})
+
+        chi2_grid = grid_result["chi2_grid"]
+        grid_result = grid_result[0]
+
+        #print(f"Grid result: {grid_result}")
+
+        print("Grid Errors", grid_result["mode"] - grid_result["lower_bound"], grid_result["upper_bound"] - grid_result["mode"])
+
+        # # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
+        # import matplotlib.pyplot as plt
+        # plt.figure(figsize=(12, 5))
+        # plt.subplot(1, 2, 1)
+        # plt.contourf(*np.meshgrid(*grid, indexing="ij"), np.exp(-0.5 * chi2_grid), levels=50)
+        # plt.colorbar(label="Likelihood")
+        # plt.xlabel("x (parameter of interest)")
+        # plt.ylabel("y (nuisance parameter)")
+        # plt.title("2D likelihood surface")
+
+        # plt.subplot(1, 2, 2)
+        # plt.plot(grid_result["grid"], grid_result["pdf"], label="Marginalized PDF for x")
+        # plt.axvline(grid_result["mode"], color="C1", linestyle="--", label="Mode")
+        # plt.axvline(grid_result["lower_bound"], color="C2", linestyle=":", label="1-sigma bounds")
+        # plt.axvline(grid_result["upper_bound"], color="C2", linestyle=":")
+        # plt.xlabel("x (parameter of interest)")
+        # plt.ylabel("Probability density")
+        # plt.title("Marginalized PDF for x")
+        # plt.legend()
+        # plt.tight_layout()
+        # plt.savefig("asymmetric_errors_demo.png", dpi=150)
+
+
 
         # This calculation of cov matrix is only valid if minimizing chi2
         cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
         logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
         chi_squared = result.fun
         logging.debug(f"chi_squared minimize: {chi_squared}")
+        import pdb; pdb.set_trace()
 
         # Redo the above without the cov_sys to determine the systematic_error
         no_sys_result = minimize(
