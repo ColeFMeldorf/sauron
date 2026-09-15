@@ -735,11 +735,14 @@ class sauron_runner:
         fit_params = result.x * scales
         logging.debug(f"Minimize Result: {fit_params}")
 
+        err_method = "grid_marginalization" # make this an option later
+        # Calculate Errors. Two possible methods, covariance matrix and posterior marginalization.
+
         from asymmetric_errs import grid_marginalized_errors
 
 
-        grid1 = np.linspace(0e-5, 4e-5, 201)
-        grid2 = np.linspace(0.5, 3.5, 201)
+        grid1 = np.linspace(0e-5, 4e-5, 101)
+        grid2 = np.linspace(0.5, 4, 101)
         grid = [grid1, grid2]  # x is the parameter of interest, y is a nuisance parameter
 
 
@@ -1574,7 +1577,7 @@ class sauron_runner:
 
         return f_norm
 
-    def add_results(self, survey, index=None, csfr_name=None):
+    def add_results(self, survey, grid_result, index=None, csfr_name=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
         Inputs
         ------
@@ -1613,6 +1616,8 @@ class sauron_runner:
             result_to_add[p] = result[i]
         for i, p in enumerate(param_names):
             result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
+        for i, p in enumerate(param_names):
+            result_to_add[f"{p}_upper_bound"] = grid_result["upper_bound"][p]
         for i, p in enumerate(param_names):
             for j, p2 in enumerate(param_names):
                 if i < j:
