@@ -41,6 +41,66 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+def _coverage_chi2(df, truth, param_names=("alpha", "beta")):
+    """Per-row chi-squared-like statistic used by the coverage tests below, to check whether the
+    fitted parameters are consistent with the known truth values at the expected rate.
+
+    If df has asymmetric '{param}_error_upper' / '{param}_error_lower' columns for every parameter in
+    param_names (i.e. add_results() was called with error_upper/error_lower), a separate covariance
+    matrix is built for EACH ROW (each simulated dataset), since which side of the asymmetric error to
+    use can differ row to row:
+      - diagonal entries: for a given row and parameter, use the lower-side variance if that row's
+        residual (fit - truth) is positive (the fit landed above truth, so truth lies below the fit --
+        it's the lower error that measures that distance), and the upper-side variance if the residual
+        is negative (fit landed below truth -- the upper error measures that distance).
+      - off-diagonal entries: taken directly from the existing per-row 'cov_{p1}_{p2}' column (each
+        simulated dataset already has its own fitted covariance between parameters; that doesn't change
+        based on which side of the split normal is used for the diagonal).
+    Each row's matrix is inverted individually and the Mahalanobis-distance-squared statistic
+    (residual^T @ inv_cov @ residual) is computed per row.
+
+    Otherwise, falls back to the original approach: a single symmetric covariance matrix built from
+    the median '{param}_error'**2 values and the median 'cov_{p1}_{p2}' cross term (same matrix for
+    every row), inverted once.
+    """
+    has_split = all(
+        f"{p}_error_upper" in df.columns and f"{p}_error_lower" in df.columns
+        for p in param_names
+    )
+
+
+    n = len(df)
+    k = len(param_names)
+
+    # residuals[:, j] = fitted value of parameter j minus its truth, for every row
+    residuals = np.column_stack([df[p].to_numpy() - t for p, t in zip(param_names, truth)])
+
+    # Pick the appropriate one-sided sigma for each row and parameter
+    sigmas = np.empty((n, k))
+    if has_split:
+        for j, p in enumerate(param_names):
+            sigma_lower = df[f"{p}_error_lower"].to_numpy()
+            sigma_upper = df[f"{p}_error_upper"].to_numpy()
+            sigmas[:, j] = np.where(residuals[:, j] > 0, sigma_lower, sigma_upper)
+    else:
+        sigmas = np.column_stack([df[f"{p}_error"].to_numpy() for p in param_names])
+
+    chi2_vals = np.empty(n)
+    for i in range(n):
+        cov_i = np.diag(sigmas[i] ** 2)
+        for a in range(k):
+            for b in range(a + 1, k):
+                col = f"cov_{param_names[a]}_{param_names[b]}"
+                if col in df.columns:
+                    cov_i[a, b] = df[col].iloc[i]
+                    cov_i[b, a] = df[col].iloc[i]
+        inv_cov_i = np.linalg.inv(cov_i)
+        chi2_vals[i] = residuals[i] @ inv_cov_i @ residuals[i]
+    return chi2_vals
+
+
+# ##########################TESTS BELOW############################################################
+
 def test_regression_specz():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
     """
@@ -344,31 +404,8 @@ def test_coverage_no_sys():
     sigma_1 = scipy_chi2.ppf([0.68], 2)
     sigma_2 = scipy_chi2.ppf([0.95], 2)
 
-    a = np.median(df["alpha_error"]**2)
-    b = np.median(df["beta_error"]**2)
-    c = np.median(df["cov_alpha_beta"])
+    product_2 = _coverage_chi2(df, truth=[2.27e-5, 1.7], param_names=("alpha", "beta"))
 
-    # product_2 = np.zeros(len(df))
-    # for i in range(50):
-    #     a = df["alpha_error"][i]**2
-    #     b = df["beta_error"][i]**2
-    #     c = df["cov_alpha_beta"][i]
-    #     cov = np.array([[a, c], [c, b]])
-    #     inv_cov = np.linalg.inv(cov)
-    #     d_alpha = df["alpha"][i] - 2.27e-5
-    #     d_beta = df["beta"][i] - 1.7
-    #     pos = np.array([d_alpha, d_beta])
-    #     chi = pos.T @ inv_cov @ pos
-    #     product_2[i] = chi
-
-    mean_cov = np.array([[a, c], [c, b]])
-
-    all_alpha = df["alpha"] - 2.27e-5
-    all_beta = df["beta"] - 1.7
-    inv_cov = np.linalg.inv(mean_cov)
-    all_pos = np.vstack([all_alpha, all_beta])
-    product_1 = np.einsum("ij,jl->il", inv_cov, all_pos)
-    product_2 = np.einsum("il,il->l", all_pos, product_1)
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
@@ -456,18 +493,7 @@ def test_coverage_with_sys():
     sigma_1 = scipy_chi2.ppf([0.68], 2)
     sigma_2 = scipy_chi2.ppf([0.95], 2)
 
-    a = np.median(df["alpha_error"]**2)
-    b = np.median(df["beta_error"]**2)
-    c = np.median(df["cov_alpha_beta"])
-
-    mean_cov = np.array([[a, c], [c, b]])
-
-    all_alpha = df["alpha"] - 2.27e-5
-    all_beta = df["beta"] - 1.7
-    inv_cov = np.linalg.inv(mean_cov)
-    all_pos = np.vstack([all_alpha, all_beta])
-    product_1 = np.einsum("ij,jl->il", inv_cov, all_pos)
-    product_2 = np.einsum("il,il->l", all_pos, product_1)
+    product_2 = _coverage_chi2(df, truth=[2.27e-5, 1.7], param_names=("alpha", "beta"))
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
@@ -978,18 +1004,7 @@ def test_coverage_SDSS():
     sigma_1 = scipy_chi2.ppf([0.68], 2)
     sigma_2 = scipy_chi2.ppf([0.95], 2)
 
-    a = np.median(df["alpha_error"]**2)
-    b = np.median(df["beta_error"]**2)
-    c = np.median(df["cov_alpha_beta"])
-
-    mean_cov = np.array([[a, c], [c, b]])
-
-    all_alpha = df["alpha"] - 2.27e-5
-    all_beta = df["beta"] - 1.7
-    inv_cov = np.linalg.inv(mean_cov)
-    all_pos = np.vstack([all_alpha, all_beta])
-    product_1 = np.einsum('ij,jl->il', inv_cov, all_pos)
-    product_2 = np.einsum("il,il->l", all_pos, product_1)
+    product_2 = _coverage_chi2(df, truth=[2.27e-5, 1.7], param_names=("alpha", "beta"))
 
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
