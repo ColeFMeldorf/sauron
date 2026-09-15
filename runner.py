@@ -1577,7 +1577,7 @@ class sauron_runner:
 
         return f_norm
 
-    def add_results(self, survey, grid_result, index=None, csfr_name=None):
+        def add_results(self, survey, grid_result, index=None, csfr_name=None, error_upper=None, error_lower=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
         Inputs
         ------
@@ -1589,6 +1589,15 @@ class sauron_runner:
             Name of the CSFR used to produce this fit (only meaningful when fitting a DTD; see
             parse_dtd_options). If given, it's recorded as a 'csfr' column so results from different
             assumed CSFRs can be told apart after saving.
+        error_upper : dict or array-like, optional
+            Upper (positive-side) 1-sigma uncertainty for each fitted parameter. SAURON does not
+            calculate this itself here -- this just gives a place to store it if it was computed
+            upstream (e.g. via profiling or MC draws). If a dict, keys must match the names in
+            self.param_names; if array-like, must be in the same order as self.param_names. Saved as
+            a '{param}_error_upper' column. If None (default), nothing changes from current behavior.
+        error_lower : dict or array-like, optional
+            Same as error_upper, but for the lower (negative-side) uncertainty. Saved as
+            '{param}_error_lower'.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # This needs to be updated for more parameters later
@@ -1616,8 +1625,20 @@ class sauron_runner:
             result_to_add[p] = result[i]
         for i, p in enumerate(param_names):
             result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
-        for i, p in enumerate(param_names):
-            result_to_add[f"{p}_upper_bound"] = grid_result["upper_bound"][p]
+
+        # Optional asymmetric (split normal) errors. Computing them is someone else's job (or not
+        # done at all) -- this just stores whatever gets passed in.
+        if error_upper is not None:
+            for i, p in enumerate(param_names):
+                result_to_add[f"{p}_error_upper"] = (
+                    error_upper[p] if isinstance(error_upper, dict) else error_upper[i]
+                )
+        if error_lower is not None:
+            for i, p in enumerate(param_names):
+                result_to_add[f"{p}_error_lower"] = (
+                    error_lower[p] if isinstance(error_lower, dict) else error_lower[i]
+                )
+
         for i, p in enumerate(param_names):
             for j, p2 in enumerate(param_names):
                 if i < j:
