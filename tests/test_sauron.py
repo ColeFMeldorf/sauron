@@ -53,7 +53,11 @@ def _coverage_chi2(df, truth, param_names=("alpha", "beta")):
         residual (fit - truth) is positive (the fit landed above truth, so truth lies below the fit --
         it's the lower error that measures that distance), and the upper-side variance if the residual
         is negative (fit landed below truth -- the upper error measures that distance).
-      - off-diagonal entries: taken directly from the existing per-row 'cov_{p1}_{p2}' column (each
+      - off-diagonal entries:
+        Now, off diagonal entries are not used at all. I am not sure how to handle covariance for this case.
+
+        Before:
+        taken directly from the existing per-row 'cov_{p1}_{p2}' column (each
         simulated dataset already has its own fitted covariance between parameters; that doesn't change
         based on which side of the split normal is used for the diagonal).
     Each row's matrix is inverted individually and the Mahalanobis-distance-squared statistic

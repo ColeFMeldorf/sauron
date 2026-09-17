@@ -779,6 +779,10 @@ class sauron_runner:
         logger.debug(f"Marginalization calculation: {marginalization_calculation}")
 
         if marginalization_calculation:
+
+            if len(fit_params) != 2:
+                raise ValueError("Marginalization calculation is only implemented for 2D parameter spaces.")
+
             from asymmetric_errs import grid_marginalized_errors
 
             # THIS CAN'T BE HARDCODED
