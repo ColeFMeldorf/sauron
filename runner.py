@@ -778,8 +778,6 @@ class sauron_runner:
         marginalization_calculation = self.args.marginalize
         logger.debug(f"Marginalization calculation: {marginalization_calculation}")
 
-        #def _infer_grid()
-
         if marginalization_calculation:
             from asymmetric_errs import grid_marginalized_errors
 
@@ -795,7 +793,7 @@ class sauron_runner:
             #grid = [grid1, grid2]  # x is the parameter of interest, y is a nuisance parameter
 
 
-            grid_result = grid_marginalized_errors(chi2, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norm,
+            grid_result = grid_marginalized_errors(chi2, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norms,
                                                                 "z_centers": z_centers, "eff_ij": eff_ij,
                                                                 "n_data": n_data, "rate_function": self.rate_function,
                                                                 "cov_sys": cov_sys})
@@ -806,8 +804,8 @@ class sauron_runner:
 
             for k in range(len(fit_params)):
                 # Check if this should actually be the chi2 min result
-                high_uncs.append(grid_result[k]["upper_bound"] - grid_result[k]["mode"])
-                low_uncs.append(grid_result[k]["mode"] - grid_result[k]["lower_bound"])
+                high_uncs.append(grid_result[k]["upper_bound"] - fit_params[k])
+                low_uncs.append(fit_params[k] - grid_result[k]["lower_bound"])
 
             chi2_grid = grid_result["chi2_grid"]
             grid_result = grid_result[0]
