@@ -87,21 +87,20 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
 
     num = np.sqrt(var_predict)
     denom = np.sqrt(var_predict_x0)
-    print("###############################################")
-    print("x:", x, "x0:", x0)
-    print("Num / Denom:", num / denom)
+   # print("###############################################")
+    #print("x:", x, "x0:", x0)
+    #print("Num / Denom:", num / denom)
     gauss_norm = 2 * np.log(num / denom)
-    print("gauss_norm:", gauss_norm)
+    #print("gauss_norm:", gauss_norm)
     gauss_norm = np.sum(gauss_norm)
-    print("gauss_norm summed:", gauss_norm)
+    #print("gauss_norm summed:", gauss_norm)
     #sprint("log_argument:", log_argument)
     #print("log_argument_quadrature_summed:", log_argument_quadrature_summed)
     #gauss_norm = 2 * np.log(log_argument_quadrature_summed)
-    print("chi sq alone:", chi_squared)
+    #print("chi sq alone:", chi_squared)
 
     chi_squared += np.sum(gauss_norm)
-    print("chi sq with gauss norm:", chi_squared )
-    import pdb; pdb.set_trace()
+    #print("chi sq with gauss norm:", chi_squared )
 
     if debug:
         #logger.debug(f"Ei: {Ei}")

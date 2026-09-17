@@ -721,8 +721,8 @@ class sauron_runner:
         def scaled_chi2(params, *args):
             return chi2(params * scales, *args)
 
-        def scaled_chi2_old(params, *args):
-            return chi2_old(params * scales, *args)
+        # def scaled_chi2_old(params, *args):
+        #     return chi2_old(params * scales, *args)
 
         logger.debug("cov sys shape: %s", cov_sys.shape)
 
@@ -735,24 +735,24 @@ class sauron_runner:
                     bounds=bounds,
                 )
 
-        result_old = minimize(
-                    scaled_chi2_old,
-                    x0=self.x0 / scales,
-                    args=(null_counts, f_norms, z_centers, eff_ij,
-                            n_data, self.rate_function, self.x0, cov_sys),
-                    method=None,
-                    bounds=bounds,
-                )
+        # result_old = minimize(
+        #             scaled_chi2_old,
+        #             x0=self.x0 / scales,
+        #             args=(null_counts, f_norms, z_centers, eff_ij,
+        #                     n_data, self.rate_function, self.x0, cov_sys),
+        #             method=None,
+        #             bounds=bounds,
+        #         )
 
         print("RESULT:", result.x)
-        print("RESULT OLD:", result_old.x)
+        #print("RESULT OLD:", result_old.x)
         print("HESS_INV:", result.hess_inv)
-        print("HESS_INV OLD:", result_old.hess_inv)
+        #print("HESS_INV OLD:", result_old.hess_inv)
         cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
         print("COV_X:", cov_x)
-        print("COV_X OLD:", result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])
+        #print("COV_X OLD:", result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])
         print("STANDARD ERRORS:", np.sqrt(np.diag(cov_x)))
-        print("STANDARD ERRORS OLD:", np.sqrt(np.diag(result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])))
+        #print("STANDARD ERRORS OLD:", np.sqrt(np.diag(result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])))
 
 
 
@@ -762,29 +762,29 @@ class sauron_runner:
         logging.debug(f"Minimize Result: {fit_params}")
 
         ### Compare new chi2 and old
-        from funcs import chi2_old
+        #from funcs import chi2_old
         test_result = result.x * scales
         logging.debug(f"Test result: {test_result} ########################")
         chi2_new = chi2(test_result, null_counts, f_norms, z_centers, eff_ij,
                         n_data, self.rate_function, self.x0, cov_sys, debug=True)
         logging.debug(f"chi2_new: {chi2_new}")
-        chi2_old_val = chi2_old(test_result, null_counts, f_norms,
-                        z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
-        logging.debug(f"chi2_old: {chi2_old_val}")
+        #chi2_old_val = chi2_old(test_result, null_counts, f_norms,
+                       # z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
+        #logging.debug(f"chi2_old: {chi2_old_val}")
 
         # Save these results for later plotting
-        try:
-            df_old = pd.read_csv(f"plots/chi2_old.csv")
-        except:
-            df_old = pd.DataFrame(columns=["survey", "chi2_old"])
-        try:
-            df_new = pd.read_csv(f"plots/chi2_new.csv")
-        except:
-            df_new = pd.DataFrame(columns=["survey", "chi2_new"])
-        df_old = pd.concat([df_old, pd.DataFrame({"survey": [survey], "chi2_old": [chi2_old_val]})], ignore_index=True)
-        df_new = pd.concat([df_new, pd.DataFrame({"survey": [survey], "chi2_new": [chi2_new]})], ignore_index=True)
-        df_old.to_csv(f"plots/chi2_old.csv", index=False)
-        df_new.to_csv(f"plots/chi2_new.csv", index=False)
+        # try:
+        #     df_old = pd.read_csv(f"plots/chi2_old.csv")
+        # except:
+        #     df_old = pd.DataFrame(columns=["survey", "chi2_old"])
+        # try:
+        #     df_new = pd.read_csv(f"plots/chi2_new.csv")
+        # except:
+        #     df_new = pd.DataFrame(columns=["survey", "chi2_new"])
+        # df_old = pd.concat([df_old, pd.DataFrame({"survey": [survey], "chi2_old": [chi2_old_val]})], ignore_index=True)
+        # df_new = pd.concat([df_new, pd.DataFrame({"survey": [survey], "chi2_new": [chi2_new]})], ignore_index=True)
+        # df_old.to_csv(f"plots/chi2_old.csv", index=False)
+        # df_new.to_csv(f"plots/chi2_new.csv", index=False)
 
 
 
@@ -847,7 +847,7 @@ class sauron_runner:
             grid_result = grid_marginalized_errors(chi2, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norms,
                                                                 "z_centers": z_centers, "eff_ij": eff_ij,
                                                                 "n_data": n_data, "rate_function": self.rate_function,
-                                                                "cov_sys": cov_sys})
+                                                                "cov_sys": cov_sys, "x0": self.x0})
 
             high_uncs = []
             low_uncs = []
