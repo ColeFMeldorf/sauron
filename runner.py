@@ -787,6 +787,8 @@ class sauron_runner:
         df_new.to_csv(f"plots/chi2_new.csv", index=False)
 
 
+
+
         # This calculation of cov matrix is only valid if minimizing chi2
         cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
         logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
@@ -824,12 +826,74 @@ class sauron_runner:
             logging.debug(f"{param_name}: {fit_params[i]:.3e} +/- {stat_err[i]:.3e} (stat) +/- {sys_err[i]:.3e} (sys)")
         logging.debug("################################################")
 
+        marginalization_calculation = self.args.marginalize
+        logger.debug(f"Marginalization calculation: {marginalization_calculation}")
+
+        if marginalization_calculation:
+            from asymmetric_errs import grid_marginalized_errors
+
+            # THIS CAN'T BE HARDCODED
+            #grid1 = np.linspace(0e-5, 4e-5, 151)
+            #grid2 = np.linspace(0.0, 4, 151)
+
+            #grid1 = np.linspace(1.2e-5, 3.4e-5, 100)
+            #grid2 = np.linspace(1, 2.5, 100)
+
+            grid = [np.linspace(fit_params[i] - 3 * np.sqrt(cov_x[i, i]), fit_params[i] + 3 * np.sqrt(cov_x[i, i]), 151) for i in range(len(fit_params))]
+
+            #grid = [grid1, grid2]  # x is the parameter of interest, y is a nuisance parameter
+
+
+            grid_result = grid_marginalized_errors(chi2, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norms,
+                                                                "z_centers": z_centers, "eff_ij": eff_ij,
+                                                                "n_data": n_data, "rate_function": self.rate_function,
+                                                                "cov_sys": cov_sys})
+
+            high_uncs = []
+            low_uncs = []
+
+
+            for k in range(len(fit_params)):
+                # Check if this should actually be the chi2 min result
+                high_uncs.append(grid_result[k]["upper_bound"] - fit_params[k])
+                low_uncs.append(fit_params[k] - grid_result[k]["lower_bound"])
+
+            chi2_grid = grid_result["chi2_grid"]
+            grid_result = grid_result[0]
+
+            print(f"Grid result keys: {grid_result.keys()}")
+
+            # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
+            # import matplotlib.pyplot as plt
+            # plt.figure(figsize=(12, 5))
+            # plt.subplot(1, 2, 1)
+            # plt.contourf(*np.meshgrid(*grid, indexing="ij"), np.exp(-0.5 * chi2_grid), levels=50)
+            # plt.colorbar(label="Likelihood")
+            # plt.xlabel("x (parameter of interest)")
+            # plt.ylabel("y (nuisance parameter)")
+            # plt.title("2D likelihood surface")
+
+            # plt.subplot(1, 2, 2)
+            # plt.plot(grid_result["grid"], grid_result["pdf"], label="Marginalized PDF for x")
+            # plt.axvline(grid_result["mode"], color="C1", linestyle="--", label="Mode")
+            # plt.axvline(grid_result["lower_bound"], color="C2", linestyle=":", label="1-sigma bounds")
+            # plt.axvline(grid_result["upper_bound"], color="C2", linestyle=":")
+            # plt.xlabel("x (parameter of interest)")
+            # plt.ylabel("Probability density")
+            # plt.title("Marginalized PDF for x")
+            # plt.legend()
+            # plt.tight_layout()
+            # plt.savefig("asymmetric_errors_demo.png", dpi=150)
+
+            #import pdb; pdb.set_trace()
+
+
+            print("High uncs", high_uncs)
+            print("Low uncs", low_uncs)
+
+
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
-        # high_params = [2.5e-5, 2.15, 1.3e-4, 0.1]
-        # Ei_high = np.sum(null_counts * eff_ij * f_norms * self.rate_function(z_centers, high_params), axis=0)
-        # low_params = [2e-5, 1.5, 5e-5, -0.7]
-        # Ei_low = np.sum(null_counts * eff_ij * f_norms * self.rate_function(z_centers, low_params), axis=0)
 
         # Estimate errors on Ei
 
@@ -893,6 +957,10 @@ class sauron_runner:
 
         self.final_counts[survey]["result"] = fit_params
         self.final_counts[survey]["covariance"] = cov_x
+        if marginalization_calculation:
+            self.final_counts[survey]["grid_result"] = grid_result
+            self.final_counts[survey]["high_uncs"] = high_uncs
+            self.final_counts[survey]["low_uncs"] = low_uncs
         self.final_counts[survey]["chi"] = chi_squared
 
         if getattr(self, "rates_to_plot", None) is None:
@@ -1580,7 +1648,7 @@ class sauron_runner:
 
         return f_norm
 
-    def add_results(self, survey, index=None, csfr_name=None):
+    def add_results(self, survey, index=None, csfr_name=None, error_upper=None, error_lower=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
         Inputs
         ------
@@ -1592,6 +1660,15 @@ class sauron_runner:
             Name of the CSFR used to produce this fit (only meaningful when fitting a DTD; see
             parse_dtd_options). If given, it's recorded as a 'csfr' column so results from different
             assumed CSFRs can be told apart after saving.
+        error_upper : dict or array-like, optional
+            Upper (positive-side) 1-sigma uncertainty for each fitted parameter. SAURON does not
+            calculate this itself here -- this just gives a place to store it if it was computed
+            upstream (e.g. via profiling or MC draws). If a dict, keys must match the names in
+            self.param_names; if array-like, must be in the same order as self.param_names. Saved as
+            a '{param}_error_upper' column. If None (default), nothing changes from current behavior.
+        error_lower : dict or array-like, optional
+            Same as error_upper, but for the lower (negative-side) uncertainty. Saved as
+            '{param}_error_lower'.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # This needs to be updated for more parameters later
@@ -1601,8 +1678,8 @@ class sauron_runner:
             survey_name = survey
 
         result = self.final_counts[survey]["result"]
-        cov = self.final_counts[survey]["covariance"]
         chi = self.final_counts[survey]["chi"]
+        cov = self.final_counts[survey]["covariance"]
         z_bins = self.fit_args_dict["z_bins"][survey]
 
         param_names = self.param_names
@@ -1619,6 +1696,30 @@ class sauron_runner:
             result_to_add[p] = result[i]
         for i, p in enumerate(param_names):
             result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
+
+        # Optional asymmetric (split normal) errors. Computing them is someone else's job (or not
+        # done at all) -- this just stores whatever gets passed in.
+
+        if "high_uncs" in self.final_counts[survey]:
+            high_uncs = self.final_counts[survey]["high_uncs"]
+            for i, p in enumerate(param_names):
+                result_to_add[f"{p}_error_upper"] = high_uncs[i]
+            low_uncs = self.final_counts[survey]["low_uncs"]
+            for i, p in enumerate(param_names):
+                result_to_add[f"{p}_error_lower"] = low_uncs[i]
+
+
+        # if error_upper is not None:
+        #     for i, p in enumerate(param_names):
+        #         result_to_add[f"{p}_error_upper"] = (
+        #             error_upper[p] if isinstance(error_upper, dict) else error_upper[i]
+        #         )
+        # if error_lower is not None:
+        #     for i, p in enumerate(param_names):
+        #         result_to_add[f"{p}_error_lower"] = (
+        #             error_lower[p] if isinstance(error_lower, dict) else error_lower[i]
+        #         )
+
         for i, p in enumerate(param_names):
             for j, p2 in enumerate(param_names):
                 if i < j:
