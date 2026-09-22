@@ -691,16 +691,14 @@ class sauron_runner:
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
         if "binned" in self.rate_function_name or "non_parametric" in self.rate_function_name:
-            # if "binned_dtd" in self.rate_function_name:
-            #     self.x0 = calculate_DTD_x0_vals(self.fit_args_dict["z_bins"][survey],
-            #                                     getattr(self, "current_csfr", None),
-            #                                     self.dtd_bins, binned_rate)
+            if "binned_dtd" in self.rate_function_name:
+                self.x0 = calculate_DTD_x0_vals(self.fit_args_dict["z_bins"][survey],
+                                                getattr(self, "current_csfr", None),
+                                                self.dtd_bins, binned_rate)
             scales = self.x0
             bounds = [(1e-12, None) for _ in self.x0]
-            # self.x0 += 1e-7
-            # logging.debug(f"Using bounds: {bounds}")
-            # import pdb; pdb.set_trace()
-            pass
+            self.x0 += 1e-7
+            logging.debug(f"Using bounds: {bounds}")
 
         elif self.rate_function_name == "power_law":
             scales = np.array([1e-5, 1])
@@ -723,10 +721,6 @@ class sauron_runner:
         def scaled_chi2(params, *args):
             return chi2(params * scales, *args)
 
-        # def scaled_chi2_old(params, *args):
-        #     return chi2_old(params * scales, *args)
-
-        logger.debug("cov sys shape: %s", cov_sys.shape)
 
         result = minimize(
                     scaled_chi2,
@@ -737,58 +731,9 @@ class sauron_runner:
                     bounds=bounds,
                 )
 
-        # result_old = minimize(
-        #             scaled_chi2_old,
-        #             x0=self.x0 / scales,
-        #             args=(null_counts, f_norms, z_centers, eff_ij,
-        #                     n_data, self.rate_function, self.x0, cov_sys),
-        #             method=None,
-        #             bounds=bounds,
-        #         )
 
-        print("RESULT:", result.x)
-        #print("RESULT OLD:", result_old.x)
-        print("HESS_INV:", result.hess_inv)
-        #print("HESS_INV OLD:", result_old.hess_inv)
-        cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
-        print("COV_X:", cov_x)
-        #print("COV_X OLD:", result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])
-        print("STANDARD ERRORS:", np.sqrt(np.diag(cov_x)))
-        #print("STANDARD ERRORS OLD:", np.sqrt(np.diag(result_old.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :])))
-
-
-
-        np.save("plots/cov_sys.npy", cov_sys)
-        logging.debug(f"Minimize Result: {result}")
         fit_params = result.x * scales
         logging.debug(f"Minimize Result: {fit_params}")
-
-        ### Compare new chi2 and old
-        #from funcs import chi2_old
-        test_result = result.x * scales
-        logging.debug(f"Test result: {test_result} ########################")
-        chi2_new = chi2(test_result, null_counts, f_norms, z_centers, eff_ij,
-                        n_data, self.rate_function, self.x0, cov_sys, debug=True)
-        logging.debug(f"chi2_new: {chi2_new}")
-        #chi2_old_val = chi2_old(test_result, null_counts, f_norms,
-                       # z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
-        #logging.debug(f"chi2_old: {chi2_old_val}")
-
-        # Save these results for later plotting
-        # try:
-        #     df_old = pd.read_csv(f"plots/chi2_old.csv")
-        # except:
-        #     df_old = pd.DataFrame(columns=["survey", "chi2_old"])
-        # try:
-        #     df_new = pd.read_csv(f"plots/chi2_new.csv")
-        # except:
-        #     df_new = pd.DataFrame(columns=["survey", "chi2_new"])
-        # df_old = pd.concat([df_old, pd.DataFrame({"survey": [survey], "chi2_old": [chi2_old_val]})], ignore_index=True)
-        # df_new = pd.concat([df_new, pd.DataFrame({"survey": [survey], "chi2_new": [chi2_new]})], ignore_index=True)
-        # df_old.to_csv(f"plots/chi2_old.csv", index=False)
-        # df_new.to_csv(f"plots/chi2_new.csv", index=False)
-
-
 
 
         # This calculation of cov matrix is only valid if minimizing chi2
@@ -887,55 +832,6 @@ class sauron_runner:
             # plt.tight_layout()
             # plt.savefig("asymmetric_errors_demo_recent.png", dpi=150)
             # plt.close()
-
-            from funcs import chi2_old
-            grid_result = grid_marginalized_errors(chi2_old, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norms,
-                                                                "z_centers": z_centers, "eff_ij": eff_ij,
-                                                                "n_data": n_data, "rate_function": self.rate_function,
-                                                                "cov_sys": cov_sys})
-
-            high_uncs = []
-            low_uncs = []
-
-
-            for k in range(len(fit_params)):
-                # Check if this should actually be the chi2 min result
-                high_uncs.append(grid_result[k]["upper_bound"] - fit_params[k])
-                low_uncs.append(fit_params[k] - grid_result[k]["lower_bound"])
-
-            chi2_grid = grid_result["chi2_grid"]
-            grid_result = grid_result[0]
-
-            print(f"Grid result keys: {grid_result.keys()}")
-
-            # # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
-            # import matplotlib.pyplot as plt
-            # plt.figure(figsize=(12, 5))
-            # plt.subplot(1, 2, 1)
-            # plt.contourf(*np.meshgrid(*grid, indexing="ij"), np.exp(-0.5 * chi2_grid), levels=50)
-            # plt.colorbar(label="Likelihood")
-            # plt.xlabel("x (parameter of interest)")
-            # plt.ylabel("y (nuisance parameter)")
-            # plt.title("2D likelihood surface")
-
-            # plt.subplot(1, 2, 2)
-            # plt.plot(grid_result["grid"], grid_result["pdf"], label="Marginalized PDF for x")
-            # plt.axvline(grid_result["mode"], color="C1", linestyle="--", label="Mode")
-            # plt.axvline(grid_result["lower_bound"], color="C2", linestyle=":", label="1-sigma bounds")
-            # plt.axvline(grid_result["upper_bound"], color="C2", linestyle=":")
-            # plt.xlabel("x (parameter of interest)")
-            # plt.ylabel("Probability density")
-            # plt.title("Marginalized PDF for x")
-            # plt.legend()
-            # plt.tight_layout()
-            # plt.savefig("asymmetric_errors_demo_recent_oldchi.png", dpi=150)
-
-
-
-            # print("High uncs", high_uncs)
-            # print("Low uncs", low_uncs)
-
-
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
 
