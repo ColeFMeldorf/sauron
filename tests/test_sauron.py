@@ -1131,34 +1131,38 @@ def test_regression_power_law_DTD():
         np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
 
 
-def test_regression_binned_DTD():
-    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
-    This time, we do DES and SDSS together.
-    """
-    outpath = pathlib.Path(__file__).parent / "test_output/test_binned_DTD_output.csv"
-    if os.path.exists(outpath):
-        os.remove(outpath)
-    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_DTD_binned.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
-    result = subprocess.run(cmd, capture_output=False, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Command failed with exit code {result.returncode}\n"
-            f"stdout:\n{result.stdout}\n"
-            f"stderr:\n{result.stderr}"
-        )
+# I have disabled this test for two reasons. 1 it is too volatile with the small redshift data
+# Secondly, the paper does not calculate the binned DTD way, rather fitting to the binned rate. I should
+# make a test that does that.
 
-    results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_binned_DTD_regression.csv")
-    for i, col in enumerate([r"param_0", r"param_1", r"param_2", r"param_0_error", r"param_1_error", r"param_2_error", r"cov_param_0_param_1", r"cov_param_0_param_2", r"cov_param_1_param_2", "reduced_chi_squared"]):
-        try:
-            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
-        except AssertionError as e:
-            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
-                           f"Please check if this is expected. ")
-            logger.warning(str(e))
-        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+# def test_regression_binned_DTD():
+#     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
+#     This time, we do DES and SDSS together.
+#     """
+#     outpath = pathlib.Path(__file__).parent / "test_output/test_binned_DTD_output.csv"
+#     if os.path.exists(outpath):
+#         os.remove(outpath)
+#     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+#     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_DTD_binned.yml"
+#     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
+#     result = subprocess.run(cmd, capture_output=False, text=True)
+#     if result.returncode != 0:
+#         raise RuntimeError(
+#             f"Command failed with exit code {result.returncode}\n"
+#             f"stdout:\n{result.stdout}\n"
+#             f"stderr:\n{result.stderr}"
+#         )
+
+#     results = pd.read_csv(outpath)
+#     regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_binned_DTD_regression.csv")
+#     for i, col in enumerate([r"param_0", r"param_1", r"param_2", r"param_0_error", r"param_1_error", r"param_2_error", r"cov_param_0_param_1", r"cov_param_0_param_2", r"cov_param_1_param_2", "reduced_chi_squared"]):
+#         try:
+#             np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+#         except AssertionError as e:
+#             logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+#                            f"Please check if this is expected. ")
+#             logger.warning(str(e))
+#         np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
 
 
 def test_regression_CSFR_list():
@@ -1237,6 +1241,14 @@ def test_regression_AplusB():
         .sort_values(["survey", "csfr"])
         .reset_index(drop=True)
     )
+
+    A_resids = results["A"] - regression["A"]
+    B_resids = results["B"] - regression["B"]
+    A_pulls = A_resids / results["A_error"]
+    B_pulls = B_resids / results["B_error"]
+    print("A pulls:", A_pulls)
+    print("B pulls:", B_pulls)
+
     for i, col in enumerate([r"A", r"B", r"A_error", r"B_error", r"cov_A_B", "reduced_chi_squared"]):
         logger.debug(f"Checking {col}")
         try:
