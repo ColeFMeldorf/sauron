@@ -9,6 +9,7 @@ from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Set to DEBUG for detailed output
 
 
 def chi2_old(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
@@ -48,72 +49,153 @@ def chi2_old(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, c
 def calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function):
     """Calculate the variance of the predicted counts."""
     fJ = rate_function(zJ, x)
+    #logger.debug(f"Calculating var_predict with x: {x}, zJ: {zJ}, fJ: {fJ}")
     var_predict = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
     return var_predict
 
 
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
+    #print(f"Calculating chi2 for x: {x}, x0: {x0}")
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
     var_data = n_data
     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+    var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
 
 
     cov_stat = np.diag(var_data + var_predict)
+    cov_stat_x0 = np.diag(var_data + var_predict_x0)
     if cov_sys is None:
         cov_sys = 0
     cov = cov_stat + cov_sys
+    cov_x0 = cov_stat_x0 + cov_sys
 
     inv_cov = np.linalg.pinv(cov)
-
     resid_vector = n_data - Ei
-
     chi_squared = resid_vector.T @ inv_cov @ resid_vector
 
-    # This is the X^2 contribution for each z bin. It has ALREADY been squared.
-    # This is what scipy.optimize.minimize needs.
+    # Gaussian normalization term: ln(det(Sigma(x))), using the FULL
+    # covariance matrix (including any off-diagonal cov_sys terms).
+    sign, logdet = np.linalg.slogdet(cov)
+    sign, logdet_x0 = np.linalg.slogdet(cov_x0)
+    logdet = logdet - logdet_x0  # Normalize by the log determinant at x0
+    #print(f"covariance matrix sign: {sign}, logdet: {logdet}")
+    if sign <= 0:
+        logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}); "
+                      "this usually means cov_sys is being applied in a way that makes "
+                      "the total covariance singular or indefinite.")
+        raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")
 
-    # Now we calculate the Gaussian normalization term.
-    var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
-    #logger.debug(f"x: {x}, x0: {x0}")
-    #slogger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
-    #log_argument = np.sqrt(var_predict / var_predict_x0)
-    #log_argument_quadrature_summed = np.sqrt(np.sum(log_argument**2))
+    #print(f"Chi-squared before adding logdet: {chi_squared}")
+    chi_squared += logdet
+    #print(f"Chi-squared after adding logdet: {chi_squared}")
 
-    #num = np.sqrt(np.sum(var_predict))
-    #denom = np.sqrt(np.sum(var_predict_x0))
-    #gauss_norm = 2 * np.log(num / denom)
-
-    num = np.sqrt(var_predict)
-    denom = np.sqrt(var_predict_x0)
-   # print("###############################################")
-    #print("x:", x, "x0:", x0)
-    #print("Num / Denom:", num / denom)
-    gauss_norm = 2 * np.log(num / denom)
-    #print("gauss_norm:", gauss_norm)
-    gauss_norm = np.sum(gauss_norm)
-    #print("gauss_norm summed:", gauss_norm)
-    #sprint("log_argument:", log_argument)
-    #print("log_argument_quadrature_summed:", log_argument_quadrature_summed)
-    #gauss_norm = 2 * np.log(log_argument_quadrature_summed)
-    #print("chi sq alone:", chi_squared)
-
-    chi_squared += np.sum(gauss_norm)
-    #print("chi sq with gauss norm:", chi_squared )
-
-    if debug:
-        #logger.debug(f"Ei: {Ei}")
-        logger.debug(f"var_data: {var_data}")
-        logger.debug(f"var_predict: {var_predict}")
-        logger.debug(f"cov stat diag: {np.diag(cov_stat)}")
-        #logger.debug(f"resid_vector: {resid_vector}")
-        #logger.debug(f"cov_stat: {cov_stat}")
-        #logger.debug(f"cov_sys: {cov_sys}")
-        #logger.debug(f"cov: {cov}")
-        #logger.debug(f"Chi-squared: {chi_squared}")
+    if np.isnan(chi_squared):
+        logger.error("Chi-squared is NaN. Check inputs and calculations.")
+        logger.error(f"x: {x}")
+        logger.error(f"var_predict: {var_predict}, logdet: {logdet}")
+        raise ValueError("Chi-squared calculation resulted in NaN.")
 
     return chi_squared
+
+#     inv_cov = np.linalg.pinv(cov)
+
+#     resid_vector = n_data - Ei
+
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # This is the X^2 contribution for each z bin. It has ALREADY been squared.
+#     # This is what scipy.optimize.minimize needs.
+
+#     # Now we calculate the Gaussian normalization term.
+#     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
+#     logger.debug(f"x: {x}, x0: {x0}")
+#     print(f"x: {x}, x0: {x0}")
+#     #logger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
+#     #log_argument = np.sqrt(var_predict / var_predict_x0)
+#     #log_argument_quadrature_summed = np.sqrt(np.sum(log_argument**2))
+
+#     #num = np.sqrt(np.sum(var_predict))
+#     #denom = np.sqrt(np.sum(var_predict_x0))
+#     #gauss_norm = 2 * np.log(num / denom)
+
+#     num = np.sqrt(var_predict)
+#     denom = np.sqrt(var_predict_x0)
+
+
+
+#    # print("###############################################")
+#     #print("x:", x, "x0:", x0)
+#     #logger.debug("num: " + str(num))
+#     #logger.debug("denom: " + str(denom))
+#     #logger.debug("Num / Denom:" + str(num / denom))
+#     gauss_norm = 2 * np.log(num / denom)
+#     gauss_norm[np.where((denom == 0) & (num == 0))] = 0  # If both are zero, set to zero.
+#     #logger.debug("gauss_norm:" + str(gauss_norm))
+#     gauss_norm = np.sum(gauss_norm)
+#     #logger.debug("gauss_norm summed:" + str(gauss_norm))
+#     #logger.debug("chi sq alone:" + str(chi_squared))
+
+#     chi_squared += np.sum(gauss_norm)
+#     #logger.debug("chi sq with gauss norm:" + str(chi_squared))
+
+#     if debug:
+#         #logger.debug(f"Ei: {Ei}")
+#         logger.debug(f"var_data: {var_data}")
+#         logger.debug(f"var_predict: {var_predict}")
+#         logger.debug(f"cov stat diag: {np.diag(cov_stat)}")
+#         #logger.debug(f"resid_vector: {resid_vector}")
+#         #logger.debug(f"cov_stat: {cov_stat}")
+#         #logger.debug(f"cov_sys: {cov_sys}")
+#         #logger.debug(f"cov: {cov}")
+#         #logger.debug(f"Chi-squared: {chi_squared}")
+
+#     if np.isnan(chi_squared):
+#         logger.error("Chi-squared is NaN. Check inputs and calculations.")
+#         logger.error(f"x: {x}, x0: {x0}")
+#         logger.error(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
+#         logger.error(f"num: {num}, denom: {denom}, gauss_norm: {gauss_norm}")
+#         raise ValueError("Chi-squared calculation resulted in NaN.")
+
+    #return chi_squared
+
+# def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=True):
+
+#     zJ = z_centers
+#     fJ = rate_function(zJ, x)
+#     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+
+#     var_data = n_data
+#     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+
+#     cov_stat = np.diag(var_data + var_predict)
+#     if cov_sys is None:
+#         cov_sys = 0
+#     cov = cov_stat + cov_sys
+
+#     inv_cov = np.linalg.pinv(cov)
+#     resid_vector = n_data - Ei
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # Gaussian normalization term: ln(det(Sigma(x))), using the FULL
+#     # covariance matrix (including any off-diagonal cov_sys terms).
+#     sign, logdet = np.linalg.slogdet(cov)
+#     if sign <= 0:
+#         logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}); "
+#                       "this usually means cov_sys is being applied in a way that makes "
+#                       "the total covariance singular or indefinite.")
+#         raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")
+
+#     chi_squared += logdet
+
+#     if np.isnan(chi_squared):
+#         logger.error("Chi-squared is NaN. Check inputs and calculations.")
+#         logger.error(f"x: {x}")
+#         logger.error(f"var_predict: {var_predict}, logdet: {logdet}")
+#         raise ValueError("Chi-squared calculation resulted in NaN.")
+
+#     return chi_squared
 
 # def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
 #     zJ = z_centers

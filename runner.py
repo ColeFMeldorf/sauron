@@ -691,14 +691,16 @@ class sauron_runner:
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
         if "binned" in self.rate_function_name or "non_parametric" in self.rate_function_name:
-            if "binned_dtd" in self.rate_function_name:
-                self.x0 = calculate_DTD_x0_vals(self.fit_args_dict["z_bins"][survey],
-                                                getattr(self, "current_csfr", None),
-                                                self.dtd_bins, binned_rate)
+            # if "binned_dtd" in self.rate_function_name:
+            #     self.x0 = calculate_DTD_x0_vals(self.fit_args_dict["z_bins"][survey],
+            #                                     getattr(self, "current_csfr", None),
+            #                                     self.dtd_bins, binned_rate)
             scales = self.x0
-            bounds = None
-            self.x0 += 1e-7
-            logging.debug(f"Using bounds: {bounds}")
+            bounds = [(1e-12, None) for _ in self.x0]
+            # self.x0 += 1e-7
+            # logging.debug(f"Using bounds: {bounds}")
+            # import pdb; pdb.set_trace()
+            pass
 
         elif self.rate_function_name == "power_law":
             scales = np.array([1e-5, 1])
@@ -863,7 +865,7 @@ class sauron_runner:
 
             print(f"Grid result keys: {grid_result.keys()}")
 
-            # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
+            # # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
             # import matplotlib.pyplot as plt
             # plt.figure(figsize=(12, 5))
             # plt.subplot(1, 2, 1)
@@ -883,13 +885,55 @@ class sauron_runner:
             # plt.title("Marginalized PDF for x")
             # plt.legend()
             # plt.tight_layout()
-            # plt.savefig("asymmetric_errors_demo.png", dpi=150)
+            # plt.savefig("asymmetric_errors_demo_recent.png", dpi=150)
+            # plt.close()
 
-            #import pdb; pdb.set_trace()
+            from funcs import chi2_old
+            grid_result = grid_marginalized_errors(chi2_old, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norms,
+                                                                "z_centers": z_centers, "eff_ij": eff_ij,
+                                                                "n_data": n_data, "rate_function": self.rate_function,
+                                                                "cov_sys": cov_sys})
+
+            high_uncs = []
+            low_uncs = []
 
 
-            print("High uncs", high_uncs)
-            print("Low uncs", low_uncs)
+            for k in range(len(fit_params)):
+                # Check if this should actually be the chi2 min result
+                high_uncs.append(grid_result[k]["upper_bound"] - fit_params[k])
+                low_uncs.append(fit_params[k] - grid_result[k]["lower_bound"])
+
+            chi2_grid = grid_result["chi2_grid"]
+            grid_result = grid_result[0]
+
+            print(f"Grid result keys: {grid_result.keys()}")
+
+            # # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
+            # import matplotlib.pyplot as plt
+            # plt.figure(figsize=(12, 5))
+            # plt.subplot(1, 2, 1)
+            # plt.contourf(*np.meshgrid(*grid, indexing="ij"), np.exp(-0.5 * chi2_grid), levels=50)
+            # plt.colorbar(label="Likelihood")
+            # plt.xlabel("x (parameter of interest)")
+            # plt.ylabel("y (nuisance parameter)")
+            # plt.title("2D likelihood surface")
+
+            # plt.subplot(1, 2, 2)
+            # plt.plot(grid_result["grid"], grid_result["pdf"], label="Marginalized PDF for x")
+            # plt.axvline(grid_result["mode"], color="C1", linestyle="--", label="Mode")
+            # plt.axvline(grid_result["lower_bound"], color="C2", linestyle=":", label="1-sigma bounds")
+            # plt.axvline(grid_result["upper_bound"], color="C2", linestyle=":")
+            # plt.xlabel("x (parameter of interest)")
+            # plt.ylabel("Probability density")
+            # plt.title("Marginalized PDF for x")
+            # plt.legend()
+            # plt.tight_layout()
+            # plt.savefig("asymmetric_errors_demo_recent_oldchi.png", dpi=150)
+
+
+
+            # print("High uncs", high_uncs)
+            # print("Low uncs", low_uncs)
 
 
         fJ = self.rate_function(z_centers, fit_params)
