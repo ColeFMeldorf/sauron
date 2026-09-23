@@ -42,10 +42,10 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
     # Gaussian normalization term: ln(det(Sigma(x))), using the FULL
     # covariance matrix (including any off-diagonal cov_sys terms).
     sign, logdet = np.linalg.slogdet(cov)
-    sign, logdet_x0 = np.linalg.slogdet(cov_x0)
+    sign_x0, logdet_x0 = np.linalg.slogdet(cov_x0)
     logdet = logdet - logdet_x0  # Normalize by the log determinant at x0
-    if sign <= 0:
-        logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}); "
+    if sign <= 0 or sign_x0 <= 0:
+        logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}, sign_x0={sign_x0}); "
                       "this usually means cov_sys is being applied in a way that makes "
                       "the total covariance singular or indefinite.")
         raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")

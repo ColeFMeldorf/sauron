@@ -1157,7 +1157,8 @@ class sauron_runner:
                                    fit_args_dict["eff_ij"][survey],
                                    n_data,
                                    rate_function,
-                                   fit_args_dict["cov_sys"][survey])
+                                   x0=self.x0,
+                                   cov_sys=fit_args_dict["cov_sys"][survey])
                 # Note this is now unsquared
                 chi2_map[i][j] = np.sum(chi2_result)
         return chi2_map
