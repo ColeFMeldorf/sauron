@@ -1943,14 +1943,11 @@ class sauron_runner:
                 data_indices[s] = np.arange(1, self.fit_args_dict["n_datasets"][s] + 1)
 
             # Create a meshgrid of all possible combinations of dataset indexes across the surveys
-<<<<<<< HEAD
             min_datasets = min(len(data_indices[s]) for s in survey)
             for s in survey:
                 self.fit_args_dict[f"{s}_combined_indices"] = np.arange(1, min_datasets + 1)
                 logging.debug(f"Combined indices for survey {s}: {self.fit_args_dict[f'{s}_combined_indices']}")
-=======
-            mesh = np.meshgrid(*[data_indices[s] for s in survey], indexing="ij")
-            mesh = [m.flatten() for m in mesh]
-            for i, s in enumerate(survey):
-                self.fit_args_dict[f"{s}_combined_indices"] = mesh[i]
->>>>>>> main
+            # mesh = np.meshgrid(*[data_indices[s] for s in survey], indexing="ij")
+            # mesh = [m.flatten() for m in mesh]
+            # for i, s in enumerate(survey):
+            #     self.fit_args_dict[f"{s}_combined_indices"] = mesh[i]
