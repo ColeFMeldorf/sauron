@@ -696,7 +696,7 @@ class sauron_runner:
                                                 getattr(self, "current_csfr", None),
                                                 self.dtd_bins, binned_rate)
             scales = self.x0
-            bounds = None
+            bounds = [(1e-12, None) for _ in self.x0]
             self.x0 += 1e-7
             logging.debug(f"Using bounds: {bounds}")
 
@@ -721,21 +721,19 @@ class sauron_runner:
         def scaled_chi2(params, *args):
             return chi2(params * scales, *args)
 
+
         result = minimize(
                     scaled_chi2,
-                    x0=np.array(self.x0) / scales,
+                    x0=self.x0 / scales,
                     args=(null_counts, f_norms, z_centers, eff_ij,
-                            n_data, self.rate_function, cov_sys),
+                            n_data, self.rate_function, self.x0, cov_sys),
                     method=None,
                     bounds=bounds,
                 )
 
-        np.save("plots/cov_sys.npy", cov_sys)
-        logging.debug(f"Minimize Result: {result}")
+
         fit_params = result.x * scales
         logging.debug(f"Minimize Result: {fit_params}")
-
-
 
 
         # This calculation of cov matrix is only valid if minimizing chi2
@@ -747,9 +745,9 @@ class sauron_runner:
         # Redo the above without the cov_sys to determine the systematic_error
         no_sys_result = minimize(
                     scaled_chi2,
-                    x0=np.array(self.x0) / scales,
+                    x0=self.x0 / scales,
                     args=(null_counts, f_norms, z_centers, eff_ij,
-                            n_data, self.rate_function, None),
+                            n_data, self.rate_function, self.x0, None),
                     method=None,
                     bounds=bounds,
                 )
@@ -800,7 +798,7 @@ class sauron_runner:
             grid_result = grid_marginalized_errors(chi2, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norms,
                                                                 "z_centers": z_centers, "eff_ij": eff_ij,
                                                                 "n_data": n_data, "rate_function": self.rate_function,
-                                                                "cov_sys": cov_sys})
+                                                                "cov_sys": cov_sys, "x0": self.x0})
 
             high_uncs = []
             low_uncs = []
@@ -816,7 +814,7 @@ class sauron_runner:
 
             print(f"Grid result keys: {grid_result.keys()}")
 
-            # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
+            # # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
             # import matplotlib.pyplot as plt
             # plt.figure(figsize=(12, 5))
             # plt.subplot(1, 2, 1)
@@ -836,15 +834,8 @@ class sauron_runner:
             # plt.title("Marginalized PDF for x")
             # plt.legend()
             # plt.tight_layout()
-            # plt.savefig("asymmetric_errors_demo.png", dpi=150)
-
-            #import pdb; pdb.set_trace()
-
-
-            print("High uncs", high_uncs)
-            print("Low uncs", low_uncs)
-
-
+            # plt.savefig("asymmetric_errors_demo_recent.png", dpi=150)
+            # plt.close()
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
 
@@ -1170,7 +1161,8 @@ class sauron_runner:
                                    fit_args_dict["eff_ij"][survey],
                                    n_data,
                                    rate_function,
-                                   fit_args_dict["cov_sys"][survey])
+                                   x0=self.x0,
+                                   cov_sys=fit_args_dict["cov_sys"][survey])
                 # Note this is now unsquared
                 chi2_map[i][j] = np.sum(chi2_result)
         return chi2_map
