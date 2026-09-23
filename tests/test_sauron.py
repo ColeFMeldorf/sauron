@@ -107,6 +107,28 @@ def _coverage_chi2(df, truth, param_names=("alpha", "beta")):
     return chi2_vals
 
 
+def _check_regression(results_path, regression_path, cols, rtol=None, atol=None):
+    if rtol is None:
+        rtol = global_rtol
+    results = pd.read_csv(results_path)
+    regression = pd.read_csv(regression_path)
+    for i, col in enumerate(cols):
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        np.testing.assert_allclose(results[col], regression[col], rtol=rtol, atol=atol)
+
+def _run_cmd(cmd):
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
 # ##########################TESTS BELOW############################################################
 
 def test_regression_specz():
@@ -127,17 +149,8 @@ def test_regression_specz():
             f"stderr:\n{result.stderr}"
         )
 
-    results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regnopz_regression.csv")
-    # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
-    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        try:
-            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
-        except AssertionError as e:
-            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
-                           f"Please check if this is expected. ")
-            logger.warning(str(e))
-        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+    cols = ["alpha", "beta", "reduced_chi_squared"]
+    _check_regression(outpath, pathlib.Path(__file__).parent / "test_regression/test_regnopz_regression.csv", cols)
 
 
 
@@ -1038,6 +1051,65 @@ def test_coverage_SDSS():
     simulated_data = scipy_chi2.rvs(df = 2, size=50, scale=1.0)
     p_value = ks_2samp(simulated_data, product_2)
     np.testing.assert_array_less(0.05, p_value.pvalue)
+
+
+
+def test_coverage_SDSS_plus_DES():
+    """In this test we check the coverage properties of SAURON on the 50 SDSS sim datasets.
+        We should recover the truth (2.27e-5, 1.7) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_output/test_coverage_SDSS_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_SDSS_DES_coverage.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
+    _run_cmd(cmd)
+    df = pd.read_csv(outpath)
+
+    sigma_1 = scipy_chi2.ppf([0.68], 2)
+    sigma_2 = scipy_chi2.ppf([0.95], 2)
+
+    product_2 = _coverage_chi2(df, truth=[2.27e-5, 1.7], param_names=("alpha", "beta"))
+
+    for i in range(len(product_2)):
+        logger.debug(f"Product 2 for dataset {i}: {product_2[i]}")
+
+    sub_one_sigma = np.where(product_2 < sigma_1)
+    sub_two_sigma = np.where(product_2 < sigma_2)
+
+    plot = False
+    if plot:
+        import matplotlib.pyplot as plt
+
+        plt.hist(product_2, bins=10, density=True, alpha=0.7, color='blue', label='Observed')
+        x = np.linspace(0, 12, 100)
+        # Dof = 6, 8 bins - 2 fitted parameters
+        plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
+        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
+        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.xlabel("Chi-squared statistic")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist_SDSS.png")
+
+    logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
+    logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
+
+    # The expected coverages are the nominal Gaussian 1σ and 2σ fractions (≈0.68 and ≈0.95), but in this
+    # test we only have O(50) pseudo-experiments (len(product_2)). The realised fractions therefore have
+    # binomial sampling noise of order sqrt(p * (1 - p) / N) ≈ 0.07 for p ≈ 0.68 and N ≈ 50. We then round
+    # to the nearest whole number of tests (4/50) for a cut of 0.08. In addition,
+    # the test statistic is chi-squared–like rather than exactly Gaussian, which further broadens the
+    # empirical distribution. We therefore use atol=0.08 to avoid flaky failures while still detecting
+    # substantial coverage regressions; tighter tolerances (e.g. 0.05) were observed to fail spuriously.
+    np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.08)
+    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.08)
+
+    # Finally we also check using a KS test that the observed distribution is consistent with chi2 with 2 dofs.
+    np.random.seed(seed=42)
+    simulated_data = scipy_chi2.rvs(df = 2, size=50, scale=1.0)
+    p_value = ks_2samp(simulated_data, product_2)
+    np.testing.assert_array_less(0.05, p_value.pvalue)
+
 
 
 def test_cc_decontam_SDSS():
