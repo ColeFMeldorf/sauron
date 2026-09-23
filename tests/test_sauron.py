@@ -193,7 +193,7 @@ def test_perfect_recovery():
     regression_vals = [2.27e-5, 1.7, 0.0]
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
         print("i: ", i, "col: ", col, "results[col]: ", results[col], "regression_vals[i]: ", regression_vals[i])
-        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-3)
+        np.testing.assert_allclose(results[col], regression_vals[i], rtol=1e-3)
 
 
 def test_perfect_recovery_pz():
@@ -218,7 +218,7 @@ def test_perfect_recovery_pz():
     results = pd.read_csv(outpath)
     regression_vals = [2.27e-5, 1.7, 0.0]
     for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        np.testing.assert_allclose(results[col], regression_vals[i], atol=1e-3)  # atol not rtol b/c we expect 0
+        np.testing.assert_allclose(results[col], regression_vals[i], rtol=1e-3)
 
 
 # Currently broken, pending fix
@@ -700,7 +700,7 @@ def test_cc_decontam():
     std_ncalc = np.std(all_ncalc, axis=0)
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
-    plot = True
+    plot = False
     if plot:
         plt.clf()
 
@@ -1003,7 +1003,7 @@ def test_coverage_SDSS():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = True
+    plot = False
     if plot:
         import matplotlib.pyplot as plt
 

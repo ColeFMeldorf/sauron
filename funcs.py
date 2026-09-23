@@ -12,50 +12,14 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Set to DEBUG for detailed output
 
 
-def chi2_old(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
-    zJ = z_centers
-    fJ = rate_function(zJ, x)
-    Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
-    var_Ei = np.abs(Ei)
-    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
-
-    cov_stat = np.diag(var_Ei + var_Si)
-    if cov_sys is None:
-        cov_sys = 0
-    cov = cov_stat + cov_sys
-
-    inv_cov = np.linalg.pinv(cov)
-
-    resid_vector = n_data - Ei
-
-    chi_squared = resid_vector.T @ inv_cov @ resid_vector
-
-    # This is the X^2 contribution for each z bin. It has ALREADY been squared.
-    # This is what scipy.optimize.minimize needs.
-
-    if debug:
-        #logger.debug(f"Ei: {Ei}")
-        logger.debug(f"var_Ei: {var_Ei}")
-        logger.debug(f"var_Si: {var_Si}")
-        logger.debug(f"cov stat diag: {np.diag(cov_stat)}")
-        # logger.debug(f"resid_vector: {resid_vector}")
-        # logger.debug(f"cov_stat: {cov_stat}")
-        # logger.debug(f"cov_sys: {cov_sys}")
-        # logger.debug(f"cov: {cov}")
-        # logger.debug(f"Chi-squared: {chi_squared}")
-
-    return chi_squared
-
 def calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function):
     """Calculate the variance of the predicted counts."""
     fJ = rate_function(zJ, x)
-    #logger.debug(f"Calculating var_predict with x: {x}, zJ: {zJ}, fJ: {fJ}")
     var_predict = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
     return var_predict
 
 
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
-    #print(f"Calculating chi2 for x: {x}, x0: {x0}")
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
@@ -80,16 +44,13 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
     sign, logdet = np.linalg.slogdet(cov)
     sign, logdet_x0 = np.linalg.slogdet(cov_x0)
     logdet = logdet - logdet_x0  # Normalize by the log determinant at x0
-    #print(f"covariance matrix sign: {sign}, logdet: {logdet}")
     if sign <= 0:
         logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}); "
                       "this usually means cov_sys is being applied in a way that makes "
                       "the total covariance singular or indefinite.")
         raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")
 
-    #print(f"Chi-squared before adding logdet: {chi_squared}")
     chi_squared += logdet
-    #print(f"Chi-squared after adding logdet: {chi_squared}")
 
     if np.isnan(chi_squared):
         logger.error("Chi-squared is NaN. Check inputs and calculations.")
