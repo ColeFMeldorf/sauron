@@ -18,16 +18,19 @@ from astropy.cosmology import LambdaCDM
 
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
-                   calculate_null_counts, AplusB_cosmicSFH, chi2, turnover_power_law_forced_cty,
+                   calculate_null_counts, chi2, turnover_power_law_forced_cty,
                    non_parametric_histogram)
 from SN_dataset import SN_dataset
+
+from dtd_functions import (dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary, precompute_AplusB, prompt_fraction_DTD,
+                          calculate_DTD_x0_vals)
 
 # Get the matplotlib logger
 matplotlib_logger = logging.getLogger("matplotlib")
 
 # Set the desired logging level (e.g., INFO, WARNING, ERROR, CRITICAL)
 matplotlib_logger.setLevel(logging.WARNING)
-# logger = logging.getLogger(__name__)
+# Logging is configured by the CLI entrypoint (sauron.py). Avoid configuring global logging on import.
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -64,8 +67,9 @@ def LaurenNicePlots():
     update_rcParams("lines.markeredgewidth", 1.0)
     update_rcParams("lines.markeredgecolor", "auto")
 
-    cycle_colors = ["navy", "maroon", "darkorange", "darkorchid", "darkturquoise", "darkmagenta", "6FADFA", "7D7D7D", "black"]
-    # cycle_colors = ['9F6CE6','FF984A','538050','6FADFA','7D7D7D','black']
+    cycle_colors = ["navy", "maroon", "darkorange", "darkorchid",  "6FADFA", "7D7D7D", "black"]
+    # "darkmagenta",
+    #cycle_colors = ['9F6CE6','FF984A','538050','6FADFA','7D7D7D','black']
     cycle_markers = ["o", "^", "*", "s", "X", "d", "1", "2", "3"]
     # cycle_colors = ['darkorchid','darkorange','darkturquoise']
     # cycle_markers = ['o','^','*']
@@ -81,26 +85,36 @@ func_name_dictionary = {
     "power_law": power_law,
     "turnover_power_law": turnover_power_law,
     "dual_power_law": turnover_power_law,
-    "AplusB_cosmicSFH": AplusB_cosmicSFH,
     "turnover_power_law_forced_cty": turnover_power_law_forced_cty,
-    "non_parametric_histogram": non_parametric_histogram
+    "non_parametric_histogram": non_parametric_histogram,
+    "file": "file"
 }
 
+dtd_func_name_dictionary = {
+    "power_law_dtd": power_law_DTD,
+    "binned_dtd": binned_DTD,
+    "AplusB_dtd": "placeholder",
+    "prompt_fraction_dtd": prompt_fraction_DTD
+}
 
 default_x0_dictionary = {
     "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
     "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
     "dual_power_law": (1, 0, 1, -2),
-    "AplusB_cosmicSFH": (2.8e-14, 9.3e-4)
+    "AplusB_dtd": (2.8e-14, 9.3e-4),
+    "power_law_dtd": (-1, 1e-14),
+    "prompt_fraction_dtd": (1.5e-4, 0.5)
 }
 
 default_parameter_name_dictionary = {
-    "power_law": ["alpha", "beta"],
-    "AplusB_cosmicSFH": ["A", "B"],
-    "turnover_power_law": ["alpha", "beta1", "alpha2", "beta2"]}
+    "power_law": ["$\\alpha$", "$\\beta$"],
+    "AplusB_dtd": ["A", "B"],
+    "turnover_power_law": ["$\\alpha$", "$\\beta_1$", "$\\alpha_2$", "$\\beta_2$"],
+    "power_law_dtd": ["$\\beta$", "$R_1$"],
+    "prompt_fraction_dtd": ["$\\eta_{Ia}$", "$f_P$"]}
 
 default_bounds_dictionary = {
-    "AplusB_cosmicSFH": ((0, 0), (np.inf, np.inf)),
+    "AplusB_dtd": ((0, 0), (np.inf, np.inf)),
 }
 
 
@@ -123,6 +137,11 @@ class sauron_runner:
         self.fit_args_dict["rate_params"] = {}
         self.results = {}
         self.final_counts = {}
+        # CSFR bookkeeping. Stays at these defaults ("no CSFR") unless a DTD is specified in
+        # FIT_OPTIONS, in which case parse_dtd_options fills them in for real.
+        self.csfr_names = [None]
+        self.rate_functions = {}
+        self.multiple_csfrs = False
 
     def parse_global_fit_options(self):
         """ Parse global fit options (I.e. those that apply to all surveys) from the config file."""
@@ -130,26 +149,150 @@ class sauron_runner:
             files_input = yaml.safe_load(f)
 
         fit_options = files_input.get("FIT_OPTIONS", {})
-        self.rate_function_name = fit_options.get("RATE_FUNCTION")
-        if self.rate_function_name is None:
-            self.rate_function_name = fit_options.get("RATE_FUNC")
-        if self.rate_function_name is None:
-            raise ValueError("RATE_FUNCTION or RATE_FUNC must be specified in FIT_OPTIONS in the config file.")
-        logging.debug(f"RATE_FUNCTION specified in config: {self.rate_function_name}")
-        self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
+
+
+
+        rate_func = fit_options.get("RATE_FUNC")
+        self.rate_function_name = fit_options.get("RATE_FUNCTION") if rate_func is None else rate_func
+        dtd = fit_options.get("DTD")
+        if dtd is not None and self.rate_function_name is not None:
+            raise ValueError("Both DTD and RATE_FUNCTION cannot be specified simultaneously.")
+        if self.rate_function_name is None and dtd is None:
+            raise ValueError("RATE_FUNCTION (or RATE_FUNC) or DTD must be specified in FIT_OPTIONS in the config file.")
+
+        if dtd is not None:
+            logging.debug(f"DTD specified in config: {dtd}")
+            self.parse_dtd_options(fit_options)
+
+        else:
+            logging.debug(f"RATE_FUNCTION specified in config: {self.rate_function_name}")
+            self.rate_function = func_name_dictionary.get(self.rate_function_name, None)
+            self.dtd_func = None
+
+        self.param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
 
         potential_x0 = fit_options.get("X0", None)
         if potential_x0 is None:
             if "non_parametric" in self.rate_function_name:
                 self.x0 = "non_param_x0_placeholder"
+            elif "binned" in self.rate_function_name:
+                pass
             else:
-                logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess "
-                f"for {self.rate_function_name}: {default_x0_dictionary.get(self.rate_function_name, (2.27e-5, 1.7))}")
-                self.x0 = default_x0_dictionary.get(self.rate_function_name, (2.27e-5, 1.7))
+                self.x0 = default_x0_dictionary.get(self.rate_function_name, None)
+                if self.x0 is None:
+                    raise ValueError(f"No default X0 found for rate function: {self.rate_function_name}. Please specify X0 in FIT_OPTIONS.")
+                else:
+                    logging.warning(f"No X0 specified in FIT_OPTIONS. Using default initial guess "
+                    f"for {self.rate_function_name}: {self.x0}")
+
              # The above should probably be changed.
         else:
             self.x0 = [float(i) for i in potential_x0.split(",")]
 
+    def parse_dtd_options(self, fit_options):
+        self.rate_function_name = fit_options.get("DTD")
+        dtd_func = dtd_func_name_dictionary.get(self.rate_function_name, None)
+
+        if dtd_func is None:
+            dtd_func = dtd_func_name_dictionary.get(self.rate_function_name + "_dtd", None)
+            self.rate_function_name = fit_options.get("DTD") + "_dtd"
+            if dtd_func is None:
+                raise ValueError(f"Unknown DTD function: {self.rate_function_name}")
+
+        self.dtd_func = dtd_func
+
+        if not self.rate_function_name.endswith("_dtd"):
+            self.rate_function_name += "_dtd"
+
+        if self.rate_function_name == "binned_dtd":
+            bins = fit_options.get("BINS")
+            if bins is None:
+                logging.warning(
+                    "No BINS specified for binned_dtd. Using default bins (3 bins between 0 and 14 Gyr)."
+                )
+                default_bins = np.array([0.0, 0.42, 2.4, 14.0])
+                default_bin_means = (default_bins[:-1] + default_bins[1:]) / 2
+                bins = np.array([0.0, 0.42, 2.4, 14.0])
+                bin_means = (bins[:-1] + bins[1:]) / 2
+
+                self.dtd_bins = bins
+                self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
+
+
+                #self.x0 = np.interp(bin_means, default_bin_means, [140e-5, 25e-5, 1.8e-5])
+                #self.x0 = 35.25e-5 * bin_means**-1
+                #self.x0 = np.array([140e-5, 25e-5, 1.8e-5])
+
+                bin_centers = (bins[:-1] + bins[1:]) / 2
+                # self.x0 = np.interp(bin_centers, [0.21, 1.41, 8.2], [140e-5, 25e-5, 1.8e-5])
+                #self.x0 = np.full(len(bins) - 1, 1e-4)
+                param_names = []
+                for i in range(len(self.x0)):
+                    param_names.append(f"{bins[i]:.2f}-{bins[i+1]:.2f} Gyr")
+                self.param_names = param_names
+
+            else:
+                bins = np.asarray(bins, dtype=float)
+                self.x0 = np.full(len(bins) - 1, 1e-5)
+            dtd_kwargs = {"bins": bins}
+            self.dtd_bins = bins
+        else:
+            dtd_kwargs = None
+        logging.debug(f"Parsed DTD options: rate_function_name={self.rate_function_name}, dtd_func={self.dtd_func}")
+        # Figure out which CSFR(s) to convolve the DTD with. This used to be hardcoded inside
+        # dtd_functions.py; now it's chosen by name from FIT_OPTIONS.CSFR in the config file. If CSFR
+        # is given as a list (e.g. two names), this DTD gets fit once per CSFR, all the way through
+        # sauron.py's main loop, with each fit's results tagged by which CSFR produced it.
+        self.csfr_names = self._resolve_csfr_names(fit_options)
+        self.multiple_csfrs = len(self.csfr_names) > 1
+
+        if self.rate_function_name == "AplusB_dtd":
+            self.rate_functions = {csfr_name: precompute_AplusB(
+                z_data=np.linspace(0, 5, 100),
+                cosmology=cosmo,
+                csfr=csfr_func_name_dictionary[csfr_name]
+            ) for csfr_name in self.csfr_names}
+            logging.debug("Precomputed AplusB function for rate fitting up here!")
+        else:
+            self.rate_functions = {
+                csfr_name: dtd_rate(dtd_func, kwargs=dtd_kwargs, csfr_func=csfr_func_name_dictionary[csfr_name])
+                for csfr_name in self.csfr_names
+            }
+        # self.rate_function is the "currently active" rate function — everything downstream
+        # (fit_rate, summary_plot, etc.) keeps reading this one attribute. sauron.py is responsible for
+        # pointing it at a different entry of self.rate_functions before each fit when
+        # self.multiple_csfrs is True.
+        self.rate_function = self.rate_functions[self.csfr_names[0]]
+
+    def _resolve_csfr_names(self, fit_options):
+        """Parse and validate the CSFR field of FIT_OPTIONS into a list of one or more CSFR names.
+
+        CSFR can be given as a single name (string) or a list of names (e.g. to fit the same DTD
+        against two different assumed star formation histories). If it's omitted entirely, we fall
+        back to 'double_power_law', which is the CSFR that used to be hardcoded.
+        """
+        csfr_option = fit_options.get("CSFR", None)
+        if csfr_option is None:
+            logging.warning(
+                "No CSFR specified in FIT_OPTIONS. Defaulting to the 'B13' CSFR "
+                "(the form that used to be hardcoded)."
+            )
+            csfr_names = ["B13"]
+        elif isinstance(csfr_option, list):
+            csfr_names = csfr_option
+        else:
+            csfr_names = [csfr_option]
+
+        if len(csfr_names) == 0:
+            raise ValueError("CSFR was specified as an empty list in FIT_OPTIONS. Provide at least one CSFR name.")
+
+        unknown = [name for name in csfr_names if name not in csfr_func_name_dictionary]
+        if unknown:
+            raise ValueError(
+                f"Unknown CSFR function(s): {unknown}. Available options: {list(csfr_func_name_dictionary.keys())}"
+            )
+
+        return csfr_names
 
     def parse_survey_fit_options(self, args_dict, survey):
         """ Parse survey-specific fit options from the config file.
@@ -212,7 +355,11 @@ class sauron_runner:
 
         simulated_rate_params = args_dict.get("RATE_PARAMS", None)
         if simulated_rate_params is not None:
-            simulated_rate_params = [float(i) for i in simulated_rate_params.split(",")]
+            # this is so hacky its not even funny, change this back or use rate_func to do this.
+            if "/" not in simulated_rate_params:
+                simulated_rate_params = [float(i) for i in simulated_rate_params.split(",")]
+            else:
+                simulated_rate_params = str(simulated_rate_params)
             self.fit_args_dict["rate_params"][survey] = simulated_rate_params
             self.fit_args_dict["rate_params"]["combined"] = simulated_rate_params
             logging.warning("Using specified RATE_PARAMS for the surveys to define combined rate params."
@@ -463,7 +610,6 @@ class sauron_runner:
             z_centers.extend(z_bins[:-1]/2 + z_bins[1:]/2)
 
         z_centers = np.array(z_centers)
-
         # This needs to be done survey by survey because f_norm is per survey
         if len(survey) == 1:
             n_data = np.concatenate([self.fit_args_dict["n_data"][s][index] for s in survey])
@@ -516,185 +662,197 @@ class sauron_runner:
             self.results[survey] = [] if self.results.get(survey) is None else self.results[survey]
 
         logging.warning("This doesn't work for multiple surveys yet!")
+        binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
 
+
+        fJ_0 = self.rate_function(z_centers, self.x0)
+        Ei = np.sum(null_counts * eff_ij * f_norm * fJ_0, axis=0)
+        var_Ei = np.abs(Ei)
+        var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ_0**2, axis=0)
+
+        cov_stat = np.diag(var_Ei + var_Si)
+
+        cov = cov_stat + cov_sys
+
+        cov_mat_in_rate = cov / (np.sum(null_counts * eff_ij * f_norms, axis=0)[:, None] *
+             np.sum(null_counts * eff_ij * f_norms, axis=0)[None, :])
+        np.save(f"plots/cov_mat_in_rate_{survey}.npy", cov_mat_in_rate)
+
+        np.save(f"plots/binned_rate_{survey}.npy", binned_rate)
         if "non_parametric" in self.rate_function_name:
-            self.x0 = np.zeros_like(z_centers) + 1e-8
-            # self.x0[np.where(z_centers < 1)] = 2.27e-5 * (1 + z_centers[np.where(z_centers < 1)])**1.7
-            # self.x0[np.where(z_centers >= 1)] = 7.5e-5 * (1 + z_centers[np.where(z_centers >= 1)])**(-0.1)
-            # Start at Fromhaier / Strolger Rate for non-parametric fit, but this should be changed to be more flexible.
-            #  This is just to make sure it starts at a reasonable place and doesn't diverge immediately.
+            self.x0 = binned_rate + 1e-5
 
         fJ_0 = self.rate_function(z_centers, self.x0)
 
         x0_counts = np.sum(null_counts * eff_ij * f_norms * fJ_0, axis=0)
-        binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+
 
         # This is only an approximation of the error, this needs to be rethought
-        self.final_counts[survey]["binned_rate_84"] = (n_data + np.sqrt(n_data)) / (np.sum(null_counts * eff_ij * f_norms, axis=0))
-        self.final_counts[survey]["binned_rate_16"] = (n_data - np.sqrt(n_data)) / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        self.final_counts[survey]["binned_rate_84"] = (n_data + np.sqrt(n_data)) / \
+         (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        self.final_counts[survey]["binned_rate_16"] = (n_data - np.sqrt(n_data)) / \
+        (np.sum(null_counts * eff_ij * f_norms, axis=0))
 
+        np.save(f"plots/binned_rate_{survey}.npy", binned_rate)
+        np.save(f"plots/z_bin_edges_{survey}.npy", z_bins_list)
         logging.debug(f"Total counts in dataset {survey}: {np.sum(n_data)}")
 
-        N = len(n_data)
-        n = len(self.x0)
-        fit_method = "minimize"
-        N = len(z_centers)  # number of data points
-        n = len(self.x0)  # number of parameters
-
-        if fit_method == "leastsq":
-
-            fit_params, cov_x, infodict = leastsq(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-                                                  n_data, self.rate_function, cov_sys),
-                                                  full_output=True)[:3]
-            logging.debug(f"Least Squares Result: {fit_params}")
-            residual_variance = (infodict["fvec"]**2).sum() / (N - n)
-            logging.debug(f"residual variance leastsq: {residual_variance}")
-            cov_x *= residual_variance
-            # * 0.5
-            # The factor of 1/2 is needed to agree with minimize, unclear why. Re-include it to make them agree better.
-
-            # See scipy doc for leastsq for explanation of this covariance rescaling
-            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-            chi_squared = np.sum(infodict["fvec"]) # If we take the square root in the chi func then
-            # I think this should be squared but I am changing back for regression
-            logging.debug(f"chi_squared leastsq: {chi_squared}")
-
-        elif fit_method == "least_squares":
-            from scipy.optimize import least_squares
-            bounds = default_bounds_dictionary.get(self.rate_function_name, None)
-            if bounds is None:
-                bounds = (-np.inf, np.inf)
+        if "binned" in self.rate_function_name or "non_parametric" in self.rate_function_name:
+            if "binned_dtd" in self.rate_function_name:
+                self.x0 = calculate_DTD_x0_vals(self.fit_args_dict["z_bins"][survey],
+                                                getattr(self, "current_csfr", None),
+                                                self.dtd_bins, binned_rate)
+            scales = self.x0
+            bounds = [(1e-12, None) for _ in self.x0]
+            self.x0 += 1e-7
             logging.debug(f"Using bounds: {bounds}")
-            result = least_squares(chi2_unsummed, x0=self.x0, args=(null_counts, f_norms, z_centers, eff_ij,
-                                                           n_data, self.rate_function, cov_sys),
-                                                           bounds=bounds,
-                                                           x_scale="jac")
 
-            hess_inv = np.linalg.inv(np.dot(result.jac.T, result.jac))
+        elif self.rate_function_name == "power_law":
+            scales = np.array([1e-5, 1])
+            bounds = None
+        elif self.rate_function_name == "power_law_dtd":
+            scales = np.array([1, 1e-14])
+            bounds = None
+        elif self.rate_function_name == "AplusB_dtd":
+            scales = np.array([1e-14, 1e-3])
+            bounds = None
+        elif "prompt_fraction" in self.rate_function_name:
+            scales = np.array([1e-4, 0.5])
+            bounds = None
+        else:
+            logging.debug("No information about relative parameter scales, using 1 for all parameters. "
+            "This may cause issues with convergence or covariance calculation.")
+            scales = np.ones_like(self.x0)
+            bounds = None
 
-            logging.debug(f"Least Squares Result: {result.x}")
+        def scaled_chi2(params, *args):
+            return chi2(params * scales, *args)
 
-            # cov_x *= (infodict['fvec']**2).sum() / (N-n)
-            logging.debug(f"Variance residuals {(result.fun**2).sum() / (N - n)}")
-            cov_x = hess_inv * (result.fun**2).sum() / (N - n)
-            chi_squared = np.sum(result.fun**2)
-            logging.debug(f"cov_x : {cov_x}")
-            # See scipy doc for leastsq for explanation of this covariance rescaling
-            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-            fit_params = result.x
-
-        elif fit_method == "minimize":
-
-            if self.rate_function_name == "power_law":
-                scales = np.array([1e-5, 1])
-            else:
-                logging.debug("No information about relative parameter scales, using 1 for all parameters. This may cause issues with convergence or covariance calculation.")
-                scales = np.ones_like(self.x0)
-
-            def scaled_chi2(params, *args):
-                return chi2(params * scales, *args)
-
-            result = minimize(
-                        scaled_chi2,
-                        x0=np.array(self.x0) / scales,
-                        args=(null_counts, f_norms, z_centers, eff_ij,
-                              n_data, self.rate_function, cov_sys),
-                        method=None
-                    )
-            fit_params = result.x * scales
-            logging.debug(f"Minimize Result: {fit_params}")
-
-
-            # This calculation of cov matrix is only valid if minimizing chi2
-            cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
-            logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
-            chi_squared = result.fun
-            logging.debug(f"chi_squared minimize: {chi_squared}")
-
-            # Redo the above without the cov_sys to determine the systematic_error
-            no_sys_result = minimize(
-                        chi2,
-                        x0=self.x0,
-                        args=(null_counts, f_norms, z_centers, eff_ij,
-                              n_data, self.rate_function, None),
-                        method=None
-                    )
-            no_sys_fit_params = no_sys_result.x
-            logging.debug(f"Minimize Result without sys cov: {no_sys_fit_params}")
-            no_sys_cov_x = no_sys_result.hess_inv * 2
-            logging.debug(f"Standard errors without sys cov: {np.sqrt(np.diag(no_sys_cov_x))}")
-            no_sys_chi_squared = no_sys_result.fun
-            logging.debug(f"chi_squared minimize without sys cov: {no_sys_chi_squared}")
-
-            total_err = np.sqrt(np.diag(cov_x))
-            stat_err = np.sqrt(np.diag(no_sys_cov_x))
-            sys_err_var = total_err**2 - stat_err**2
-            if np.any(sys_err_var < 0):
-                logging.debug(
-                    "Clipping negative systematic error variances to 0 for survey %s: %s",
-                    survey,
-                    sys_err_var[sys_err_var < 0],
+        result = minimize(
+                    scaled_chi2,
+                    x0=self.x0 / scales,
+                    args=(null_counts, f_norms, z_centers, eff_ij,
+                            n_data, self.rate_function, self.x0, cov_sys),
+                    method=None,
+                    bounds=bounds,
                 )
-            sys_err = np.sqrt(np.clip(sys_err_var, 0.0, None))
-            logging.debug(f"######## Results for survey {survey} ##########")
-            for i, param_name in enumerate(default_parameter_name_dictionary.get(self.rate_function_name, [f"param_{j}" for j in range(len(fit_params))])):
-                logging.debug(f"{param_name}: {fit_params[i]:.3e} +/- {stat_err[i]:.3e} (stat) +/- {sys_err[i]:.3e} (sys)")
-            logging.debug("################################################")
 
 
-            # logging.debug("Checking chi_squared calculation by recalculating with best fit params...")
-            # test_chi = chi2(fit_params, null_counts, f_norms, z_centers, eff_ij, n_data, self.rate_function, cov_sys, debug=True)
-            # logging.debug(f"Test chi_squared: {test_chi} ")
+        fit_params = result.x * scales
+        logging.debug(f"Minimize Result: {fit_params}")
 
 
-        elif fit_method == "curve_fit":
-            from scipy.optimize import curve_fit
+        # This calculation of cov matrix is only valid if minimizing chi2
+        cov_x = result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
+        logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
+        chi_squared = result.fun
+        logging.debug(f"chi_squared minimize: {chi_squared}")
 
-            fJ_0 = self.rate_function(z_centers, self.x0)
-            Ei = np.sum(null_counts * eff_ij * f_norm * fJ_0, axis=0)
-            var_Ei = np.abs(Ei)
-            var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ_0**2, axis=0)
+        # Redo the above without the cov_sys to determine the systematic_error
+        no_sys_result = minimize(
+                    scaled_chi2,
+                    x0=self.x0 / scales,
+                    args=(null_counts, f_norms, z_centers, eff_ij,
+                            n_data, self.rate_function, self.x0, None),
+                    method=None,
+                    bounds=bounds,
+                )
+        no_sys_fit_params = no_sys_result.x * scales
+        logging.debug(f"Minimize Result without sys cov: {no_sys_fit_params}")
+        no_sys_cov_x = no_sys_result.hess_inv * 2 * scales[:, np.newaxis] * scales[np.newaxis, :]
+        logging.debug(f"Standard errors without sys cov: {np.sqrt(np.diag(no_sys_cov_x))}")
+        no_sys_chi_squared = no_sys_result.fun
+        logging.debug(f"chi_squared minimize without sys cov: {no_sys_chi_squared}")
 
-            cov_stat = np.diag(var_Ei + var_Si)
-
-            cov = cov_stat + cov_sys
-            logger.debug(f"Sys Covariance Matrix Diag: {np.diag(cov_sys)}")
-            logger.debug(f"Stat Covariance Matrix Diag: {np.diag(cov_stat)}")
-            logger.debug(f"Covariance Matrix Diag: {np.diag(cov)}")
-
-            popt, pcov = curve_fit(
-                lambda z, *x: np.sum(null_counts * eff_ij * f_norms *
-                                      self.rate_function(z, x), axis=0), sigma=cov,
-                                      absolute_sigma=False,
-                xdata=z_centers,
-                ydata=n_data,
-                # provide x0 as a single parameter
-                p0=self.x0,
+        total_err = np.sqrt(np.diag(cov_x))
+        stat_err = np.sqrt(np.diag(no_sys_cov_x))
+        sys_err_var = total_err**2 - stat_err**2
+        if np.any(sys_err_var < 0):
+            logging.debug(
+                "Clipping negative systematic error variances to 0 for survey %s: %s",
+                survey,
+                sys_err_var[sys_err_var < 0],
             )
+        sys_err = np.sqrt(np.clip(sys_err_var, 0.0, None))
+        logging.debug(f"######## Results for survey {survey} ##########")
+        for i, param_name in enumerate(default_parameter_name_dictionary.get(self.rate_function_name, [f"param_{j}" for j in range(len(fit_params))])):
+            logging.debug(f"{param_name}: {fit_params[i]:.3e} +/- {stat_err[i]:.3e} (stat) +/- {sys_err[i]:.3e} (sys)")
+        logging.debug("################################################")
 
-            fit_params = popt
-            cov_x = pcov
-            chi_squared = chi2(fit_params, null_counts, f_norms, z_centers,
-                               eff_ij, n_data, self.rate_function, cov_sys)
+        marginalization_calculation = self.args.marginalize
+        logger.debug(f"Marginalization calculation: {marginalization_calculation}")
+
+        if marginalization_calculation:
+
+            if len(fit_params) != 2:
+                raise ValueError("Marginalization calculation is only implemented for 2D parameter spaces.")
+
+            from asymmetric_errs import grid_marginalized_errors
+
+            # THIS CAN'T BE HARDCODED
+            #grid1 = np.linspace(0e-5, 4e-5, 151)
+            #grid2 = np.linspace(0.0, 4, 151)
+
+            #grid1 = np.linspace(1.2e-5, 3.4e-5, 100)
+            #grid2 = np.linspace(1, 2.5, 100)
+
+            grid = [np.linspace(fit_params[i] - 3 * np.sqrt(cov_x[i, i]), fit_params[i] + 3 * np.sqrt(cov_x[i, i]), 151) for i in range(len(fit_params))]
+
+            #grid = [grid1, grid2]  # x is the parameter of interest, y is a nuisance parameter
 
 
-            logging.debug(f"Curve Fit Result: {fit_params}")
-            logging.debug(f"Covariance Matrix from curve_fit: {cov_x}")
-            logging.debug(f"Standard errors from curve_fit: {np.sqrt(np.diag(cov_x))}")
+            grid_result = grid_marginalized_errors(chi2, grid, chi2_kwargs = {"null_counts": null_counts, "f_norm": f_norms,
+                                                                "z_centers": z_centers, "eff_ij": eff_ij,
+                                                                "n_data": n_data, "rate_function": self.rate_function,
+                                                                "cov_sys": cov_sys, "x0": self.x0})
 
+            high_uncs = []
+            low_uncs = []
+
+
+            for k in range(len(fit_params)):
+                # Check if this should actually be the chi2 min result
+                high_uncs.append(grid_result[k]["upper_bound"] - fit_params[k])
+                low_uncs.append(fit_params[k] - grid_result[k]["lower_bound"])
+
+            chi2_grid = grid_result["chi2_grid"]
+            grid_result = grid_result[0]
+
+            print(f"Grid result keys: {grid_result.keys()}")
+
+            # # Plot the 2D chi2 surface and the marginalized PDF for x, just to visualize it.
+            # import matplotlib.pyplot as plt
+            # plt.figure(figsize=(12, 5))
+            # plt.subplot(1, 2, 1)
+            # plt.contourf(*np.meshgrid(*grid, indexing="ij"), np.exp(-0.5 * chi2_grid), levels=50)
+            # plt.colorbar(label="Likelihood")
+            # plt.xlabel("x (parameter of interest)")
+            # plt.ylabel("y (nuisance parameter)")
+            # plt.title("2D likelihood surface")
+
+            # plt.subplot(1, 2, 2)
+            # plt.plot(grid_result["grid"], grid_result["pdf"], label="Marginalized PDF for x")
+            # plt.axvline(grid_result["mode"], color="C1", linestyle="--", label="Mode")
+            # plt.axvline(grid_result["lower_bound"], color="C2", linestyle=":", label="1-sigma bounds")
+            # plt.axvline(grid_result["upper_bound"], color="C2", linestyle=":")
+            # plt.xlabel("x (parameter of interest)")
+            # plt.ylabel("Probability density")
+            # plt.title("Marginalized PDF for x")
+            # plt.legend()
+            # plt.tight_layout()
+            # plt.savefig("asymmetric_errors_demo_recent.png", dpi=150)
+            # plt.close()
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
-        # high_params = [2.5e-5, 2.15, 1.3e-4, 0.1]
-        # Ei_high = np.sum(null_counts * eff_ij * f_norms * self.rate_function(z_centers, high_params), axis=0)
-        # low_params = [2e-5, 1.5, 5e-5, -0.7]
-        # Ei_low = np.sum(null_counts * eff_ij * f_norms * self.rate_function(z_centers, low_params), axis=0)
 
         # Estimate errors on Ei
 
-        samples = np.random.multivariate_normal(fit_params, cov_x, 1000)
+        logging.debug(f"Estimating errors on Ei...")
+        n_draws = 100
+        samples = np.random.multivariate_normal(fit_params, cov_x, n_draws)
         fJ_draws = np.array([self.rate_function(z_centers, sample) for sample in samples]).T
         null_counts_draws = null_counts[:, np.newaxis]  # for broadcasting
-        eff_ij_draws = np.repeat(eff_ij[:, :, np.newaxis], 1000, axis=2)
+        eff_ij_draws = np.repeat(eff_ij[:, :, np.newaxis], n_draws, axis=2)
         f_norms_draws = np.atleast_1d(f_norms)
         f_norms_draws = f_norms_draws[:, np.newaxis]  # for broadcasting
 
@@ -702,6 +860,15 @@ class sauron_runner:
         Ei_err = np.std(Ei_draws, axis=1)
 
         Ei_16, Ei_84 = np.percentile(Ei_draws, [16, 84], axis=1)
+
+
+#        self.final_counts[survey]["binned_rate_84"] = Ei_84  # Come back and fix this! !!!!! XXX !!! XXX
+#        self.final_counts[survey]["binned_rate_16"] = Ei_16 # This should work
+
+        binned_rate_84 = Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        binned_rate_16 = Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        np.save(f"plots/binned_rate_84_{survey}.npy", binned_rate_84)
+        np.save(f"plots/binned_rate_16_{survey}.npy", binned_rate_16)
         Ei_50 = np.percentile(Ei_draws, 50, axis=1)
 
         # plt.figure(figsize=(8, 6))
@@ -710,7 +877,7 @@ class sauron_runner:
         # plt.plot(z_centers, Ei_16, label='16th Percentile', linestyle='--', color='orange')
         # plt.plot(z_centers, Ei_84, label='84th Percentile', linestyle='--', color='orange')
         # plt.plot(z_centers, Ei_50, label='Median', linestyle='-.', color='green')
-        # for i in range(1000):
+        # for i in range(n_draws):
         #     plt.plot(z_centers, Ei_draws[:, i], color='gray', alpha=0.03)
 
         # #plt.plot(z_centers, Ei_high, label='High Parameters Fit', color='red')
@@ -721,6 +888,7 @@ class sauron_runner:
         # plt.title(f"Fit and Parameter Draws for {survey}")
         # plt.legend()
         # plt.savefig(f"fit_and_draws_{survey}.png")
+
 
         self.final_counts[survey]["predicted_counts"] = Ei
         self.final_counts[survey]["x0_counts"] = x0_counts
@@ -733,12 +901,40 @@ class sauron_runner:
 
         self.final_counts[survey]["predicted_rate_16"] = Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
         self.final_counts[survey]["predicted_rate_84"] = Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+
+
         self.n_data = n_data
 
         self.final_counts[survey]["result"] = fit_params
         self.final_counts[survey]["covariance"] = cov_x
+        if marginalization_calculation:
+            self.final_counts[survey]["grid_result"] = grid_result
+            self.final_counts[survey]["high_uncs"] = high_uncs
+            self.final_counts[survey]["low_uncs"] = low_uncs
         self.final_counts[survey]["chi"] = chi_squared
 
+        if getattr(self, "rates_to_plot", None) is None:
+            self.rates_to_plot = {}
+
+        if self.rates_to_plot.get(survey) is None:
+            self.rates_to_plot[survey] = []
+
+        z_centers = self.fit_args_dict["z_centers"][survey]
+        z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
+        rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
+
+        new_plot = {
+            "type": "model",
+            "index": index,
+            "csfr_name": getattr(self, "current_csfr", None),
+            "predicted_rate_16": Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
+            "predicted_rate_84": Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0)),
+            "z_centers": z_centers,
+            "z_centers_fine": z_centers_fine,
+            "predicted_rate": rate_fine,
+            "chi": chi_squared,
+        }
+        self.rates_to_plot[survey].append(new_plot)
         if survey != "combined":
             logging.debug(f"Calculating binned redshift errors for dataset {survey}...")
             if self.fit_args_dict.get("z_centers_err", None) is None:
@@ -929,7 +1125,7 @@ class sauron_runner:
 
         return n_data
 
-    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5]):
+    def generate_chi2_map(self, survey, index, n_samples=50, extent=[1.4, 2.0, 2.0e-5, 2.6e-5], csfr = None):
         """Generate an array of chi2 values over a grid of alpha and beta values for a given survey.
         For now, this only works for the power law fit function.
         Inputs
@@ -948,9 +1144,12 @@ class sauron_runner:
             z_centers = np.tile(z_centers, int(num_surveys))
             logging.debug("updated z_centers for chi2 map:", z_centers)
 
-        param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        param_names = self.param_names
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(self.x0))]
+
+
+        rate_function = self.rate_function if csfr is None else self.rate_functions[csfr]
 
         for i, a in enumerate(np.linspace(extent[2], extent[3], n_samples)):
             for j, b in enumerate(np.linspace(extent[0], extent[1], n_samples)):
@@ -967,8 +1166,9 @@ class sauron_runner:
                                    z_centers,
                                    fit_args_dict["eff_ij"][survey],
                                    n_data,
-                                   self.rate_function,
-                                   fit_args_dict["cov_sys"][survey])
+                                   rate_function,
+                                   x0=self.x0,
+                                   cov_sys=fit_args_dict["cov_sys"][survey])
                 # Note this is now unsquared
                 chi2_map[i][j] = np.sum(chi2_result)
         return chi2_map
@@ -990,24 +1190,17 @@ class sauron_runner:
         plt.tight_layout()
         fig.tight_layout(pad=3.0)
 
+
+        #x = [0.1582277103980981, 0.2594937254128336, 0.35443046846833953, 0.4514767741491768, 0.5590717690815249, 0.6497890948447501, 0.7552742351101487, 0.8481014155403231, 0.9535865558057216, 1.044303881568947]
+        #y = [0.1433249567286628, 0.28672876407995695, 0.35811541217385745, 0.35434417851059935, 0.4816801295127702, 0.4740914969087896, 0.5889995743470519, 0.5615976557344384, 0.7922286438044143, 0.7474175568260809]
+
+        #y = np.array(y) * 1e-4
+        #ax1.scatter(x, y, label="Perret", color="C0", s=10)
         surveys = list(surveys)
         for i, survey in enumerate(surveys):
             s = survey
             if survey != "combined":
-                # ax1 = ax[0]
                 z_centers = np.array(self.fit_args_dict["z_centers"][survey])
-
-                # yerr=self.final_counts[survey]["predicted_counts_err"]
-                # ax1.errorbar(z_centers, self.final_counts[survey]["predicted_counts"],
-                #              yerr=self.final_counts[survey]["predicted_counts_err"],  fmt='o',
-                #              label=f" {survey} Sauron Prediction ", ms = 5)
-                # ax1.errorbar(z_centers, self.final_counts[survey]["observed_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["observed_counts"]),
-                #              fmt='o', label=f" {survey} Data", ms = 5)
-                # ax1.errorbar(z_centers, self.final_counts[survey]["x0_counts"],
-                #              yerr=np.sqrt(self.final_counts[survey]["x0_counts"]),
-                #              fmt='o', label=f" {survey} Initial Prediction ", ms=5)
-
 
                 yerr = np.array([self.final_counts[survey]["binned_rate_84"] - self.final_counts[survey]["binned_rate"],
                     self.final_counts[survey]["binned_rate"] - self.final_counts[survey]["binned_rate_16"]])
@@ -1035,70 +1228,256 @@ class sauron_runner:
                 extraplot_survey = surveys[-1]
 
             if survey == extraplot_survey:
-
-                z_bins = self.fit_args_dict["z_bins"][survey]
-                z_centers = self.fit_args_dict["z_centers"][survey]
-
-                z_centers_fine = np.linspace(z_centers.min(), z_centers.max(), 100)
-                rate_fine = self.rate_function(z_centers_fine, self.final_counts[survey]["result"])
-                ax1.plot(z_centers_fine, rate_fine, label="Best Fit Rate Function ", color = "k")
-                ax1.fill_between(z_centers, self.final_counts[survey]["predicted_rate_16"], self.final_counts[survey]["predicted_rate_84"], color="gray", alpha=0.5, label="1 sigma confidence region")
-
-                chi_2 = self.final_counts[survey]["chi"]
-                reduced_chi_2 = chi_2 / (len(z_centers) - len(self.final_counts[survey]["result"]))
-                props = dict(boxstyle="round", facecolor="white", alpha=0.8)
-                ax1.text(-0.9, 0.7, "$\\chi^2$ = {:.2f}\nReduced $\\chi^2$ = {:.2f}".format(np.sum(chi_2), np.sum(reduced_chi_2)),
-                          transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom", horizontalalignment="right", bbox=props)
+                smallest_x = np.inf
+                biggest_x = -np.inf
+                smallest_y = np.inf
+                biggest_y = -np.inf
+                things_to_plot = self.rates_to_plot[survey]
+                for ii, item in enumerate(things_to_plot):
+                    rate_fine = item["predicted_rate"]
+                    z_centers_fine = item["z_centers_fine"]
+                    z_centers = item["z_centers"]
+                    predicted_rate_16 = item["predicted_rate_16"]
+                    predicted_rate_84 = item["predicted_rate_84"]
 
 
-                ax1.legend()
+                    if item["csfr_name"] is not None:
+                        csfr_label = item["csfr_name"]
+                        csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
+                        # Loop through and capitalize first letter of each word
+                        for i, letter in enumerate(csfr_label):
+                            if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
+                                csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
 
-                if "combined" in surveys:
-                    non_combined_datasets = [survey for survey in surveys if survey != "combined"]
-                    label = "+".join(non_combined_datasets)
-                else:
-                    label = survey
+                        label = f"Best Fit Rate ({csfr_label} CSFR)"
+                    else:
+                        label = "Best Fit Rate "
 
-                extent_chi = [df["beta"][0] - 3 * df["beta_error"][0], df["beta"][0] + 3 * df["beta_error"][0],
-                             df["alpha"][0] - 3 * df["alpha_error"][0], df["alpha"][0] + 3 * df["alpha_error"][0]]
-                logger.debug(extent_chi)
-                chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1) # this needs to be fixed
-                # normalized_map = chi2_map # - np.min(chi2_map)   # +1 to avoid log(0)
-                chi2_map -= np.min(chi2_map)
+                    chi_2 = item["chi"]
+                    reduced_chi_2 = chi_2 / (len(z_centers) - len(self.final_counts[survey]["result"]))
 
-                # sigma_map = chi2_to_sigma(chi2_map, dof=len(z_centers) - 2)
-                sigma_map = chi2_map
+                    #label += "\n $\\chi^2_{reduced}$ " + f"= {reduced_chi_2:.2f}"
 
-                im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="plasma")
-                # ax2.contour(sigma_map, levels=[1, 2, 3], extent=[1.4, 2, 2.0e-5, 2.6e-5], colors='k', linewidths=1)
-                # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-                ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
-                plt.colorbar(im, ax=ax2, label="Δχ²")
-                # ax2.axhline(2.27e-5, color='black', linestyle='--')
-                # ax2.axvline(1.7, color='black', linestyle='--', label="Fromhaier")
-                ax2.errorbar(df["beta"], df["alpha"], xerr=df["beta_error"], yerr=df["alpha_error"], fmt="o",
-                            color="white", ms=10, label=f"Fit results {label}")
-                ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
-                ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
-                ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt="o", ms=10, label="Dilday (2010)")
-                ax2.set_xlabel("$\\beta$")
-                ax2.set_ylabel("$\\alpha$")
-                ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
-                ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
-                ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-                ax2.set_xlim(extent_chi[0], extent_chi[1])
-                ax2.set_ylim(extent_chi[2], extent_chi[3])
+                    color_index = ii + len(surveys) -1
+                    if "non_parametric" not in self.rate_function_name:
+                        ax1.plot(z_centers_fine, rate_fine, label=label, color = "C"+str(color_index))
+                    else:
+                        ax1.plot(z_centers, rate_fine, label=label, color = "C"+str(color_index))
+                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color="C"+str(color_index), alpha=0.5)
+                    # , label="1 sigma confidence region"
 
-                # Adaptively define the ticks
-                y_limits = extent_chi[2], extent_chi[3]
-                y_range = y_limits[1] - y_limits[0]
-                y_tick_spacing = y_range / 5  # Aim for around 5 ticks
-                y_tick_spacing = max(y_tick_spacing, 1e-6)  # Set a minimum spacing to avoid too many ticks
-                y_tick_spacing = min(y_tick_spacing, 1e-5)  # Set a maximum spacing to avoid too few ticks
-                y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
-                ax2.set_yticks(y_ticks)
-                ax2.set_yticklabels([f"{y_tick*1e5:.1f}" for y_tick in y_ticks])
-                ax2.legend(loc = "lower left", fontsize=9)
+                    if ii == 0:
+                        props = dict(boxstyle="round", facecolor="white", alpha=0.8)
+
+                    if item["csfr_name"] is not None:
+
+                        ax1.text(-0.55, 0.9 - ii * 0.1, "Reduced $\\chi^2$ ({} CSFR = {:.2f})".format(csfr_label, reduced_chi_2),
+                            transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom",
+                                horizontalalignment="right", bbox=props)
+                    else:
+                        ax1.text(-0.85, 0.7 - ii * 0.1, "Reduced $\\chi^2$ = {:.2f}".format(reduced_chi_2),
+                            transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom",
+                                horizontalalignment="right", bbox=props)
+
+                ax1.legend(loc = "lower right", fontsize=8, framealpha=0.5)
+
+                if "non_parametric" not in self.rate_function_name:
+
+                    if "combined" in surveys:
+                        non_combined_datasets = [survey for survey in surveys if survey != "combined"]
+                        label = "+".join(non_combined_datasets)
+                    else:
+                        label = survey
+
+
+                    param_names = self.param_names
+                    if param_names is None:
+                        param_names = ["param_" + str(i) for i in range(len(self.final_counts[survey]["result"]))]
+                    param_names = [p.replace("$", "") for p in param_names]
+                    param_names = [p.replace("\\", "") for p in param_names]
+
+
+                    df_list = self.results[s]
+
+                    if self.multiple_csfrs:
+                        csfrs = [d["csfr"].values[0] for d in df_list]
+                    else:
+                        csfrs = [None]
+
+                    extent_chi_0s = []
+                    extent_chi_1s = []
+                    extent_chi_2s = []
+                    extent_chi_3s = []
+                    for i, c in enumerate(csfrs):
+                        logging.debug(f"Processing CSFR: {c}")
+                        df = df_list[i]
+
+                        stretch_x = 5 if c != "L08" else 10
+                        stretch_y = 5
+
+                        extent_chi = [df[param_names[1]][0] - stretch_x * df[f"{param_names[1]}_error"][0],
+                                     df[param_names[1]][0] + stretch_x * df[f"{param_names[1]}_error"][0],
+                                     df[param_names[0]][0] - stretch_y * df[f"{param_names[0]}_error"][0],
+                                     df[param_names[0]][0] + stretch_y * df[f"{param_names[0]}_error"][0]]
+
+                        extent_chi_0s.append(extent_chi[0])
+                        extent_chi_1s.append(extent_chi[1])
+                        extent_chi_2s.append(extent_chi[2])
+                        extent_chi_3s.append(extent_chi[3])
+                        logging.debug(f"current df {df}")
+                        chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
+                        chi2_map -= np.min(chi2_map)
+
+                        sigma_map = chi2_map
+
+                        # Reload param names with Latex included this time.
+
+                        if not self.multiple_csfrs:
+                            # Can't do this with multiple rates from multiple CSFRs being plotted, as which would get to
+                            # be the color map? Instead, just plot contours.
+                            im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="viridis")
+                            plt.colorbar(im, ax=ax2, label="Δχ²")
+                        # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                        cs = ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
+                        contour_level = cs.allsegs[0]
+                        segment = contour_level[0]  # This is a NumPy array of shape (N, 2)
+
+                        x_coords = segment[:, 0]
+                        min_x = np.min(x_coords)
+                        if min_x < smallest_x or smallest_x is None:
+                            smallest_x = min_x
+                        if min_x > biggest_x or biggest_x is None:
+                            biggest_x = min_x
+                        y_coords = segment[:, 1]
+                        min_y = np.min(y_coords)
+                        if min_y < smallest_y or smallest_y is None:
+                            smallest_y = min_y
+                        if min_y > biggest_y or biggest_y is None:
+                            biggest_y = min_y
+                        logging.debug(f"Scatter plotting the following values: {df[param_names[1]]}, {df[param_names[0]]}")
+
+                        chi_plot_label = f"{label}"
+                        if self.multiple_csfrs:
+                            csfr_label = c
+                            csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
+                            # Loop through and capitalize first letter of each word
+                            for i, letter in enumerate(csfr_label):
+                                if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
+                                    csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
+                            chi_plot_label += f" ({csfr_label} CSFR)"
+                        ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
+                                     ms=5, label=chi_plot_label)
+                    if self.rate_function_name == "power_law":
+                        ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
+                        ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
+                        ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt="o", ms=10, label="Dilday (2010)")
+                    if "AplusB" in self.rate_function_name:
+                        ax2.errorbar(9.3e-4, 2.8e-14, xerr=3.1e-4,
+                                    yerr=1.2e-14, color="magenta", fmt="o", ms=5, label="D08)")
+                        ax2.errorbar(3.3e-4, 1.9e-14, xerr=0.2e-4, yerr=0.1e-14, color = "red", fmt="o", ms=5, label = "P12")
+                        ax2.errorbar(5.4e-4, 1.5e-14, xerr=2e-4, yerr=0.7e-14, color = "cyan", fmt="o", ms=5, label = "K08")
+                        ax2.errorbar(3.9e-4, 5.3e-14, xerr=0.7e-4, yerr=1.1e-14, color = "green", fmt="o", ms=5, label = "S06")
+                    if "power_law_dtd" in self.rate_function_name:
+                        #ax2.errorbar(2.11e-13, -1.13,  yerr=0.05,xerr=.05e-13, label = "Wiseman (2020)", color = "C0", fmt="o", ms=5)
+                        results_dict = {"G11": (-1.1, 0.1),
+                                        "P12": (-0.98, 0.05),
+                                        "M12": (-1.12, 0.08),
+                                        "W21": (-1.13, 0.05),}
+                        for i, (label, (beta, unc)) in enumerate(results_dict.items()):
+                            ax2.axhline(beta, color="C"+str(i + 3), label = label + " $\sigma$ = " + str(unc))
+                            xlim = ax2.get_xlim()
+                            #ax2.fill_between([xlim[0], xlim[1]], beta - unc, beta + unc, color="C"+str(i), alpha=0.2)
+                    if "prompt_fraction" in self.rate_function_name:
+                        plt.axvline(0.59, color = "white", linestyle = "--", label = "Simulated Value")
+                        plt.axhline(1.38e-4, color = "white", linestyle = "--")
+
+
+
+                    label_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+                    if label_names is None:
+                        label_names = param_names
+
+
+                    ax2.set_xlabel(label_names[1])
+                    ax2.set_ylabel(label_names[0])
+
+                    #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
+                    #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
+                    #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
+
+
+                    # Adaptively define the ticks
+                    extent_chi_0s = np.array(extent_chi_0s)
+                    extent_chi_1s = np.array(extent_chi_1s)
+                    extent_chi_2s = np.array(extent_chi_2s)
+                    extent_chi_3s = np.array(extent_chi_3s)
+
+                    smallest_x = np.min(extent_chi_0s)
+                    biggest_x = np.max(extent_chi_1s)
+                    smallest_y = np.min(extent_chi_2s)
+                    biggest_y = np.max(extent_chi_3s)
+
+                    #ax2.set_xlim(smallest_x, biggest_x )
+                    #ax2.set_ylim(smallest_y, biggest_y)
+                    #y_limits = smallest_y, biggest_y
+
+                    y_limits = ax2.get_ylim()
+                    y_range = y_limits[1] - y_limits[0]
+                    y_tick_spacing = y_range / 5  # Aim for around 5 ticks
+                    y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
+                    #ax2.set_yticks(y_ticks)
+
+
+                    log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
+                    norm = 10**log_norm
+                    log_norm = int(log_norm)
+                    # get current y label
+
+                    if log_norm < -1 or log_norm > 1:
+                        current_ylabel = ax2.get_ylabel()
+                        # update the y label to include the normalization factor
+                        ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                    else:
+                        norm = 1
+
+                    # Check the labels. If any are non-unique, dial up the precision until they are unique
+                    precision = 1
+                    while len(set([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])) < len(y_ticks):
+                        precision += 1
+
+                    ax2.set_yticklabels([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])
+
+                    # # Do the same for x ticks
+                    # #x_limits = smallest_x, biggest_x
+                    # x_limits = ax2.get_xlim()
+                    # x_range = x_limits[1] - x_limits[0]
+                    # x_tick_spacing = x_range / 5  # Aim for around 5 ticks
+                    # x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
+                    # #ax2.set_xticks(x_ticks)
+
+                    # log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
+                    # norm = 10**log_norm
+                    # log_norm = int(log_norm)
+
+                    # if "power_law_dtd" in self.rate_function_name:
+                    #     x_unit = "SNe yr$^{-1}$ Mpc$^{-3}$"
+                    # else:
+                    #     x_unit = ""
+
+                    # if log_norm < -1 or log_norm > 1:
+                    #     # get current x label
+                    #     current_xlabel = ax2.get_xlabel()
+                    #     # update the x label to include the normalization factor
+                    #     ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]" + f" {x_unit}")
+                    # else:
+                    #     norm = 1
+                    #  # Check the labels. If any are non-unique, dial up the precision until they are unique
+                    # precision = 1
+                    # while len(set([f"{x_tick/norm:.{precision}f}" for x_tick in x_ticks])) < len(x_ticks):
+                    #     precision += 1
+                    # ax2.set_xticklabels([f"{x_tick/norm:.{precision}f}" for x_tick in x_ticks])
+
+                    ax2.legend(loc = "upper right", fontsize=8, ncol = 2)
 
         fig.savefig("summary_plot.png")
 
@@ -1220,7 +1599,7 @@ class sauron_runner:
 
         return f_norm
 
-    def add_results(self, survey, index=None):
+    def add_results(self, survey, index=None, csfr_name=None, error_upper=None, error_lower=None):
         """ Add results for a given survey and dataset index to the results dictionary to be saved in save_results.
         Inputs
         ------
@@ -1228,6 +1607,19 @@ class sauron_runner:
             Name of the survey.
         index : int
             Dataset index.
+        csfr_name : str, optional
+            Name of the CSFR used to produce this fit (only meaningful when fitting a DTD; see
+            parse_dtd_options). If given, it's recorded as a 'csfr' column so results from different
+            assumed CSFRs can be told apart after saving.
+        error_upper : dict or array-like, optional
+            Upper (positive-side) 1-sigma uncertainty for each fitted parameter. SAURON does not
+            calculate this itself here -- this just gives a place to store it if it was computed
+            upstream (e.g. via profiling or MC draws). If a dict, keys must match the names in
+            self.param_names; if array-like, must be in the same order as self.param_names. Saved as
+            a '{param}_error_upper' column. If None (default), nothing changes from current behavior.
+        error_lower : dict or array-like, optional
+            Same as error_upper, but for the lower (negative-side) uncertainty. Saved as
+            '{param}_error_lower'.
         """
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # This needs to be updated for more parameters later
@@ -1237,26 +1629,57 @@ class sauron_runner:
             survey_name = survey
 
         result = self.final_counts[survey]["result"]
-        cov = self.final_counts[survey]["covariance"]
         chi = self.final_counts[survey]["chi"]
+        cov = self.final_counts[survey]["covariance"]
         z_bins = self.fit_args_dict["z_bins"][survey]
 
-        param_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+        param_names = self.param_names
         if param_names is None:
             param_names = ["param_" + str(i) for i in range(len(result))]
+
+
+
+        param_names = [p.replace("$", "") for p in param_names]
+        param_names = [p.replace("\\", "") for p in param_names]
 
         result_to_add = {}
         for i, p in enumerate(param_names):
             result_to_add[p] = result[i]
         for i, p in enumerate(param_names):
             result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
+
+        # Optional asymmetric (split normal) errors. Computing them is someone else's job (or not
+        # done at all) -- this just stores whatever gets passed in.
+
+        if "high_uncs" in self.final_counts[survey]:
+            high_uncs = self.final_counts[survey]["high_uncs"]
+            for i, p in enumerate(param_names):
+                result_to_add[f"{p}_error_upper"] = high_uncs[i]
+            low_uncs = self.final_counts[survey]["low_uncs"]
+            for i, p in enumerate(param_names):
+                result_to_add[f"{p}_error_lower"] = low_uncs[i]
+
+
+        # if error_upper is not None:
+        #     for i, p in enumerate(param_names):
+        #         result_to_add[f"{p}_error_upper"] = (
+        #             error_upper[p] if isinstance(error_upper, dict) else error_upper[i]
+        #         )
+        # if error_lower is not None:
+        #     for i, p in enumerate(param_names):
+        #         result_to_add[f"{p}_error_lower"] = (
+        #             error_lower[p] if isinstance(error_lower, dict) else error_lower[i]
+        #         )
+
         for i, p in enumerate(param_names):
             for j, p2 in enumerate(param_names):
                 if i < j:
                     result_to_add[f"cov_{p}_{p2}"] = cov[i, j]
 
-        result_to_add["reduced_chi_squared"] = chi / (len(z_bins) - len(param_names)) # oops this should be z center
+        result_to_add["reduced_chi_squared"] = chi / ((len(z_bins)) - len(param_names))  # This needs to be fixed!
         result_to_add["survey"] = survey_name
+        if csfr_name is not None:
+            result_to_add["csfr"] = csfr_name
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
 
@@ -1265,7 +1688,7 @@ class sauron_runner:
         The cuts are determined by the CUTS field for each survey in the config file,
         of the form:
         CUTS:
-          parameter_name: min_value, max_value      
+          parameter_name: min_value, max_value
         For example:
         DES:
           CUTS:
@@ -1279,8 +1702,8 @@ class sauron_runner:
             Name of the survey.
         subset_version : bool
             Sometimes you only want to fit the rate to a portion of a dataset. E.g., the pilot survey for Roman,
-            or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the 
-            DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets, 
+            or perhaps the deep and shallow fields for DES. In this case, we would need to apply the cuts to the
+            DUMP datasets as well. This is what subset_version is for. If True, cuts will be applied to all datasets,
             including DUMP datasets, and the cuts will be fetched from the SUBSET category in the config file
             instead of the CUTS category. If False, cuts will only be applied to the SIM and DATA datasets only, and
             the cuts will be fetched from the CUTS category in the config file.
@@ -1520,7 +1943,14 @@ class sauron_runner:
                 data_indices[s] = np.arange(1, self.fit_args_dict["n_datasets"][s] + 1)
 
             # Create a meshgrid of all possible combinations of dataset indexes across the surveys
+<<<<<<< HEAD
             min_datasets = min(len(data_indices[s]) for s in survey)
             for s in survey:
                 self.fit_args_dict[f"{s}_combined_indices"] = np.arange(1, min_datasets + 1)
                 logging.debug(f"Combined indices for survey {s}: {self.fit_args_dict[f'{s}_combined_indices']}")
+=======
+            mesh = np.meshgrid(*[data_indices[s] for s in survey], indexing="ij")
+            mesh = [m.flatten() for m in mesh]
+            for i, s in enumerate(survey):
+                self.fit_args_dict[f"{s}_combined_indices"] = mesh[i]
+>>>>>>> main

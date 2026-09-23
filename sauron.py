@@ -9,13 +9,17 @@ import math
 # Sauron modules
 from runner import sauron_runner
 
-# Configure the basic logging setup
+
+
+# # Configure the basic logging setup
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s",
     datefmt="%H:%M:%S"
 )
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def main():
     parser = argparse.ArgumentParser(description="SAURON: Survey-Agnostic volUmetric Rate Of superNovae")
@@ -35,6 +39,7 @@ def main():
     parser.add_argument("--fit-only-one-combined", "--fit1", action=argparse.BooleanOptionalAction, help="Only fit one combined dataset across all"
                         " surveys, instead of fitting as many as there are datasets. I.e., if I have 5"
                         "simulated datasets and 10 for another, I could do 5 combined datasets if this is set to False.", default=False)
+    parser.add_argument("--marginalize", "-m", action=argparse.BooleanOptionalAction, help="Calculate marginalized errors.", default=False)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -66,8 +71,18 @@ def main():
             logging.info(f"Working on survey {survey}, dataset {i+1} -------------------")
             index = i + 1
 
-            runner.fit_rate(survey, index, PROB_THRESH=PROB_THRESH)
-            runner.add_results(survey, index)
+            # If FIT_OPTIONS.CSFR in the config was a list of more than one CSFR, this loop runs once
+            # per CSFR; otherwise it runs once, exactly as before.
+            logging.debug("ALL RATE FUNCTIONS: " + str(runner.rate_functions))
+            for csfr_name in runner.csfr_names:
+                logging.info(f"  ...assuming CSFR: {csfr_name}")
+                logging.debug(f"runner.dtd_func: {runner.dtd_func}, runner.rate_function: {runner.rate_function}, runner.rate_functions: {runner.rate_functions}")
+                runner.rate_function = runner.rate_functions[csfr_name] if runner.dtd_func else runner.rate_function
+                logging.debug(f"Using rate function for CSFR: {runner.rate_function}")
+                runner.current_csfr = csfr_name
+
+                runner.fit_rate(survey, index, PROB_THRESH=PROB_THRESH)
+                runner.add_results(survey, index, csfr_name=csfr_name)
 
     # Fit all surveys together
 
@@ -87,8 +102,15 @@ def main():
 
         for index in indices:
             logging.info(f"Fitting index {index} -----------------------")
-            runner.fit_rate(surveys, index=index, PROB_THRESH=PROB_THRESH)
-            runner.add_results("combined", index=index)
+            for csfr_name in runner.csfr_names:
+
+                logging.info(f"  ...assuming CSFR: {csfr_name}")
+
+                runner.rate_function = runner.rate_functions[csfr_name] if runner.dtd_func else runner.rate_function
+                runner.current_csfr = csfr_name
+
+                runner.fit_rate(surveys, index=index, PROB_THRESH=PROB_THRESH)
+                runner.add_results("combined", index=index, csfr_name=csfr_name)
         surveys.extend(["combined"])
 
     if args.plot:

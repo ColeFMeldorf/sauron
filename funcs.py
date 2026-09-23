@@ -5,47 +5,182 @@ import pandas as pd
 import numpy as np
 import logging
 from scipy.stats import binned_statistic as binstat
-from astropy import units as u
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
-from scipy.integrate import quad
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Set to DEBUG for detailed output
 
 
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
+def calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function):
+    """Calculate the variance of the predicted counts."""
+    fJ = rate_function(zJ, x)
+    var_predict = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+    return var_predict
+
+
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
-    var_Ei = np.abs(Ei)
-    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+    var_data = n_data
+    var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+    var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
 
-    cov_stat = np.diag(var_Ei + var_Si)
+
+    cov_stat = np.diag(var_data + var_predict)
+    cov_stat_x0 = np.diag(var_data + var_predict_x0)
     if cov_sys is None:
         cov_sys = 0
     cov = cov_stat + cov_sys
+    cov_x0 = cov_stat_x0 + cov_sys
 
     inv_cov = np.linalg.pinv(cov)
-
     resid_vector = n_data - Ei
-
     chi_squared = resid_vector.T @ inv_cov @ resid_vector
 
-    # This is the X^2 contribution for each z bin. It has ALREADY been squared.
-    # This is what scipy.optimize.minimize needs.
+    # Gaussian normalization term: ln(det(Sigma(x))), using the FULL
+    # covariance matrix (including any off-diagonal cov_sys terms).
+    sign, logdet = np.linalg.slogdet(cov)
+    sign_x0, logdet_x0 = np.linalg.slogdet(cov_x0)
+    logdet = logdet - logdet_x0  # Normalize by the log determinant at x0
+    if (sign <= 0 or sign_x0 <= 0 or
+            np.min(np.linalg.eigvalsh(cov)) <= 0 or
+            np.min(np.linalg.eigvalsh(cov_x0)) <= 0):
+        logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}, sign_x0={sign_x0}); "
+                      "this usually means cov_sys is being applied in a way that makes "
+                      "the total covariance singular or indefinite.")
+        raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")
 
-    if debug:
-        logger.debug(f"Ei: {Ei}")
-        logger.debug(f"var_Ei: {var_Ei}")
-        logger.debug(f"var_Si: {var_Si}")
-        logger.debug(f"resid_vector: {resid_vector}")
-        logger.debug(f"cov_stat: {cov_stat}")
-        logger.debug(f"cov_sys: {cov_sys}")
-        logger.debug(f"cov: {cov}")
-        logger.debug(f"Chi-squared: {chi_squared}")
+    chi_squared += logdet
+
+    if np.isnan(chi_squared):
+        logger.error("Chi-squared is NaN. Check inputs and calculations.")
+        logger.error(f"x: {x}")
+        logger.error(f"var_predict: {var_predict}, logdet: {logdet}")
+        raise ValueError("Chi-squared calculation resulted in NaN.")
 
     return chi_squared
 
+#     inv_cov = np.linalg.pinv(cov)
+
+#     resid_vector = n_data - Ei
+
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # This is the X^2 contribution for each z bin. It has ALREADY been squared.
+#     # This is what scipy.optimize.minimize needs.
+
+#     # Now we calculate the Gaussian normalization term.
+#     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
+#     logger.debug(f"x: {x}, x0: {x0}")
+#     print(f"x: {x}, x0: {x0}")
+#     #logger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
+#     #log_argument = np.sqrt(var_predict / var_predict_x0)
+#     #log_argument_quadrature_summed = np.sqrt(np.sum(log_argument**2))
+
+#     #num = np.sqrt(np.sum(var_predict))
+#     #denom = np.sqrt(np.sum(var_predict_x0))
+#     #gauss_norm = 2 * np.log(num / denom)
+
+#     num = np.sqrt(var_predict)
+#     denom = np.sqrt(var_predict_x0)
+
+
+
+#    # print("###############################################")
+#     #print("x:", x, "x0:", x0)
+#     #logger.debug("num: " + str(num))
+#     #logger.debug("denom: " + str(denom))
+#     #logger.debug("Num / Denom:" + str(num / denom))
+#     gauss_norm = 2 * np.log(num / denom)
+#     gauss_norm[np.where((denom == 0) & (num == 0))] = 0  # If both are zero, set to zero.
+#     #logger.debug("gauss_norm:" + str(gauss_norm))
+#     gauss_norm = np.sum(gauss_norm)
+#     #logger.debug("gauss_norm summed:" + str(gauss_norm))
+#     #logger.debug("chi sq alone:" + str(chi_squared))
+
+#     chi_squared += np.sum(gauss_norm)
+#     #logger.debug("chi sq with gauss norm:" + str(chi_squared))
+
+#     if debug:
+#         #logger.debug(f"Ei: {Ei}")
+#         logger.debug(f"var_data: {var_data}")
+#         logger.debug(f"var_predict: {var_predict}")
+#         logger.debug(f"cov stat diag: {np.diag(cov_stat)}")
+#         #logger.debug(f"resid_vector: {resid_vector}")
+#         #logger.debug(f"cov_stat: {cov_stat}")
+#         #logger.debug(f"cov_sys: {cov_sys}")
+#         #logger.debug(f"cov: {cov}")
+#         #logger.debug(f"Chi-squared: {chi_squared}")
+
+#     if np.isnan(chi_squared):
+#         logger.error("Chi-squared is NaN. Check inputs and calculations.")
+#         logger.error(f"x: {x}, x0: {x0}")
+#         logger.error(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
+#         logger.error(f"num: {num}, denom: {denom}, gauss_norm: {gauss_norm}")
+#         raise ValueError("Chi-squared calculation resulted in NaN.")
+
+    #return chi_squared
+
+# def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=True):
+
+#     zJ = z_centers
+#     fJ = rate_function(zJ, x)
+#     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+
+#     var_data = n_data
+#     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+
+#     cov_stat = np.diag(var_data + var_predict)
+#     if cov_sys is None:
+#         cov_sys = 0
+#     cov = cov_stat + cov_sys
+
+#     inv_cov = np.linalg.pinv(cov)
+#     resid_vector = n_data - Ei
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # Gaussian normalization term: ln(det(Sigma(x))), using the FULL
+#     # covariance matrix (including any off-diagonal cov_sys terms).
+#     sign, logdet = np.linalg.slogdet(cov)
+#     if sign <= 0:
+#         logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}); "
+#                       "this usually means cov_sys is being applied in a way that makes "
+#                       "the total covariance singular or indefinite.")
+#         raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")
+
+#     chi_squared += logdet
+
+#     if np.isnan(chi_squared):
+#         logger.error("Chi-squared is NaN. Check inputs and calculations.")
+#         logger.error(f"x: {x}")
+#         logger.error(f"var_predict: {var_predict}, logdet: {logdet}")
+#         raise ValueError("Chi-squared calculation resulted in NaN.")
+
+#     return chi_squared
+
+# def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
+#     zJ = z_centers
+#     fJ = rate_function(zJ, x)
+#     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+#     var_data = n_data
+#     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+
+#     cov_stat = np.diag(var_data + var_predict)
+#     if cov_sys is None:
+#         cov_sys = 0
+#     cov = cov_stat + cov_sys
+
+#     inv_cov = np.linalg.pinv(cov)
+#     resid_vector = n_data - Ei
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # ln det(Cov(x)) -- correct normalization when Cov itself depends on x
+#     sign, logdet = np.linalg.slogdet(cov)
+#     chi_squared += logdet
+
+#     return chi_squared
 
 def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # Calculate covariance matrix term for a given systematic function and its parameters
@@ -147,136 +282,27 @@ import astropy.cosmology as cosmo
 cosmology = cosmo.LambdaCDM(H0=70, Om0=0.3, Ode0=0.7)
 
 
-def cosmic_SFR(z, a, b, c, d):
-    H0 = cosmology.H0.to("km/s*Mpc").value  # in km/s/Mpc
-    return (a + b * z) / (1 + (z / c)**d) * H0 / 100
-
-
-def cosmic_SFR_dt_dz(z, a, b, c, d):
-    H0 = cosmology.H0  # in km/s/Mpc
-    Om0 = cosmology.Om0
-    Ode0 = cosmology.Ode0
-    dt_dz = 1 / H0 / (1 + z) / np.sqrt(Ode0 + Om0 * (1 + z)**3)  # in Gyr per unit redshift
-    dt_dz = dt_dz.to("yr").value  # convert to years
-
-    return cosmic_SFR(z, a, b, c, d) * dt_dz
-
-
-def cosmic_SFR_integrated(z, a, b, c, d):
-    return quad(cosmic_SFR_dt_dz, 0, z, args=(a, b, c, d))[0]
-
-
-def AplusB_cosmicSFH(z, x):
-    """ A + B model with cosmic star formation history """
-    # Currently using values from Dilday 2008 but should be updated.
-    a = 0.0118
-    b = 0.08
-    c = 3.3
-    d = 5.2
-
-    A, B = x
-
-    rho_dot_evaluated = cosmic_SFR(z, a, b, c, d)
-    vec_rho_integrated = np.vectorize(cosmic_SFR_integrated)
-    rho_integrated_evaluated = vec_rho_integrated(z, a, b, c, d)
-    return A * rho_integrated_evaluated + B * rho_dot_evaluated
-
-
 def calculate_null_counts(z_bins, z_centers, N_gen=None, true_rate_function=None, rate_params=None,
                           time=None, solid_angle=None, cosmo=None):
     """Calculate the number of expected counts for 1 SN / Mpc^3 / yr over the survey volume and time."""
 
     # Method 1, stupid method, divide N_gen by true rate.
+    logging.debug("Ngen is {}, true_rate_function is {}, rate_params is {}".format(N_gen, true_rate_function, rate_params))
     if all(v is not None for v in [N_gen, true_rate_function, rate_params]):
-        fJ = true_rate_function(z_centers, rate_params)
+        # check if rate_params is a string (file path) or not
+
+        logging.debug(f"Calculating null counts using N_gen and true_rate_function with rate_params: {rate_params}")
+        if not isinstance(rate_params, str):
+            logging.debug(f"Using rate parameters directly: {rate_params}")
+            fJ = true_rate_function(z_centers, rate_params)
+        else:
+            # open the file
+            logging.debug(f"Reading rate parameters from file: {rate_params}")
+            df = pd.read_csv(rate_params, delim_whitespace=True, comment="#", header = None, names=["z", "rate"])
+            fJ = np.interp(z_centers, df["z"], df["rate"])
         total_counts = N_gen / fJ
-        return total_counts
 
-    # Method 2, harder but more robust method, actually calculate directly from survey parameters.
-    logging.info("Calculating null counts via direct integration...")
-    logging.info(f"Using time: {time}, solid angle: {solid_angle}")
-    logging.info(f"N_gen: {N_gen}")
-    if all(v is not None for v in [time, solid_angle]):
-        total_counts = []
-        for i in range(len(z_centers)):
-            z_min = z_bins[i]
-            z_max = z_bins[i+1]
-            count_sum = SNcount_model(z_min, z_max, RATEPAR={}, genz_wgt=lambda z, par: 1,
-                                      HzFUN_INFO=None, SOLID_ANGLE=solid_angle, GENRANGE_PEAKMJD=time, cosmo=cosmo)
-            total_counts.append(count_sum.value)
-
-    return np.array(total_counts)
-
-
-
-def SNcount_model(zMIN, zMAX, RATEPAR, genz_wgt, HzFUN_INFO, SOLID_ANGLE, GENRANGE_PEAKMJD, cosmo):
-    """Python translation of the C function SNcount_model.
-    FULL DISCLOSURE: This function was created by an AI language model (ChatGPT) 
-    based on the provided C code and documentation,
-    which was then modified by Cole, because Cole has not used C since middle school.
-     However, testing it against the SNANA it seems to give consistent results
-    to 1 - 2 sigma with the actual counts that end up in the dump files of SNANA. 
-    Since those are slightly stochastic, this is 
-    probably acceptable. My fear is that the bias is of the order ~0.1%, which could be an issue 
-    when we want to measure rates to
-    that precision. But for now, this should be sufficient for testing and development purposes.
-
-    Computes the expected number of SNe between redshifts zMIN and zMAX.
-
-    Parameters
-    ----------
-    zMIN, zMAX : float
-        Redshift integration bounds.
-
-    RATEPAR : object or dict
-        Parameters needed by genz_wgt(z, RATEPAR).
-
-    dVdz : callable
-        Function dVdz(z, HzFUN_INFO) returning comoving volume element per unit redshift.
-
-    genz_wgt : callable
-        Function genz_wgt(z, RATEPAR) giving rate * reweighting factor.
-
-    SOLID_ANGLE : float
-        Survey solid angle (same as INPUTS.SOLID_ANGLE in C).
-
-    GENRANGE_PEAKMJD : array-like of length 2
-        [MJD_min, MJD_max] — time window.
-
-    Returns
-    -------
-    float
-        Expected number of supernovae.
-    """
-
-    # number of integration bins
-    NBZ = int((zMAX - zMIN) * 1000.0)
-    if NBZ < 10:
-        NBZ = 10
-
-    dz = (zMAX - zMIN) / NBZ
-    SNsum = 0.0
-
-    # Integration loop (midpoint rule)
-    for iz in range(1, NBZ + 1):
-        ztmp = zMIN + dz * (iz - 0.5)
-
-        dVdz = cosmo.differential_comoving_volume(ztmp).to(u.Mpc**3 / u.sr).value
-
-        vtmp = dVdz
-        rtmp = genz_wgt(ztmp, RATEPAR)
-
-        tmp = rtmp * vtmp / (1.0 + ztmp)
-        SNsum += tmp
-
-    # Solid angle and time window
-    dOmega = SOLID_ANGLE
-    delMJD = GENRANGE_PEAKMJD[1] - GENRANGE_PEAKMJD[0]
-    Tyear = delMJD / 365.0
-
-    SNsum *= (dOmega * Tyear * dz)
-
-    return SNsum
+        return np.array(total_counts)
 
 
 def chi2_to_sigma(chi2_diff, dof):
