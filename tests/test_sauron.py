@@ -881,9 +881,9 @@ def test_coverage_SDSS():
         # plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
         # plt.xlabel("Chi-squared statistic")
         # plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist_SDSS.png")
-        sauron_coverage_scatterplot(df, param_1_name="alpha", param_2_name="beta", save=True,
-                                        outpath=pathlib.Path(__file__).parent /
-                                        "test_plots/test_coverage_sys_scatter_SDSS.png")
+        outpath = pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_scatter_SDSS.png"
+        outpath.parent.mkdir(parents=True, exist_ok=True)
+        sauron_coverage_scatterplot(df, param_1_name="alpha", param_2_name="beta", save=True, outpath=outpath)
 
     logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
     logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
