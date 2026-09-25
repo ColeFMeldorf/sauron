@@ -961,6 +961,8 @@ def test_coverage_SDSS_plus_DES():
         plt.xlabel("Chi-squared statistic")
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist_SDSS_plus_DES.png")
 
+        sauron_coverage_scatterplot(df, outpath=pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_scatter_SDSS_plus_DES.png")
+
 
 
     # The expected coverages are the nominal Gaussian 1σ and 2σ fractions (≈0.68 and ≈0.95), but in this
@@ -1054,7 +1056,8 @@ import numpy as np
 
 
 
-def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = "beta", save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scatter.png"):
+def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = "beta",
+save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scatter.png"):
 
 
     plt.figure(figsize = (8,4), dpi=200)
@@ -1090,25 +1093,26 @@ def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = 
                                         [average_covariance, np.mean(results[f"{b}_error"]**2)]])
 
     total_inv_cov = np.zeros((2,2))
-    for i in range(len(results)):
-        print(f"############ {i} ############")
-        print("alpha_err:", results[f"{a}_error"][i])
-        print("beta_err:", results[f"{b}_error"][i])
-        print("covariance:", results[f"cov_{a}_{b}"][i])
-        total_inv_cov += np.linalg.inv(np.array([[results[f"{a}_error"][i]**2, results[f"cov_{a}_{b}"][i]],
-                                                [results[f"cov_{a}_{b}"][i], results[f"{b}_error"][i]**2]]))
-        total_cov = np.linalg.inv(total_inv_cov)
-        print("Total Covariance Matrix:", total_cov)
+    # for i in range(len(results)):
+    #     import pdb; pdb.set_trace()
+    #     print(f"############ {i} ############")
+    #     print("alpha_err:", results[f"{a}_error"][i])
+    #     print("beta_err:", results[f"{b}_error"][i])
+    #     print("covariance:", results[f"cov_{a}_{b}"][i])
+    #     total_inv_cov += np.linalg.inv(np.array([[results[f"{a}_error"][i]**2, results[f"cov_{a}_{b}"][i]],
+    #                                             [results[f"cov_{a}_{b}"][i], results[f"{b}_error"][i]**2]]))
+    #     total_cov = np.linalg.inv(total_inv_cov)
+    #     print("Total Covariance Matrix:", total_cov)
 
-        alpha_mean = np.mean(results[a])
-        beta_mean = np.mean(results[b])
-        print("Mahalnobis distance of mean to truth using total covariance")
-        distance = np.array([alpha_mean, beta_mean]) - np.array([2.27e-5, 1.7])
-        maha_dist = distance.T @ np.linalg.inv(total_cov) @ distance
-        p_value = 1 - scipy_chi2.cdf(maha_dist, df=2)
-        print("Chi2 cdf:", scipy_chi2.cdf(maha_dist, df=2))
-        print("p_value:", p_value)
-        print("Mahalanobis Distance to Simulated Alpha & Beta:", maha_dist)
+    #     alpha_mean = np.mean(results[a])
+    #     beta_mean = np.mean(results[b])
+    #     print("Mahalnobis distance of mean to truth using total covariance")
+    #     distance = np.array([alpha_mean, beta_mean]) - np.array([2.27e-5, 1.7])
+    #     maha_dist = distance.T @ np.linalg.inv(total_cov) @ distance
+    #     p_value = 1 - scipy_chi2.cdf(maha_dist, df=2)
+    #     print("Chi2 cdf:", scipy_chi2.cdf(maha_dist, df=2))
+    #     print("p_value:", p_value)
+    #     print("Mahalanobis Distance to Simulated Alpha & Beta:", maha_dist)
 
     dist = np.array([weighted_alpha_mean, weighted_beta_mean]) - np.array([2.27e-5, 1.7])
     maha_dist = dist.T @ np.linalg.inv(average_covariance_matrix) @ dist
