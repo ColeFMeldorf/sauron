@@ -932,6 +932,8 @@ def test_coverage_SDSS_plus_DES():
     _run_cmd(cmd)
     df = pd.read_csv(outpath)
 
+    df = df[df["survey"].str.contains("combined")]
+
     sigma_1 = scipy_chi2.ppf([0.68], 2)
     sigma_2 = scipy_chi2.ppf([0.95], 2)
 
@@ -943,7 +945,10 @@ def test_coverage_SDSS_plus_DES():
     sub_one_sigma = np.where(product_2 < sigma_1)
     sub_two_sigma = np.where(product_2 < sigma_2)
 
-    plot = False
+    logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
+    logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
+
+    plot = True
     if plot:
         import matplotlib.pyplot as plt
 
@@ -954,10 +959,9 @@ def test_coverage_SDSS_plus_DES():
         plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
         plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
         plt.xlabel("Chi-squared statistic")
-        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist_SDSS.png")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist_SDSS_plus_DES.png")
 
-    logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
-    logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
+
 
     # The expected coverages are the nominal Gaussian 1σ and 2σ fractions (≈0.68 and ≈0.95), but in this
     # test we only have O(50) pseudo-experiments (len(product_2)). The realised fractions therefore have
