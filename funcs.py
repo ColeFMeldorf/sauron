@@ -217,6 +217,7 @@ def rescale_CC_for_cov(rescale_vals_and_seeds, PROB_THRESH, index, survey, datas
         sim_IA = datasets[f"{survey}_SIM_IA"]
         sim_CC_df_no_cut = datasets[f"{survey}_SIM_CC"].df
         types = sim_CC_df_no_cut.TYPE.unique()
+
         # Separate the CC SNe by type
         sim_CC_sep_on_type = [sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t] for t in types]
         # Resample each type according to the rescale values
