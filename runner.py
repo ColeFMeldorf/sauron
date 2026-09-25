@@ -19,7 +19,7 @@ from astropy.cosmology import LambdaCDM
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, chi2, turnover_power_law_forced_cty,
-                   non_parametric_histogram)
+                   non_parametric_histogram, poisson_nll)
 from SN_dataset import SN_dataset
 
 from dtd_functions import (dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary, precompute_AplusB, prompt_fraction_DTD,
@@ -728,8 +728,20 @@ class sauron_runner:
         def scaled_chi2(params, *args):
             return chi2(params * scales, *args)
 
+        def scaled_poisson_nll(params, *args):
+            return poisson_nll(params * scales, *args)
+
+        # result = minimize(
+        #             scaled_chi2,
+        #             x0=self.x0 / scales,
+        #             args=(null_counts, f_norms, z_centers, eff_ij,
+        #                     n_data, self.rate_function, self.x0, cov_sys),
+        #             method=None,
+        #             bounds=bounds,
+        #         )
+
         result = minimize(
-                    scaled_chi2,
+                    scaled_poisson_nll,
                     x0=self.x0 / scales,
                     args=(null_counts, f_norms, z_centers, eff_ij,
                             n_data, self.rate_function, self.x0, cov_sys),
@@ -747,6 +759,7 @@ class sauron_runner:
         logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
         chi_squared = result.fun
         logging.debug(f"chi_squared minimize: {chi_squared}")
+
 
         # Redo the above without the cov_sys to determine the systematic_error
         no_sys_result = minimize(
@@ -844,6 +857,10 @@ class sauron_runner:
             # plt.close()
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
+
+
+        print("FINAL Ei:", Ei)
+        print("FINAL n_data:", n_data)
 
         # Estimate errors on Ei
 
