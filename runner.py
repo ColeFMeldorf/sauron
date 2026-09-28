@@ -731,23 +731,23 @@ class sauron_runner:
         def scaled_poisson_nll(params, *args):
             return poisson_nll(params * scales, *args)
 
-        # result = minimize(
-        #             scaled_chi2,
-        #             x0=self.x0 / scales,
-        #             args=(null_counts, f_norms, z_centers, eff_ij,
-        #                     n_data, self.rate_function, self.x0, cov_sys),
-        #             method=None,
-        #             bounds=bounds,
-        #         )
-
         result = minimize(
-                    scaled_poisson_nll,
+                    scaled_chi2,
                     x0=self.x0 / scales,
                     args=(null_counts, f_norms, z_centers, eff_ij,
                             n_data, self.rate_function, self.x0, cov_sys),
                     method=None,
                     bounds=bounds,
                 )
+
+        # result = minimize(
+        #             scaled_poisson_nll,
+        #             x0=self.x0 / scales,
+        #             args=(null_counts, f_norms, z_centers, eff_ij,
+        #                     n_data, self.rate_function, self.x0, cov_sys),
+        #             method=None,
+        #             bounds=bounds,
+        #         )
 
 
         fit_params = result.x * scales

@@ -65,7 +65,7 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
-    var_data = n_data
+    var_data = Ei
     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
 
@@ -359,3 +359,46 @@ def chi2_to_sigma(chi2_diff, dof):
 
     sigma = np.sqrt(2) * erfinv(1 - 2 * p_value)
     return sigma
+
+
+def mean_of_correlated_errors(xj, Cj):
+    """ Given a list of n dimensional data vectors (xj) and each n by n covariance matrix (Cj),
+    calculate the mean of the data vectors taking into account the correlations.
+
+    Parameters:
+    xk : list of np.ndarray
+        List of n-dimensional data vectors.
+    Ck : list of np.ndarray
+        List of n by n covariance matrices corresponding to each data vector.
+
+    Returns:
+    mean : np.ndarray
+        The mean of the data vectors considering the correlations.
+    mean_cov : np.ndarray
+        The covariance matrix of the mean.
+    """
+    # Mj = []
+    # for C in Cj:
+    #     inv_term = (np.sum(np.diag(C) ** -1))**-1
+    #     main_diag_only = C * np.eye(C.shape[0], dtype=int)
+    #     Mj.append(inv_term * main_diag_only)
+
+    # a = np.zeros_like(xj[0])
+    # for M_j in Mj:
+    #     a += M_j @ xj[Mj.index(M_j)]
+
+    # mean_cov =
+    cov_combined = np.zeros_like(Cj[0])
+    for C in Cj:
+        cov_combined += np.linalg.inv(C)
+    cov_combined = np.linalg.inv(cov_combined)
+
+    logger.debug(f"Combined covariance matrix: {cov_combined}")
+
+    mean = np.zeros_like(xj[0])
+    for x, C in zip(xj, Cj):
+        mean += np.linalg.inv(C) @ x
+    mean = cov_combined @ mean
+    logger.debug(f"Weighted mean: {mean}")
+
+    return mean, cov_combined

@@ -1053,8 +1053,39 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.stats import chi2 as scipy_chi2
 import numpy as np
+from funcs import mean_of_correlated_errors
 
+from matplotlib.patches import Ellipse
 
+def plot_covariance_ellipse(ax, mean, cov, n_std=1.0, facecolor='none', **kwargs):
+    """
+    Plots a covariance error ellipse given a 2x2 covariance matrix and a center.
+    """
+    # 1. Calculate eigenvalues and eigenvectors
+    # eigh is optimized for symmetric matrices like covariance matrices
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
+    print("Eigenvalues before sorting:", eigenvalues)
+
+    # Sort eigenvalues in descending order to identify major vs minor axes
+    order = eigenvalues.argsort()[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+
+    # 2. Calculate the angle of rotation (in degrees)
+    # The angle is determined by the first component of the primary eigenvector
+    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+    print("Angle of rotation (degrees):", angle)
+
+    # 3. Calculate width and height based on the standard deviation scale
+    # The lengths of the axes are proportional to the square root of the eigenvalues
+    width, height = 2 * n_std * np.sqrt(eigenvalues)
+
+    # 4. Construct and add the Ellipse patch
+    ellipse = Ellipse(xy=mean, width=width, height=height, angle=angle,
+                      facecolor=facecolor, **kwargs)
+
+    ax.add_patch(ellipse)
+    return ellipse
 
 def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = "beta",
 save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scatter.png"):
@@ -1063,21 +1094,39 @@ save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scat
     plt.figure(figsize = (8,4), dpi=200)
     plt.subplot(1,2,1)
 
+
     a = param_1_name
     b = param_2_name
 
-    weighted_alpha_mean = np.sum(results[a] / results[f"{a}_error"]**2) / np.sum(1 / results[f"{a}_error"]**2)
-    weighted_beta_mean = np.sum(results[b] / results[f"{b}_error"]**2) / np.sum(1 / results[f"{b}_error"]**2)
+
+    list_of_xj = [np.array([results[a].iloc[i], results[b].iloc[i]]) for i in range(len(results))]
+    list_of_Cj = [np.array([[results[f"{a}_error"].iloc[i]**2, results[f"cov_{a}_{b}"].iloc[i]],
+                            [results[f"cov_{a}_{b}"].iloc[i], results[f"{b}_error"].iloc[i]**2]]) for i in range(len(results))]
+    weighted_average, mean_cov = mean_of_correlated_errors(list_of_xj, list_of_Cj)
+
+
+
+    weighted_alpha_mean = weighted_average[0]
+    weighted_beta_mean = weighted_average[1]
+    #alpha_err = np.sqrt(mean_cov[0,0])
+    #beta_err = np.sqrt(mean_cov[1,1])
+    #average_covariance = mean_cov[0,1]
+    #average_covariance_matrix = mean_cov
+
+
+
+    # weighted_alpha_mean = np.sum(results[a] / results[f"{a}_error"]**2) / np.sum(1 / results[f"{a}_error"]**2)
+    # weighted_beta_mean = np.sum(results[b] / results[f"{b}_error"]**2) / np.sum(1 / results[f"{b}_error"]**2)
     alpha_err = np.sqrt(np.sum(results[f"{a}_error"]**2)) / len(results)
     beta_err = np.sqrt(np.sum(results[f"{b}_error"]**2)) / len(results)
     average_covariance = np.mean(results[f"cov_{a}_{b}"])
-    print("Average Covariance:", average_covariance)
-    print("reduced covariance:", np.mean(results[f"cov_{a}_{b}"] / (results[f"{a}_error"] * results[f"{b}_error"])))
-    plt.errorbar(np.mean(results[a]),np.mean(results[b]), xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Mean", ms = 5)
+    # print("Average Covariance:", average_covariance)
+    # print("reduced covariance:", np.mean(results[f"cov_{a}_{b}"] / (results[f"{a}_error"] * results[f"{b}_error"])))
+    #plt.errorbar(np.mean(results[a]),np.mean(results[b]), xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Mean", ms = 5)
 
     print("Weighted Alpha Mean:", weighted_alpha_mean)
     print("Weighted Beta Mean:", weighted_beta_mean)
-    plt.errorbar(weighted_alpha_mean, weighted_beta_mean, xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Weighted Mean", ms = 10)
+    plt.errorbar(weighted_alpha_mean, weighted_beta_mean, xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Weighted Mean", ms = 5)
     print("Unweighted Alpha Mean:", np.mean(results[a]))
     print("Unweighted Beta Mean:", np.mean(results[b]))
 
@@ -1094,7 +1143,6 @@ save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scat
 
     total_inv_cov = np.zeros((2,2))
     # for i in range(len(results)):
-    #     import pdb; pdb.set_trace()
     #     print(f"############ {i} ############")
     #     print("alpha_err:", results[f"{a}_error"][i])
     #     print("beta_err:", results[f"{b}_error"][i])
@@ -1153,13 +1201,26 @@ save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scat
     for sig in [1, 2, 3]:
         plt.errorbar(results[f"{a}"][integer_sigma == sig], results[f"{b}"][integer_sigma == sig],
         xerr = results[f"{a}_error"][integer_sigma == sig], yerr = results[f"{b}_error"][integer_sigma == sig],
-        fmt = "o", label = labels[sig-1], zorder = 0, ms = 3, alpha = 0.7)
+        fmt = "o", label = labels[sig-1], zorder = 0, ms = 3, alpha = 0.3)
 
     #chivals = pos.T @ np.linalg.inv(average_covariance_matrix) @ pos
     plt.contour(X, Y, chivals, levels=[2.30, 6.18], colors=['blue', 'red'], linestyles=['--', '--'], label = "1 and 2 sigma Contours")
 
-    plt.xlim(np.min(results[f"{a}"])*0.9, np.max(results[f"{a}"])*1.1)
-    plt.ylim(np.min(results[f"{b}"])*0.9, np.max(results[f"{b}"])*1.1)
+    #from scipy.stats import multivariate_normal
+
+    list_of_xj = [np.array([results[a].iloc[i], results[b].iloc[i]]) for i in range(len(results))]
+    list_of_Cj = [np.array([[results[f"{a}_error"].iloc[i]**2, results[f"cov_{a}_{b}"].iloc[i]],
+                            [results[f"cov_{a}_{b}"].iloc[i], results[f"{b}_error"].iloc[i]**2]]) for i in range(len(results))]
+    weighted_average, mean_cov = mean_of_correlated_errors(list_of_xj, list_of_Cj)
+    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=1, edgecolor='red')
+    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=2, edgecolor='blue')
+    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=3, edgecolor='green')
+
+    #plt.xlim(np.min(results[f"{a}"])*0.9, np.max(results[f"{a}"])*1.1)
+    #plt.ylim(np.min(results[f"{b}"])*0.9, np.max(results[f"{b}"])*1.1)
+
+    plt.xlim(2.1e-5, 2.3e-5)
+    plt.ylim(1.6, 1.8)
 
     plt.xlabel(r"$\alpha$")
     plt.ylabel(r"$\beta$")
