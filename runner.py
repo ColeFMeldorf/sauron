@@ -1215,15 +1215,106 @@ class sauron_runner:
         ax1 = plt.subplot(gs[0])
         ax2 = plt.subplot(gs[1])
 
+        _rows = [
+            (0.01,   0.28,  0.09,  0.09,  np.nan, np.nan, "Cappellaro+1999"),
+            (0.03,   0.28,  0.11,  0.11,  np.nan, np.nan, "Mannucci+2005"),
+            (0.0375, 0.278, 0.112, 0.083, 0.015,  0.00,   "Dilday+2010"),
+            (0.073,  0.242, 0.029, 0.029, 0.033,  0.019,  "Frohmaier+2019"),
+            (0.1,    0.259, 0.052, 0.044, 0.028,  0.001,  "Dilday+2010"),
+            (0.10,   0.32,  0.15,  0.15,  np.nan, np.nan, "Madgwick+2003"),
+            (0.10,   0.55,  0.50,  0.29,  0.20,   0.20,   "Cappellaro+2015"),
+            (0.11,   0.37,  0.10,  0.10,  np.nan, np.nan, "Strolger 2003"),
+            (0.13,   0.20,  0.07,  0.07,  0.05,   0.05,   "Blanc+2004"),
+            (0.15,   0.307, 0.038, 0.034, 0.035,  0.005,  "Dilday+2010"),
+            (0.15,   0.32,  0.23,  0.23,  0.23,   0.06,   "Rodney & Tonry 2010"),
+            (0.16,   0.14,  0.09,  0.09,  0.06,   0.12,   "Perrett+2012"),
+            (0.2,    0.348, 0.032, 0.030, 0.082,  0.007,  "Dilday+2010"),
+            (0.20,   0.20,  0.08,  0.08,  np.nan, np.nan, "Horesh+2008"),
+            (0.25,   0.36,  0.60,  0.26,  0.12,   0.35,   "Rodney+2014"),
+            (0.25,   0.365, 0.031, 0.028, 0.182,  0.012,  "Dilday+2010"),
+            (0.25,   0.39,  0.13,  0.12,  0.10,   0.10,   "Cappellaro+2015"),
+            (0.26,   0.28,  0.07,  0.07,  0.06,   0.07,   "Perrett+2012"),
+            (0.30,   0.34,  0.16,  0.15,  np.nan, np.nan, "Botticella+2008"),
+            (0.30,   0.434, 0.037, 0.034, 0.396,  0.016,  "Dilday+2010"),
+            (0.35,   0.34,  0.19,  0.19,  0.19,   0.03,   "Rodney & Tonry 2010"),
+            (0.35,   0.36,  0.06,  0.06,  0.05,   0.06,   "Perrett+2012"),
+            (0.42,   0.46,  0.42,  0.32,  0.10,   0.13,   "Graur+2014"),
+            (0.44,   0.262, 0.229, 0.133, 0.059,  0.120,  "Okumura+2014"),
+            (0.45,   0.31,  0.15,  0.15,  0.15,   0.04,   "Rodney & Tonry 2010"),
+            (0.45,   0.36,  0.06,  0.06,  0.04,   0.05,   "Perrett+2012"),
+            (0.45,   0.52,  0.11,  0.13,  0.16,   0.16,   "Cappellaro+2015"),
+            (0.46,   0.48,  0.17,  0.17,  np.nan, np.nan, "Tonry+2003"),
+            (0.47,   0.42,  0.06,  0.06,  0.13,   0.09,   "Neill+2006"),
+            (0.47,   0.80,  0.37,  0.27,  1.66,   0.26,   "Dahlen+2008"),
+            (0.55,   0.32,  0.14,  0.14,  0.14,   0.07,   "Rodney & Tonry 2010"),
+            (0.55,   0.48,  0.06,  0.06,  0.04,   0.05,   "Perrett+2012"),
+            (0.55,   0.52,  0.10,  0.09,  np.nan, np.nan, "Pain+2002"),
+            (0.65,   0.48,  0.05,  0.05,  0.04,   0.06,   "Perrett+2012"),
+            (0.65,   0.49,  0.17,  0.17,  0.17,   0.08,   "Rodney & Tonry 2010"),
+            (0.65,   0.69,  0.19,  0.18,  0.27,   0.27,   "Cappellaro+2015"),
+            (0.74,   0.79,  0.33,  0.41,  np.nan, np.nan, "Graur+2011"),
+            (0.75,   0.51,  0.27,  0.19,  0.23,   0.19,   "Rodney+2014"),
+            (0.75,   0.58,  0.06,  0.06,  0.05,   0.07,   "Perrett+2012"),
+            (0.75,   0.68,  0.21,  0.21,  0.21,   0.14,   "Rodney & Tonry 2010"),
+            (0.80,   0.839, 0.230, 0.185, 0.060,  0.120,  "Okumura+2014"),
+            (0.83,   1.30,  0.33,  0.27,  0.73,   0.51,   "Dahlen+2008"),
+            (0.85,   0.57,  0.05,  0.05,  0.06,   0.07,   "Perrett+2012"),
+            (0.85,   0.78,  0.22,  0.22,  0.22,   0.16,   "Rodney & Tonry 2010"),
+            (0.94,   0.45,  0.22,  0.19,  0.13,   0.06,   "Graur+2014"),
+            (0.95,   0.76,  0.25,  0.25,  0.25,   0.26,   "Rodney & Tonry 2010"),
+            (0.95,   0.77,  0.08,  0.08,  0.10,   0.12,   "Perrett+2012"),
+            (1.05,   0.79,  0.28,  0.28,  0.28,   0.41,   "Rodney & Tonry 2010"),
+            (1.1,    0.74,  0.12,  0.12,  0.10,   0.13,   "Perrett+2012"),
+            (1.14,   0.705, 0.239, 0.183, 0.102,  0.103,  "Okumura+2014"),
+            (1.21,   1.32,  0.36,  0.29,  0.38,   0.32,   "Dahlen+2008"),
+            (1.23,   0.84,  0.25,  0.28,  np.nan, np.nan, "Graur+2011"),
+            (1.25,   0.64,  0.31,  0.31,  0.34,   0.23,   "Rodney+2014"),
+            (1.59,   0.45,  0.34,  0.22,  0.05,   0.09,   "Graur+2014"),
+            (1.61,   0.42,  0.39,  0.23,  0.19,   0.14,   "Dahlen+2008"),
+            (1.69,   1.02,  0.54,  0.37,  np.nan, np.nan, "Graur+2011"),
+            (1.75,   0.72,  0.45,  0.30,  0.50,   0.28,   "Rodney+2014"),
+            (2.25,   0.49,  0.95,  0.38,  0.45,   0.24,   "Rodney+2014"),
+            ]
+            # fmt: on
+
+        z        = np.array([r[0] for r in _rows])
+        rate     = np.array([r[1] for r in _rows])
+        stat_up  = np.array([r[2] for r in _rows])
+        stat_lo  = np.array([r[3] for r in _rows])
+        sys_up   = np.array([r[4] for r in _rows])
+        sys_lo   = np.array([r[5] for r in _rows])
+        source   = np.array([r[6] for r in _rows])
+
+        rate *= 1e-4
+
+
+        z_cutoff = 1.4
+        rate = rate[np.where(z < z_cutoff)]
+        z = z[np.where(z < z_cutoff)]
+        stat_up = stat_up[np.where(z < z_cutoff)]
+        stat_lo = stat_lo[np.where(z < z_cutoff)]
+        sys_up = sys_up[np.where(z < z_cutoff)]
+        sys_lo = sys_lo[np.where(z < z_cutoff)]
+        source = source[np.where(z < z_cutoff)]
+
+        print(rate)
+        print(z)
+
+        # Total (stat + sys in quadrature); falls back to stat-only where sys is N.A.
+        tot_up = np.sqrt(stat_up**2 + np.nan_to_num(sys_up)**2)
+        tot_lo = np.sqrt(stat_lo**2 + np.nan_to_num(sys_lo)**2)
+
+        tot_up *= 1e-4
+        tot_lo *= 1e-4
+
+        ax1.errorbar(z, rate, yerr=[tot_lo, tot_up], label="Data",
+        color="k", alpha = 0.3, fmt = "o")
+
+        #ax1.set_ylim(0, 1e-4)
         plt.tight_layout()
         fig.tight_layout(pad=3.0)
 
 
-        #x = [0.1582277103980981, 0.2594937254128336, 0.35443046846833953, 0.4514767741491768, 0.5590717690815249, 0.6497890948447501, 0.7552742351101487, 0.8481014155403231, 0.9535865558057216, 1.044303881568947]
-        #y = [0.1433249567286628, 0.28672876407995695, 0.35811541217385745, 0.35434417851059935, 0.4816801295127702, 0.4740914969087896, 0.5889995743470519, 0.5615976557344384, 0.7922286438044143, 0.7474175568260809]
-
-        #y = np.array(y) * 1e-4
-        #ax1.scatter(x, y, label="Perret", color="C0", s=10)
         surveys = list(surveys)
         for i, survey in enumerate(surveys):
             s = survey
@@ -1293,227 +1384,226 @@ class sauron_runner:
                         ax1.plot(z_centers, rate_fine, label=label, color = "C"+str(color_index))
                     ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color="C"+str(color_index), alpha=0.5)
                     # , label="1 sigma confidence region"
-                    f_x = [0.05504582463125854, 0.0703363706701545, 0.10193679720668135, 0.15494386472749114, 0.2008154146511998, 0.262996845072539, 0.25178381325454047, 0.3058103034270645, 0.35473994491995636, 0.45157989344700566, 0.548419841974055, 0.6523953080982056, 0.7502545910839893, 0.8521913882906709, 0.9531090274245768]
-                    f_y = [0.000027570946957244527, 0.000024788513671054033, 0.000025562153065155003, 0.000030521056092238684, 0.00003435059259758193, 0.00002883758002898668, 0.00003601373074021692, 0.00004269628409450243, 0.00003775739234030398, 0.00003749055951201835, 0.00005061882337679413, 0.000051829737326348544, 0.00006262020770162846, 0.00006144704100200326, 0.00008121774138035307]
-                    f_y = np.array(f_y)
-
-                    x = [0.05935261062199595, 0.1708633544113032, 0.30395690813771875, 0.4118706466097882, 0.5971223335035152, 0.7949640058277835, 1.0269784735197014, 1.7356115508125238]
-                    y = [0.00002534543015880397, 0.000029563247583904124, 0.000037965330504586786, 0.00003470483939484611, 0.000046914721332389875, 0.000060055326655245245, 0.00007638503126417242, 0.0000624115001994188]
-                    #f_y *= 0.7
-                    ax1.plot(f_x, f_y, label="Frohmaier Data", color="C"+str(color_index))
-                    ax1.plot(x, y, label = "Strolger Data", color="C"+str(color_index))
-                    if ii == 0:
-                        props = dict(boxstyle="round", facecolor="white", alpha=0.8)
-
-                    if item["csfr_name"] is not None:
-
-                        ax1.text(-0.55, 0.9 - ii * 0.1, "Reduced $\\chi^2$ ({} CSFR = {:.2f})".format(csfr_label, reduced_chi_2),
-                            transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom",
-                                horizontalalignment="right", bbox=props)
-                    else:
-                        ax1.text(-0.85, 0.7 - ii * 0.1, "Reduced $\\chi^2$ = {:.2f}".format(reduced_chi_2),
-                            transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom",
-                                horizontalalignment="right", bbox=props)
-
-                ax1.legend(loc = "lower right", fontsize=8, framealpha=0.5)
-
-                if "non_parametric" not in self.rate_function_name:
-
-                    if "combined" in surveys:
-                        non_combined_datasets = [survey for survey in surveys if survey != "combined"]
-                        label = "+".join(non_combined_datasets)
-                    else:
-                        label = survey
-
-
-                    param_names = self.param_names
-                    if param_names is None:
-                        param_names = ["param_" + str(i) for i in range(len(self.final_counts[survey]["result"]))]
-                    param_names = [p.replace("$", "") for p in param_names]
-                    param_names = [p.replace("\\", "") for p in param_names]
-
-
-                    df_list = self.results[s]
-
-                    if self.multiple_csfrs:
-                        csfrs = [d["csfr"].values[0] for d in df_list]
-                    else:
-                        csfrs = [None]
-
-                    extent_chi_0s = []
-                    extent_chi_1s = []
-                    extent_chi_2s = []
-                    extent_chi_3s = []
-                    for i, c in enumerate(csfrs):
-                        logging.debug(f"Processing CSFR: {c}")
-                        df = df_list[i]
-
-                        stretch_x = 5 if c != "L08" else 10
-                        stretch_y = 5
-
-                        extent_chi = [df[param_names[1]][0] - stretch_x * df[f"{param_names[1]}_error"][0],
-                                     df[param_names[1]][0] + stretch_x * df[f"{param_names[1]}_error"][0],
-                                     df[param_names[0]][0] - stretch_y * df[f"{param_names[0]}_error"][0],
-                                     df[param_names[0]][0] + stretch_y * df[f"{param_names[0]}_error"][0]]
-
-                        extent_chi_0s.append(extent_chi[0])
-                        extent_chi_1s.append(extent_chi[1])
-                        extent_chi_2s.append(extent_chi[2])
-                        extent_chi_3s.append(extent_chi[3])
-                        logging.debug(f"current df {df}")
-                        chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
-                        chi2_map -= np.min(chi2_map)
-
-                        sigma_map = chi2_map
-
-                        # Reload param names with Latex included this time.
-
-                        if not self.multiple_csfrs:
-                            # Can't do this with multiple rates from multiple CSFRs being plotted, as which would get to
-                            # be the color map? Instead, just plot contours.
-                            im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="viridis")
-                            plt.colorbar(im, ax=ax2, label="Δχ²")
-                        # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
-                        cs = ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
-                        contour_level = cs.allsegs[0]
-                        segment = contour_level[0]  # This is a NumPy array of shape (N, 2)
-
-                        x_coords = segment[:, 0]
-                        min_x = np.min(x_coords)
-                        if min_x < smallest_x or smallest_x is None:
-                            smallest_x = min_x
-                        if min_x > biggest_x or biggest_x is None:
-                            biggest_x = min_x
-                        y_coords = segment[:, 1]
-                        min_y = np.min(y_coords)
-                        if min_y < smallest_y or smallest_y is None:
-                            smallest_y = min_y
-                        if min_y > biggest_y or biggest_y is None:
-                            biggest_y = min_y
-                        logging.debug(f"Scatter plotting the following values: {df[param_names[1]]}, {df[param_names[0]]}")
-
-                        chi_plot_label = f"{label}"
-                        if self.multiple_csfrs:
-                            csfr_label = c
-                            csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
-                            # Loop through and capitalize first letter of each word
-                            for i, letter in enumerate(csfr_label):
-                                if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
-                                    csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
-                            chi_plot_label += f" ({csfr_label} CSFR)"
-                        ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
-                                     ms=5, label=chi_plot_label)
-                    if self.rate_function_name == "power_law":
-                        ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
-                        ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
-                        ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt="o", ms=10, label="Dilday (2010)")
-                    if "AplusB" in self.rate_function_name:
-                        ax2.errorbar(9.3e-4, 2.8e-14, xerr=3.1e-4,
-                                    yerr=1.2e-14, color="magenta", fmt="o", ms=5, label="D08)")
-                        ax2.errorbar(3.3e-4, 1.9e-14, xerr=0.2e-4, yerr=0.1e-14, color = "red", fmt="o", ms=5, label = "P12")
-                        ax2.errorbar(5.4e-4, 1.5e-14, xerr=2e-4, yerr=0.7e-14, color = "cyan", fmt="o", ms=5, label = "K08")
-                        ax2.errorbar(3.9e-4, 5.3e-14, xerr=0.7e-4, yerr=1.1e-14, color = "green", fmt="o", ms=5, label = "S06")
-                    if "power_law_dtd" in self.rate_function_name:
-                        #ax2.errorbar(2.11e-13, -1.13,  yerr=0.05,xerr=.05e-13, label = "Wiseman (2020)", color = "C0", fmt="o", ms=5)
-                        results_dict = {"G11": (-1.1, 0.1),
-                                        "P12": (-0.98, 0.05),
-                                        "M12": (-1.12, 0.08),
-                                        "W21": (-1.13, 0.05),}
-                        for i, (label, (beta, unc)) in enumerate(results_dict.items()):
-                            ax2.axhline(beta, color="C"+str(i + 3), label = label + " $\sigma$ = " + str(unc))
-                            xlim = ax2.get_xlim()
-                            #ax2.fill_between([xlim[0], xlim[1]], beta - unc, beta + unc, color="C"+str(i), alpha=0.2)
-                    if "prompt_fraction" in self.rate_function_name:
-                        plt.axvline(0.59, color = "white", linestyle = "--", label = "Simulated Value")
-                        plt.axhline(1.38e-4, color = "white", linestyle = "--")
 
 
 
-                    label_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
-                    if label_names is None:
-                        label_names = param_names
+
+                #     #f_x = [0.05504582463125854, 0.0703363706701545, 0.10193679720668135, 0.15494386472749114, 0.2008154146511998, 0.262996845072539, 0.25178381325454047, 0.3058103034270645, 0.35473994491995636, 0.45157989344700566, 0.548419841974055, 0.6523953080982056, 0.7502545910839893, 0.8521913882906709, 0.9531090274245768]
+                #     #f_y = [0.000027570946957244527, 0.000024788513671054033, 0.000025562153065155003, 0.000030521056092238684, 0.00003435059259758193, 0.00002883758002898668, 0.00003601373074021692, 0.00004269628409450243, 0.00003775739234030398, 0.00003749055951201835, 0.00005061882337679413, 0.000051829737326348544, 0.00006262020770162846, 0.00006144704100200326, 0.00008121774138035307]
+                #     #f_y = np.array(f_y)
+
+                #    # x = [0.05935261062199595, 0.1708633544113032, 0.30395690813771875, 0.4118706466097882, 0.5971223335035152, 0.7949640058277835, 1.0269784735197014, 1.7356115508125238]
+                #     #y = [0.00002534543015880397, 0.000029563247583904124, 0.000037965330504586786, 0.00003470483939484611, 0.000046914721332389875, 0.000060055326655245245, 0.00007638503126417242, 0.0000624115001994188]
+                #     #ax1.plot(f_x, f_y, label="Frohmaier Data", color="C"+str(color_index))
+                #     #ax1.plot(x, y, label = "Strolger Data", color="C"+str(color_index))
+                #     if ii == 0:
+                #         props = dict(boxstyle="round", facecolor="white", alpha=0.8)
+
+                #     if item["csfr_name"] is not None:
+
+                #         ax1.text(-0.55, 0.9 - ii * 0.1, "Reduced $\\chi^2$ ({} CSFR = {:.2f})".format(csfr_label, reduced_chi_2),
+                #             transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom",
+                #                 horizontalalignment="right", bbox=props)
+                #     else:
+                #         ax1.text(-0.85, 0.7 - ii * 0.1, "Reduced $\\chi^2$ = {:.2f}".format(reduced_chi_2),
+                #             transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom",
+                #                 horizontalalignment="right", bbox=props)
+
+                # ax1.legend(loc = "lower right", fontsize=8, framealpha=0.5)
+
+                # if "non_parametric" not in self.rate_function_name:
+
+                #     if "combined" in surveys:
+                #         non_combined_datasets = [survey for survey in surveys if survey != "combined"]
+                #         label = "+".join(non_combined_datasets)
+                #     else:
+                #         label = survey
 
 
-                    ax2.set_xlabel(label_names[1])
-                    ax2.set_ylabel(label_names[0])
-
-                    #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
-                    #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
-                    #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-
-
-                    # Adaptively define the ticks
-                    extent_chi_0s = np.array(extent_chi_0s)
-                    extent_chi_1s = np.array(extent_chi_1s)
-                    extent_chi_2s = np.array(extent_chi_2s)
-                    extent_chi_3s = np.array(extent_chi_3s)
-
-                    smallest_x = np.min(extent_chi_0s)
-                    biggest_x = np.max(extent_chi_1s)
-                    smallest_y = np.min(extent_chi_2s)
-                    biggest_y = np.max(extent_chi_3s)
-
-                    #ax2.set_xlim(smallest_x, biggest_x )
-                    #ax2.set_ylim(smallest_y, biggest_y)
-                    #y_limits = smallest_y, biggest_y
-
-                    y_limits = ax2.get_ylim()
-                    y_range = y_limits[1] - y_limits[0]
-                    y_tick_spacing = y_range / 5  # Aim for around 5 ticks
-                    y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
-                    #ax2.set_yticks(y_ticks)
+                #     param_names = self.param_names
+                #     if param_names is None:
+                #         param_names = ["param_" + str(i) for i in range(len(self.final_counts[survey]["result"]))]
+                #     param_names = [p.replace("$", "") for p in param_names]
+                #     param_names = [p.replace("\\", "") for p in param_names]
 
 
-                    log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
-                    norm = 10**log_norm
-                    log_norm = int(log_norm)
-                    # get current y label
+                #     df_list = self.results[s]
 
-                    if log_norm < -1 or log_norm > 1:
-                        current_ylabel = ax2.get_ylabel()
-                        # update the y label to include the normalization factor
-                        ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
-                    else:
-                        norm = 1
+                #     if self.multiple_csfrs:
+                #         csfrs = [d["csfr"].values[0] for d in df_list]
+                #     else:
+                #         csfrs = [None]
 
-                    # Check the labels. If any are non-unique, dial up the precision until they are unique
-                    precision = 1
-                    while len(set([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])) < len(y_ticks):
-                        precision += 1
+                #     extent_chi_0s = []
+                #     extent_chi_1s = []
+                #     extent_chi_2s = []
+                #     extent_chi_3s = []
+                #     for i, c in enumerate(csfrs):
+                #         logging.debug(f"Processing CSFR: {c}")
+                #         df = df_list[i]
 
-                    ax2.set_yticklabels([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])
+                #         stretch_x = 5 if c != "L08" else 10
+                #         stretch_y = 5
 
-                    # # Do the same for x ticks
-                    # #x_limits = smallest_x, biggest_x
-                    # x_limits = ax2.get_xlim()
-                    # x_range = x_limits[1] - x_limits[0]
-                    # x_tick_spacing = x_range / 5  # Aim for around 5 ticks
-                    # x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
-                    # #ax2.set_xticks(x_ticks)
+                #         extent_chi = [df[param_names[1]][0] - stretch_x * df[f"{param_names[1]}_error"][0],
+                #                      df[param_names[1]][0] + stretch_x * df[f"{param_names[1]}_error"][0],
+                #                      df[param_names[0]][0] - stretch_y * df[f"{param_names[0]}_error"][0],
+                #                      df[param_names[0]][0] + stretch_y * df[f"{param_names[0]}_error"][0]]
 
-                    # log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
-                    # norm = 10**log_norm
-                    # log_norm = int(log_norm)
+                #         extent_chi_0s.append(extent_chi[0])
+                #         extent_chi_1s.append(extent_chi[1])
+                #         extent_chi_2s.append(extent_chi[2])
+                #         extent_chi_3s.append(extent_chi[3])
+                #         logging.debug(f"current df {df}")
+                #         chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
+                #         chi2_map -= np.min(chi2_map)
 
-                    # if "power_law_dtd" in self.rate_function_name:
-                    #     x_unit = "SNe yr$^{-1}$ Mpc$^{-3}$"
-                    # else:
-                    #     x_unit = ""
+                #         sigma_map = chi2_map
 
-                    # if log_norm < -1 or log_norm > 1:
-                    #     # get current x label
-                    #     current_xlabel = ax2.get_xlabel()
-                    #     # update the x label to include the normalization factor
-                    #     ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]" + f" {x_unit}")
-                    # else:
-                    #     norm = 1
-                    #  # Check the labels. If any are non-unique, dial up the precision until they are unique
-                    # precision = 1
-                    # while len(set([f"{x_tick/norm:.{precision}f}" for x_tick in x_ticks])) < len(x_ticks):
-                    #     precision += 1
-                    # ax2.set_xticklabels([f"{x_tick/norm:.{precision}f}" for x_tick in x_ticks])
+                #         # Reload param names with Latex included this time.
 
-                    ax2.legend(loc = "upper right", fontsize=8, ncol = 2)
+                #         if not self.multiple_csfrs:
+                #             # Can't do this with multiple rates from multiple CSFRs being plotted, as which would get to
+                #             # be the color map? Instead, just plot contours.
+                #             im = ax2.imshow(sigma_map, extent=extent_chi, origin="lower", aspect="auto", cmap="viridis")
+                #             plt.colorbar(im, ax=ax2, label="Δχ²")
+                #         # Δχ² contour levels for 2 parameters (≈1σ, 2σ, 3σ confidence regions; see Numerical Recipes / χ² tables)
+                #         cs = ax2.contour(sigma_map, levels=[2.30, 6.18, 11.83], extent=extent_chi, colors="k", linewidths=1)
+                #         contour_level = cs.allsegs[0]
+                #         segment = contour_level[0]  # This is a NumPy array of shape (N, 2)
+
+                #         x_coords = segment[:, 0]
+                #         min_x = np.min(x_coords)
+                #         if min_x < smallest_x or smallest_x is None:
+                #             smallest_x = min_x
+                #         if min_x > biggest_x or biggest_x is None:
+                #             biggest_x = min_x
+                #         y_coords = segment[:, 1]
+                #         min_y = np.min(y_coords)
+                #         if min_y < smallest_y or smallest_y is None:
+                #             smallest_y = min_y
+                #         if min_y > biggest_y or biggest_y is None:
+                #             biggest_y = min_y
+                #         logging.debug(f"Scatter plotting the following values: {df[param_names[1]]}, {df[param_names[0]]}")
+
+                #         chi_plot_label = f"{label}"
+                #         if self.multiple_csfrs:
+                #             csfr_label = c
+                #             csfr_label = csfr_label.replace("$", "").replace("\\", "").replace("_", " ")
+                #             # Loop through and capitalize first letter of each word
+                #             for i, letter in enumerate(csfr_label):
+                #                 if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
+                #                     csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
+                #             chi_plot_label += f" ({csfr_label} CSFR)"
+                #         ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
+                #                      ms=5, label=chi_plot_label)
+                #     if self.rate_function_name == "power_law":
+                #         ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
+                #         ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
+                #         ax2.errorbar(2.04, 2.32e-5, xerr=0.9, yerr=0.15e-5, color = "green", fmt="o", ms=10, label="Dilday (2010)")
+                #     if "AplusB" in self.rate_function_name:
+                #         ax2.errorbar(9.3e-4, 2.8e-14, xerr=3.1e-4,
+                #                     yerr=1.2e-14, color="magenta", fmt="o", ms=5, label="D08)")
+                #         ax2.errorbar(3.3e-4, 1.9e-14, xerr=0.2e-4, yerr=0.1e-14, color = "red", fmt="o", ms=5, label = "P12")
+                #         ax2.errorbar(5.4e-4, 1.5e-14, xerr=2e-4, yerr=0.7e-14, color = "cyan", fmt="o", ms=5, label = "K08")
+                #         ax2.errorbar(3.9e-4, 5.3e-14, xerr=0.7e-4, yerr=1.1e-14, color = "green", fmt="o", ms=5, label = "S06")
+                #     if "power_law_dtd" in self.rate_function_name:
+                #         #ax2.errorbar(2.11e-13, -1.13,  yerr=0.05,xerr=.05e-13, label = "Wiseman (2020)", color = "C0", fmt="o", ms=5)
+                #         results_dict = {"G11": (-1.1, 0.1),
+                #                         "P12": (-0.98, 0.05),
+                #                         "M12": (-1.12, 0.08),
+                #                         "W21": (-1.13, 0.05),}
+                #         for i, (label, (beta, unc)) in enumerate(results_dict.items()):
+                #             ax2.axhline(beta, color="C"+str(i + 3), label = label + " $\sigma$ = " + str(unc))
+                #             xlim = ax2.get_xlim()
+                #             #ax2.fill_between([xlim[0], xlim[1]], beta - unc, beta + unc, color="C"+str(i), alpha=0.2)
+                #     if "prompt_fraction" in self.rate_function_name:
+                #         plt.axvline(0.59, color = "white", linestyle = "--", label = "Simulated Value")
+                #         plt.axhline(1.38e-4, color = "white", linestyle = "--")
+
+
+
+                #     label_names = default_parameter_name_dictionary.get(self.rate_function_name, None)
+                #     if label_names is None:
+                #         label_names = param_names
+
+
+                #     ax2.set_xlabel(label_names[1])
+                #     ax2.set_ylabel(label_names[0])
+
+
+                #     # Adaptively define the ticks
+                #     extent_chi_0s = np.array(extent_chi_0s)
+                #     extent_chi_1s = np.array(extent_chi_1s)
+                #     extent_chi_2s = np.array(extent_chi_2s)
+                #     extent_chi_3s = np.array(extent_chi_3s)
+
+                #     smallest_x = np.min(extent_chi_0s)
+                #     biggest_x = np.max(extent_chi_1s)
+                #     smallest_y = np.min(extent_chi_2s)
+                #     biggest_y = np.max(extent_chi_3s)
+
+                #     #ax2.set_xlim(smallest_x, biggest_x )
+                #     #ax2.set_ylim(smallest_y, biggest_y)
+                #     #y_limits = smallest_y, biggest_y
+
+                #     y_limits = ax2.get_ylim()
+                #     y_range = y_limits[1] - y_limits[0]
+                #     y_tick_spacing = y_range / 5  # Aim for around 5 ticks
+                #     y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
+                #     #ax2.set_yticks(y_ticks)
+
+
+                #     log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
+                #     norm = 10**log_norm
+                #     log_norm = int(log_norm)
+                #     # get current y label
+
+                #     if log_norm < -1 or log_norm > 1:
+                #         current_ylabel = ax2.get_ylabel()
+                #         # update the y label to include the normalization factor
+                #         ax2.set_ylabel(f"{current_ylabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]")
+                #     else:
+                #         norm = 1
+
+                #     # Check the labels. If any are non-unique, dial up the precision until they are unique
+                #     precision = 1
+                #     while len(set([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])) < len(y_ticks):
+                #         precision += 1
+
+                #    # ax2.set_yticklabels([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])
+
+                #     # # Do the same for x ticks
+                #     # #x_limits = smallest_x, biggest_x
+                #     # x_limits = ax2.get_xlim()
+                #     # x_range = x_limits[1] - x_limits[0]
+                #     # x_tick_spacing = x_range / 5  # Aim for around 5 ticks
+                #     # x_ticks = np.arange(np.ceil(x_limits[0] / x_tick_spacing) * x_tick_spacing, np.floor(x_limits[1] / x_tick_spacing) * x_tick_spacing + x_tick_spacing, x_tick_spacing)
+                #     # #ax2.set_xticks(x_ticks)
+
+                #     # log_norm = np.floor(np.log10(np.abs(max(x_ticks))))
+                #     # norm = 10**log_norm
+                #     # log_norm = int(log_norm)
+
+                #     # if "power_law_dtd" in self.rate_function_name:
+                #     #     x_unit = "SNe yr$^{-1}$ Mpc$^{-3}$"
+                #     # else:
+                #     #     x_unit = ""
+
+                #     # if log_norm < -1 or log_norm > 1:
+                #     #     # get current x label
+                #     #     current_xlabel = ax2.get_xlabel()
+                #     #     # update the x label to include the normalization factor
+                #     #     ax2.set_xlabel(f"{current_xlabel} ["+r"$\times"+"10^"+"{"+str(log_norm)+"}$]" + f" {x_unit}")
+                #     # else:
+                #     #     norm = 1
+                #     #  # Check the labels. If any are non-unique, dial up the precision until they are unique
+                #     # precision = 1
+                #     # while len(set([f"{x_tick/norm:.{precision}f}" for x_tick in x_ticks])) < len(x_ticks):
+                #     #     precision += 1
+                #     # ax2.set_xticklabels([f"{x_tick/norm:.{precision}f}" for x_tick in x_ticks])
+
+                #     ax2.legend(loc = "upper right", fontsize=8, ncol = 2)
 
         fig.savefig("summary_plot.png")
 
@@ -1603,6 +1693,9 @@ class sauron_runner:
                     plt.savefig(path)
             else:
                 cov_sys = None
+
+            #logging.debug(f"Including a 5% systematic uncertainty due to area uncertainty.")
+            #cov_sys *= np.eye(cov_sys.shape[0]) * 1.05
             self.fit_args_dict["cov_sys"][survey] = cov_sys
 
     def calculate_f_norm(self, survey, index):
