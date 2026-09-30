@@ -119,7 +119,12 @@ def _check_regression(results_path, regression_path, cols, rtol=None, atol=None)
             logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
                            f"Please check if this is expected. ")
             logger.warning(str(e))
-        np.testing.assert_allclose(results[col], regression[col], rtol=rtol, atol=atol)
+        logger.debug(f"Checking {col}")
+        logger.debug(f"results[col]: {results[col]}")
+        logger.debug(f"regression[col]: {regression[col]}")
+        logger.debug(f"rtol: {rtol}, atol: {atol}")
+        # , rtol=rtol, atol=atol
+        np.testing.assert_allclose(results[col], regression[col])
 
 def _run_cmd(cmd):
     result = subprocess.run(cmd, capture_output=False, text=True)

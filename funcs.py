@@ -65,7 +65,7 @@ def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, c
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
-    var_data = Ei
+    var_data = n_data
     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
 

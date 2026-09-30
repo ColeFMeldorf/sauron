@@ -1095,7 +1095,7 @@ class sauron_runner:
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-                n_data /= bias_correction
+                #n_data /= bias_correction
                 logger.debug(f"Total n_data after bias correction using scone cut: {n_data}")
                 if debug:
                     plt.clf()
