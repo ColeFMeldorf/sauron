@@ -665,18 +665,18 @@ class sauron_runner:
         binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
 
 
-        fJ_0 = self.rate_function(z_centers, self.x0)
-        Ei = np.sum(null_counts * eff_ij * f_norm * fJ_0, axis=0)
-        var_Ei = np.abs(Ei)
-        var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ_0**2, axis=0)
+        # fJ_0 = self.rate_function(z_centers, self.x0)
+        # Ei = np.sum(null_counts * eff_ij * f_norm * fJ_0, axis=0)
+        # var_Ei = np.abs(Ei)
+        # var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ_0**2, axis=0)
 
-        cov_stat = np.diag(var_Ei + var_Si)
+        # cov_stat = np.diag(var_Ei + var_Si)
 
-        cov = cov_stat + cov_sys
+        # cov = cov_stat + cov_sys
 
-        cov_mat_in_rate = cov / (np.sum(null_counts * eff_ij * f_norms, axis=0)[:, None] *
-             np.sum(null_counts * eff_ij * f_norms, axis=0)[None, :])
-        np.save(f"plots/cov_mat_in_rate_{survey}.npy", cov_mat_in_rate)
+        # cov_mat_in_rate = cov / (np.sum(null_counts * eff_ij * f_norms, axis=0)[:, None] *
+        #      np.sum(null_counts * eff_ij * f_norms, axis=0)[None, :])
+        # np.save(f"plots/cov_mat_in_rate_{survey}.npy", cov_mat_in_rate)
 
         np.save(f"plots/binned_rate_{survey}.npy", binned_rate)
         if "non_parametric" in self.rate_function_name:
@@ -865,8 +865,12 @@ class sauron_runner:
 #        self.final_counts[survey]["binned_rate_84"] = Ei_84  # Come back and fix this! !!!!! XXX !!! XXX
 #        self.final_counts[survey]["binned_rate_16"] = Ei_16 # This should work
 
-        binned_rate_84 = Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
-        binned_rate_16 = Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        #binned_rate_84 = Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        #binned_rate_16 = Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        binned_rate_84 = (n_data + np.sqrt(n_data)) / \
+         (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        binned_rate_16 = (n_data - np.sqrt(n_data)) / \
+        (np.sum(null_counts * eff_ij * f_norms, axis=0))
         np.save(f"plots/binned_rate_84_{survey}.npy", binned_rate_84)
         np.save(f"plots/binned_rate_16_{survey}.npy", binned_rate_16)
         Ei_50 = np.percentile(Ei_draws, 50, axis=1)
@@ -1263,8 +1267,15 @@ class sauron_runner:
                         ax1.plot(z_centers_fine, rate_fine, label=label, color = "C"+str(color_index))
                     else:
                         ax1.plot(z_centers, rate_fine, label=label, color = "C"+str(color_index))
-                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color="C"+str(color_index), alpha=0.5)
-                    # , label="1 sigma confidence region"
+
+                    if len(things_to_plot) == 1:
+                        label = "1 sigma confidence region"
+                        color = "gray"
+                    else:
+                        label = None
+                        color = "C"+str(color_index)
+
+                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color=color, alpha=0.5, label="1 sigma confidence region")
 
                     if ii == 0:
                         props = dict(boxstyle="round", facecolor="white", alpha=0.8)
