@@ -21,7 +21,8 @@ DES_DATALIKE_SIM = "/project2/rkessler/SURVEYS/" \
     "PIP_D5YR_RATEPZ_NEWCC_SIM_NOMINAL_DATADESSIM_IA-0001/FITOPT000.FITRES.gz"
 SDSS_DATALIKE_SIM = "/project2/rkessler/SURVEYS/ROMAN/USERS/cmeldorf/CFM-SDSS-JH8/5_MERGE/"\
     "MERGE_SDSSFIT_SDSS/output/PIP_CFM-SDSS-JH8_SDSS-0001/FITOPT000.FITRES.gz"
-
+POWER_LAW_DTD_CONFIG="/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again_dtd.yml"
+APLUSB_CONFIG = "/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again_AplusB.yml"
 
 def get_function_name():
     return sys._getframe(2).f_code.co_name
@@ -285,16 +286,23 @@ def fig_7():
 def fig_10():
     run_a_cmd(SDSS_PLUS_DES_RATE_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
 
+def fig_11():
+    run_a_cmd(POWER_LAW_DTD_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
+
+def fig_12():
+    run_a_cmd(APLUSB_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
 
 def run_all_fig_scripts():
-
-    #fig_1_left_3_left_and_8()
-    #fig_1_right_3_right_and_9()
     # Figure 2 is a diagram
-    #fig_4_and_6()
-    #fig_5()
-    #fig_7()
-    fig_10()
+
+    # fig_1_left_3_left_and_8()
+    # fig_1_right_3_right_and_9()
+    # fig_4_and_6()
+    # fig_5()
+    # fig_7()
+    # fig_10()
+    #fig_11()
+    fig_12()
 
 
 

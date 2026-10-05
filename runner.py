@@ -1418,10 +1418,6 @@ class sauron_runner:
                     ax2.set_xlabel(label_names[1])
                     ax2.set_ylabel(label_names[0])
 
-                    #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
-                    #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
-                    #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-
 
                     # Adaptively define the ticks
                     extent_chi_0s = np.array(extent_chi_0s)
@@ -1442,7 +1438,7 @@ class sauron_runner:
                     y_range = y_limits[1] - y_limits[0]
                     y_tick_spacing = y_range / 5  # Aim for around 5 ticks
                     y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
-                    #ax2.set_yticks(y_ticks)
+                    ax2.set_yticks(y_ticks)
 
 
                     log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
