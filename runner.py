@@ -17,6 +17,7 @@ from scipy import stats
 from astropy.cosmology import LambdaCDM
 
 # Sauron modules
+from config_loader import load_config
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, chi2, turnover_power_law_forced_cty,
                    non_parametric_histogram)
@@ -143,12 +144,17 @@ class sauron_runner:
         self.rate_functions = {}
         self.multiple_csfrs = False
 
+    @property
+    def config(self):
+        """The fully resolved config (parents merged in), loaded once on first use."""
+        if getattr(self, "_config", None) is None:
+            self._config = load_config(self.args.config)
+        return self._config
+
     def parse_global_fit_options(self):
         """ Parse global fit options (I.e. those that apply to all surveys) from the config file."""
-        with open(self.args.config, "r") as f:
-            files_input = yaml.safe_load(f)
 
-        fit_options = files_input.get("FIT_OPTIONS", {})
+        fit_options = self.config.get("FIT_OPTIONS", {})
 
 
 
@@ -373,7 +379,7 @@ class sauron_runner:
         TODO: Turn this into smaller functions for readability.
         """
 
-        files_input = yaml.safe_load(open(self.args.config, "r"))
+        files_input = self.config
         surveys = list(files_input.keys())
         if "FIT_OPTIONS" in surveys:
             surveys.remove("FIT_OPTIONS")
@@ -1720,8 +1726,7 @@ class sauron_runner:
             the cuts will be fetched from the CUTS category in the config file.
         """
         datasets = self.datasets
-        with open(self.args.config, "r") as config_file:
-            files_input = yaml.safe_load(config_file)[survey]
+        files_input = self.config[survey]
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # if n_datasets == 1:
         #     for datatype in ["ALL", "IA", "CC"]:
