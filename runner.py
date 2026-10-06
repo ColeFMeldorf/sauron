@@ -1281,7 +1281,7 @@ class sauron_runner:
                         label = None
                         color = "C"+str(color_index)
 
-                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color=color, alpha=0.5, label="1 sigma confidence region")
+                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color=color, alpha=0.5, label=label)
 
                     if ii == 0:
                         props = dict(boxstyle="round", facecolor="white", alpha=0.8)
@@ -1341,7 +1341,6 @@ class sauron_runner:
                         extent_chi_1s.append(extent_chi[1])
                         extent_chi_2s.append(extent_chi[2])
                         extent_chi_3s.append(extent_chi[3])
-                        logging.debug(f"current df {df}")
                         chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
                         chi2_map -= np.min(chi2_map)
 
@@ -1395,7 +1394,6 @@ class sauron_runner:
                         ax2.errorbar(5.4e-4, 1.5e-14, xerr=2e-4, yerr=0.7e-14, color = "cyan", fmt="o", ms=5, label = "K08")
                         ax2.errorbar(3.9e-4, 5.3e-14, xerr=0.7e-4, yerr=1.1e-14, color = "green", fmt="o", ms=5, label = "S06")
                     if "power_law_dtd" in self.rate_function_name:
-                        #ax2.errorbar(2.11e-13, -1.13,  yerr=0.05,xerr=.05e-13, label = "Wiseman (2020)", color = "C0", fmt="o", ms=5)
                         results_dict = {"G11": (-1.1, 0.1),
                                         "P12": (-0.98, 0.05),
                                         "M12": (-1.12, 0.08),

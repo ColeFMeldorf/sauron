@@ -23,6 +23,7 @@ SDSS_DATALIKE_SIM = "/project2/rkessler/SURVEYS/ROMAN/USERS/cmeldorf/CFM-SDSS-JH
     "MERGE_SDSSFIT_SDSS/output/PIP_CFM-SDSS-JH8_SDSS-0001/FITOPT000.FITRES.gz"
 POWER_LAW_DTD_CONFIG="/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again_dtd.yml"
 APLUSB_CONFIG = "/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again_AplusB.yml"
+HOURGLASS_CONFIG = "/home/colefmeldorf/sauron/config_files/config_hourglass_photoz.yml"
 
 def get_function_name():
     return sys._getframe(2).f_code.co_name
@@ -254,6 +255,71 @@ def binned_rate_plot(starttime):
     plt.savefig(generated_figures_dir / "binned_rate_comparison.png")
 
 
+def turnover_power_law(z, x,z_turn=1):
+    alpha1, beta1, alpha2, beta2 = x
+    fJ = np.where(z < z_turn,
+                alpha1 * (1 + z)**beta1,
+                alpha2 * (1 + z)**beta2)
+    return fJ
+
+
+def binned_rate_hourglass(df):
+    LaurenNicePlots()
+
+    plt.figure(figsize=(10, 5), dpi = 200)
+
+    plt.subplot(1, 2, 1)
+    z_bins = np.linspace(0.2, 2.8, 16)
+    z_centers = 0.5 * (z_bins[1:] + z_bins[:-1])
+
+    all_results = np.zeros((len(df), len(z_centers)))
+    for row in df.iterrows():
+        rate_vals = [row[1][f"param_{i}"] for i in range(len(z_centers))]
+        all_results[row[0], :] = rate_vals
+
+    mean_rate = np.mean(all_results, axis=0)
+    percentiles = np.percentile(all_results, [16, 84], axis=0)
+
+    z_fine = np.linspace(z_centers[0], z_centers[-1], 100)
+    plt.plot(z_fine, turnover_power_law(z_fine, [2.27e-5, 1.7, 7.5e-5, -0.1]), label = "Simulated Rate", color = "gray", ls = "--")
+
+    unc_high = percentiles[1] - mean_rate
+    unc_low = mean_rate - percentiles[0]
+    plt.errorbar(z_centers, mean_rate, yerr=[unc_low, unc_high], fmt='o', color='black', label="Roman Forecast")
+    plt.xlabel("Redshift")
+    plt.ylabel("Volumetric Rate (SNe yr$^{-1}$ Mpc$^{-3}$)")
+
+    # Redshift values and symmetric errors
+    redshift = np.array([0.07, 0.19, 0.33, 0.44, 0.61, 0.81, 1.05, 1.73])
+    redshift_err = np.array([0.06, 0.06, 0.08, 0.03, 0.14, 0.07, 0.17, 0.52])
+
+    # R_Ia values with asymmetric errors [lower, upper]
+    R_Ia = np.array([0.28, 0.30, 0.38, 0.35, 0.47, 0.60, 0.76, 0.61]) *1e-4
+    R_Ia_err_lo = np.array([0.03, 0.02, 0.02, 0.04, 0.03, 0.04, 0.06, 0.10])*1e-4
+    R_Ia_err_hi = np.array([0.04, 0.02, 0.02, 0.05, 0.03, 0.04, 0.06, 0.14])*1e-4
+
+    # plt.errorbar expects asymmetric errors as shape (2, N): [lower, upper]
+    R_Ia_err = np.array([R_Ia_err_lo, R_Ia_err_hi])
+
+    plt.errorbar(redshift, R_Ia, xerr=redshift_err, yerr=R_Ia_err, fmt='o', label = "S20 Data Compendium")
+    plt.legend(loc="lower right")
+    ########################################################################
+
+    plt.subplot(1, 2, 2)
+    plt.grid(True)
+    plt.errorbar(redshift, (R_Ia_err_hi + R_Ia_err_lo)/2, xerr=redshift_err, fmt='o', label="S20 Data Compendium")
+    mean_err = (unc_high + unc_low) / 2
+    plt.errorbar(z_centers, mean_err, xerr  = np.diff(z_centers)[0]/2, fmt='o', color='black', label="Roman Forecast")
+    plt.ylabel("1$\sigma$ Uncertainty in Rate (SNe yr$^{-1}$ Mpc$^{-3}$)")
+    plt.xlabel("Redshift")
+    plt.legend()
+    plt.ylim(0, 1.5e-5)
+    plt.suptitle("Roman Forecast vs. S20 Data Compendium ", fontsize = 16)
+    plt.tight_layout()
+    generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
+    plt.savefig(generated_figures_dir / "roman_forecast_vs_s20_data_compendium.png")
+
+
 def fig_1_left_3_left_and_8():
     run_a_cmd(DES_ONLY_RATE_CONFIG,
     ["/home/colefmeldorf/sauron/plots/efficiency_matrix_DES.png",
@@ -286,11 +352,21 @@ def fig_7():
 def fig_10():
     run_a_cmd(SDSS_PLUS_DES_RATE_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
 
+
 def fig_11():
     run_a_cmd(POWER_LAW_DTD_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
 
+
 def fig_12():
     run_a_cmd(APLUSB_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
+
+
+def fig_13():
+    run_a_cmd(HOURGLASS_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
+    binned_rate_hourglass(pd.read_csv("sauron_output.csv"))
+
+def fig_14():
+    pass
 
 def run_all_fig_scripts():
     # Figure 2 is a diagram
@@ -301,8 +377,9 @@ def run_all_fig_scripts():
     # fig_5()
     # fig_7()
     # fig_10()
-    #fig_11()
-    fig_12()
+    # fig_11()
+    # fig_12()
+    fig_13()
 
 
 
