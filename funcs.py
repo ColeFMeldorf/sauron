@@ -19,48 +19,6 @@ def calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function):
     return var_predict
 
 
-def poisson_nll(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
-    """Cash (Poisson) statistic: -2 * ln(L_poisson), up to an additive constant.
-
-    Same call signature as funcs.chi2() (including the unused x0 argument) so
-    it can be swapped in directly inside sauron_runner.fit_rate()'s minimize()
-    calls. Smaller is better, exactly like chi2 -- pass this to minimize() the
-    same way.
-    """
-    zJ = z_centers
-    fJ = rate_function(zJ, x)
-    m_i = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)  # model-predicted counts (= "Ei" elsewhere)
-    n_i = np.asarray(n_data, dtype=float)
-
-    # Poisson means must be positive. During minimization the optimizer can
-    # briefly wander into unphysical territory (e.g. negative alpha), so
-    # clip instead of raising -- this keeps the objective function smooth
-    # enough for a gradient-based optimizer instead of blowing up.
-    m_i = np.clip(m_i, 1e-10, None)
-
-    # n_i * ln(n_i / m_i) --  guarded so that n_i == 0 bins contribute 0
-    # (the true limit of n*ln(n) as n -> 0) instead of nan from ln(0).
-    log_term = np.zeros_like(n_i)
-    nonzero = n_i > 0
-    log_term[nonzero] = n_i[nonzero] * np.log(n_i[nonzero] / m_i[nonzero])
-
-    cstat = 2.0 * np.sum(m_i - n_i + log_term)
-
-    if cov_sys is not None and np.any(cov_sys):
-        # Approximate treatment of systematics: an additive Gaussian penalty
-        # on top of the exact Poisson statistical term. See module docstring.
-        resid_vector = n_i - m_i
-        inv_cov_sys = np.linalg.pinv(np.asarray(cov_sys, dtype=float))
-        cstat += resid_vector.T @ inv_cov_sys @ resid_vector
-
-    if np.isnan(cstat):
-        logger.error("Poisson NLL (Cash statistic) is NaN.")
-        logger.error(f"x: {x}")
-        logger.error(f"m_i: {m_i}, n_i: {n_i}")
-        raise ValueError("Poisson NLL calculation resulted in NaN.")
-
-    return cstat
-
 def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)

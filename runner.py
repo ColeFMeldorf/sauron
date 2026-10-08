@@ -19,7 +19,7 @@ from astropy.cosmology import LambdaCDM
 # Sauron modules
 from funcs import (power_law, turnover_power_law, calculate_covariance_matrix_term, rescale_CC_for_cov,
                    calculate_null_counts, chi2, turnover_power_law_forced_cty,
-                   non_parametric_histogram, poisson_nll)
+                   non_parametric_histogram)
 from SN_dataset import SN_dataset
 
 from dtd_functions import (dtd_rate, power_law_DTD, binned_DTD, csfr_func_name_dictionary, precompute_AplusB, prompt_fraction_DTD,
@@ -728,8 +728,6 @@ class sauron_runner:
         def scaled_chi2(params, *args):
             return chi2(params * scales, *args)
 
-        def scaled_poisson_nll(params, *args):
-            return poisson_nll(params * scales, *args)
 
         result = minimize(
                     scaled_chi2,
@@ -739,15 +737,6 @@ class sauron_runner:
                     method=None,
                     bounds=bounds,
                 )
-
-        # result = minimize(
-        #             scaled_poisson_nll,
-        #             x0=self.x0 / scales,
-        #             args=(null_counts, f_norms, z_centers, eff_ij,
-        #                     n_data, self.rate_function, self.x0, cov_sys),
-        #             method=None,
-        #             bounds=bounds,
-        #         )
 
 
         fit_params = result.x * scales
@@ -859,8 +848,6 @@ class sauron_runner:
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
 
 
-        print("FINAL Ei:", Ei)
-        print("FINAL n_data:", n_data)
 
         # Estimate errors on Ei
 
@@ -1095,7 +1082,7 @@ class sauron_runner:
                 bias_correction = datasets[f"{survey}_SIM_ALL"].z_counts(z_bins, prob_thresh=PROB_THRESH) / \
                                     datasets[f"{survey}_SIM_IA"].z_counts(z_bins)
                 bias_correction = np.nan_to_num(bias_correction, nan=1.0, posinf=1.0, neginf=1.0)
-                #n_data /= bias_correction
+                n_data /= bias_correction
                 logger.debug(f"Total n_data after bias correction using scone cut: {n_data}")
                 if debug:
                     plt.clf()
