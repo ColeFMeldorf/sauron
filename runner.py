@@ -734,6 +734,7 @@ class sauron_runner:
         def scaled_chi2(params, *args):
             return chi2(params * scales, *args)
 
+
         result = minimize(
                     scaled_chi2,
                     x0=self.x0 / scales,
@@ -753,6 +754,7 @@ class sauron_runner:
         logging.debug(f"Standard errors: {np.sqrt(np.diag(cov_x))}")
         chi_squared = result.fun
         logging.debug(f"chi_squared minimize: {chi_squared}")
+
 
         # Redo the above without the cov_sys to determine the systematic_error
         no_sys_result = minimize(
@@ -850,6 +852,8 @@ class sauron_runner:
             # plt.close()
         fJ = self.rate_function(z_centers, fit_params)
         Ei = np.sum(null_counts * eff_ij * f_norms * fJ, axis=0)
+
+
 
         # Estimate errors on Ei
 

@@ -107,6 +107,33 @@ def _coverage_chi2(df, truth, param_names=("alpha", "beta")):
     return chi2_vals
 
 
+def _check_regression(results_path, regression_path, cols, rtol=None, atol=None):
+    if rtol is None:
+        rtol = global_rtol
+    results = pd.read_csv(results_path)
+    regression = pd.read_csv(regression_path)
+    for i, col in enumerate(cols):
+        try:
+            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
+        except AssertionError as e:
+            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
+                           f"Please check if this is expected. ")
+            logger.warning(str(e))
+        logger.debug(f"Checking {col}")
+        logger.debug(f"results[col]: {results[col]}")
+        logger.debug(f"regression[col]: {regression[col]}")
+        logger.debug(f"rtol: {rtol}, atol: {atol}")
+        # , rtol=rtol, atol=atol
+        np.testing.assert_allclose(results[col], regression[col], rtol=rtol, **({} if atol is None else {"atol": atol}))
+
+def _run_cmd(cmd):
+    result = subprocess.run(cmd, capture_output=False, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Command failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
 # ##########################TESTS BELOW############################################################
 
 def test_regression_specz():
@@ -127,17 +154,8 @@ def test_regression_specz():
             f"stderr:\n{result.stderr}"
         )
 
-    results = pd.read_csv(outpath)
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/test_regnopz_regression.csv")
-    # Updated from delta alpha and delta beta to just alpha beta. Difference ~10^-4 level.
-    for i, col in enumerate(["alpha", "beta", "reduced_chi_squared"]):
-        try:
-            np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
-        except AssertionError as e:
-            logger.warning(f"Values for {col} have changed more than the warning tolerance of {warning_rtol}. "
-                           f"Please check if this is expected. ")
-            logger.warning(str(e))
-        np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+    cols = ["alpha", "beta", "reduced_chi_squared"]
+    _check_regression(outpath, pathlib.Path(__file__).parent / "test_regression/test_regnopz_regression.csv", cols)
 
 
 
@@ -905,6 +923,71 @@ def test_coverage_SDSS():
     np.testing.assert_array_less(0.05, p_value.pvalue)
 
 
+
+def test_coverage_SDSS_plus_DES():
+    """In this test we check the coverage properties of SAURON on the 50 SDSS sim datasets.
+        We should recover the truth (2.27e-5, 1.7) within 1 sigma 68% of the time and within 2 sigma 95% of the time.
+    """
+    outpath = pathlib.Path(__file__).parent / "test_output/test_coverage_SDSS_output.csv"
+    if os.path.exists(outpath):
+        os.remove(outpath)
+    sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_SDSS_DES_coverage.yml"
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5"]
+    _run_cmd(cmd)
+    df = pd.read_csv(outpath)
+
+    df = df[df["survey"].str.contains("combined")]
+
+    sigma_1 = scipy_chi2.ppf([0.68], 2)
+    sigma_2 = scipy_chi2.ppf([0.95], 2)
+
+    product_2 = _coverage_chi2(df, truth=[2.27e-5, 1.7], param_names=("alpha", "beta"))
+
+    for i in range(len(product_2)):
+        logger.debug(f"Product 2 for dataset {i}: {product_2[i]}")
+
+    sub_one_sigma = np.where(product_2 < sigma_1)
+    sub_two_sigma = np.where(product_2 < sigma_2)
+
+    logger.debug(f"Below 1 sigma: {np.size(sub_one_sigma[0])/np.size(product_2)}")
+    logger.debug(f"Below 2 sigma: {np.size(sub_two_sigma[0])/np.size(product_2)}")
+
+    plot = True
+    if plot:
+        import matplotlib.pyplot as plt
+
+        plt.hist(product_2, bins=10, density=True, alpha=0.7, color='blue', label='Observed')
+        x = np.linspace(0, 12, 100)
+        # Dof = 6, 8 bins - 2 fitted parameters
+        plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
+        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
+        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.xlabel("Chi-squared statistic")
+        plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist_SDSS_plus_DES.png")
+
+        sauron_coverage_scatterplot(df, outpath=pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_scatter_SDSS_plus_DES.png")
+
+
+
+    # The expected coverages are the nominal Gaussian 1σ and 2σ fractions (≈0.68 and ≈0.95), but in this
+    # test we only have O(50) pseudo-experiments (len(product_2)). The realised fractions therefore have
+    # binomial sampling noise of order sqrt(p * (1 - p) / N) ≈ 0.07 for p ≈ 0.68 and N ≈ 50. We then round
+    # to the nearest whole number of tests (4/50) for a cut of 0.08. In addition,
+    # the test statistic is chi-squared–like rather than exactly Gaussian, which further broadens the
+    # empirical distribution. We therefore use atol=0.08 to avoid flaky failures while still detecting
+    # substantial coverage regressions; tighter tolerances (e.g. 0.05) were observed to fail spuriously.
+    np.testing.assert_allclose(np.size(sub_one_sigma[0])/np.size(product_2), 0.68, atol=0.08)
+    np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.08)
+
+    # Finally we also check using a KS test that the observed distribution is consistent with chi2 with 2 dofs.
+    np.random.seed(seed=42)
+    simulated_data = scipy_chi2.rvs(df = 2, size=50, scale=1.0)
+    p_value = ks_2samp(simulated_data, product_2)
+    np.testing.assert_array_less(0.05, p_value.pvalue)
+
+
+
 def test_cc_decontam_SDSS():
     config_path = pathlib.Path(__file__).parent / "test_configs/config_SDSS_coverage.yml"
     args = SimpleNamespace()
@@ -975,30 +1058,80 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.stats import chi2 as scipy_chi2
 import numpy as np
+from funcs import mean_of_correlated_errors
 
+from matplotlib.patches import Ellipse
 
+def plot_covariance_ellipse(ax, mean, cov, n_std=1.0, facecolor='none', **kwargs):
+    """
+    Plots a covariance error ellipse given a 2x2 covariance matrix and a center.
+    """
+    # 1. Calculate eigenvalues and eigenvectors
+    # eigh is optimized for symmetric matrices like covariance matrices
+    eigenvalues, eigenvectors = np.linalg.eigh(cov)
+    print("Eigenvalues before sorting:", eigenvalues)
 
-def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = "beta", save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scatter.png"):
+    # Sort eigenvalues in descending order to identify major vs minor axes
+    order = eigenvalues.argsort()[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+
+    # 2. Calculate the angle of rotation (in degrees)
+    # The angle is determined by the first component of the primary eigenvector
+    angle = np.degrees(np.arctan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+    print("Angle of rotation (degrees):", angle)
+
+    # 3. Calculate width and height based on the standard deviation scale
+    # The lengths of the axes are proportional to the square root of the eigenvalues
+    width, height = 2 * n_std * np.sqrt(eigenvalues)
+
+    # 4. Construct and add the Ellipse patch
+    ellipse = Ellipse(xy=mean, width=width, height=height, angle=angle,
+                      facecolor=facecolor, **kwargs)
+
+    ax.add_patch(ellipse)
+    return ellipse
+
+def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = "beta",
+save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scatter.png"):
 
 
     plt.figure(figsize = (8,4), dpi=200)
     plt.subplot(1,2,1)
 
+
     a = param_1_name
     b = param_2_name
 
-    weighted_alpha_mean = np.sum(results[a] / results[f"{a}_error"]**2) / np.sum(1 / results[f"{a}_error"]**2)
-    weighted_beta_mean = np.sum(results[b] / results[f"{b}_error"]**2) / np.sum(1 / results[f"{b}_error"]**2)
+
+    list_of_xj = [np.array([results[a].iloc[i], results[b].iloc[i]]) for i in range(len(results))]
+    list_of_Cj = [np.array([[results[f"{a}_error"].iloc[i]**2, results[f"cov_{a}_{b}"].iloc[i]],
+                            [results[f"cov_{a}_{b}"].iloc[i], results[f"{b}_error"].iloc[i]**2]]) for i in range(len(results))]
+    weighted_average, mean_cov = mean_of_correlated_errors(list_of_xj, list_of_Cj)
+
+
+
+    weighted_alpha_mean = weighted_average[0]
+    weighted_beta_mean = weighted_average[1]
+    #alpha_err = np.sqrt(mean_cov[0,0])
+    #beta_err = np.sqrt(mean_cov[1,1])
+    #average_covariance = mean_cov[0,1]
+    #average_covariance_matrix = mean_cov
+
+
+
+    # weighted_alpha_mean = np.sum(results[a] / results[f"{a}_error"]**2) / np.sum(1 / results[f"{a}_error"]**2)
+    # weighted_beta_mean = np.sum(results[b] / results[f"{b}_error"]**2) / np.sum(1 / results[f"{b}_error"]**2)
     alpha_err = np.sqrt(np.sum(results[f"{a}_error"]**2)) / len(results)
     beta_err = np.sqrt(np.sum(results[f"{b}_error"]**2)) / len(results)
     average_covariance = np.mean(results[f"cov_{a}_{b}"])
-    print("Average Covariance:", average_covariance)
-    print("reduced covariance:", np.mean(results[f"cov_{a}_{b}"] / (results[f"{a}_error"] * results[f"{b}_error"])))
-    plt.errorbar(np.mean(results[a]),np.mean(results[b]), xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Mean", ms = 5)
+    # print("Average Covariance:", average_covariance)
+    # print("reduced covariance:", np.mean(results[f"cov_{a}_{b}"] / (results[f"{a}_error"] * results[f"{b}_error"])))
+    #plt.errorbar(np.mean(results[a]),np.mean(results[b]), xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Mean", ms = 5)
 
     print("Weighted Alpha Mean:", weighted_alpha_mean)
     print("Weighted Beta Mean:", weighted_beta_mean)
-    plt.errorbar(weighted_alpha_mean, weighted_beta_mean, xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Weighted Mean", ms = 10)
+    plt.errorbar(weighted_alpha_mean, weighted_beta_mean, xerr = alpha_err, yerr = beta_err, fmt = "o", color = "k", label = "Weighted Mean", ms = 5)
     print("Unweighted Alpha Mean:", np.mean(results[a]))
     print("Unweighted Beta Mean:", np.mean(results[b]))
 
@@ -1014,25 +1147,25 @@ def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = 
                                         [average_covariance, np.mean(results[f"{b}_error"]**2)]])
 
     total_inv_cov = np.zeros((2,2))
-    for i in range(len(results)):
-        print(f"############ {i} ############")
-        print("alpha_err:", results[f"{a}_error"][i])
-        print("beta_err:", results[f"{b}_error"][i])
-        print("covariance:", results[f"cov_{a}_{b}"][i])
-        total_inv_cov += np.linalg.inv(np.array([[results[f"{a}_error"][i]**2, results[f"cov_{a}_{b}"][i]],
-                                                [results[f"cov_{a}_{b}"][i], results[f"{b}_error"][i]**2]]))
-        total_cov = np.linalg.inv(total_inv_cov)
-        print("Total Covariance Matrix:", total_cov)
+    # for i in range(len(results)):
+    #     print(f"############ {i} ############")
+    #     print("alpha_err:", results[f"{a}_error"][i])
+    #     print("beta_err:", results[f"{b}_error"][i])
+    #     print("covariance:", results[f"cov_{a}_{b}"][i])
+    #     total_inv_cov += np.linalg.inv(np.array([[results[f"{a}_error"][i]**2, results[f"cov_{a}_{b}"][i]],
+    #                                             [results[f"cov_{a}_{b}"][i], results[f"{b}_error"][i]**2]]))
+    #     total_cov = np.linalg.inv(total_inv_cov)
+    #     print("Total Covariance Matrix:", total_cov)
 
-        alpha_mean = np.mean(results[a])
-        beta_mean = np.mean(results[b])
-        print("Mahalnobis distance of mean to truth using total covariance")
-        distance = np.array([alpha_mean, beta_mean]) - np.array([2.27e-5, 1.7])
-        maha_dist = distance.T @ np.linalg.inv(total_cov) @ distance
-        p_value = 1 - scipy_chi2.cdf(maha_dist, df=2)
-        print("Chi2 cdf:", scipy_chi2.cdf(maha_dist, df=2))
-        print("p_value:", p_value)
-        print("Mahalanobis Distance to Simulated Alpha & Beta:", maha_dist)
+    #     alpha_mean = np.mean(results[a])
+    #     beta_mean = np.mean(results[b])
+    #     print("Mahalnobis distance of mean to truth using total covariance")
+    #     distance = np.array([alpha_mean, beta_mean]) - np.array([2.27e-5, 1.7])
+    #     maha_dist = distance.T @ np.linalg.inv(total_cov) @ distance
+    #     p_value = 1 - scipy_chi2.cdf(maha_dist, df=2)
+    #     print("Chi2 cdf:", scipy_chi2.cdf(maha_dist, df=2))
+    #     print("p_value:", p_value)
+    #     print("Mahalanobis Distance to Simulated Alpha & Beta:", maha_dist)
 
     dist = np.array([weighted_alpha_mean, weighted_beta_mean]) - np.array([2.27e-5, 1.7])
     maha_dist = dist.T @ np.linalg.inv(average_covariance_matrix) @ dist
@@ -1073,13 +1206,26 @@ def sauron_coverage_scatterplot(results, param_1_name = "alpha", param_2_name = 
     for sig in [1, 2, 3]:
         plt.errorbar(results[f"{a}"][integer_sigma == sig], results[f"{b}"][integer_sigma == sig],
         xerr = results[f"{a}_error"][integer_sigma == sig], yerr = results[f"{b}_error"][integer_sigma == sig],
-        fmt = "o", label = labels[sig-1], zorder = 0, ms = 3, alpha = 0.7)
+        fmt = "o", label = labels[sig-1], zorder = 0, ms = 3, alpha = 0.3)
 
     #chivals = pos.T @ np.linalg.inv(average_covariance_matrix) @ pos
     plt.contour(X, Y, chivals, levels=[2.30, 6.18], colors=['blue', 'red'], linestyles=['--', '--'], label = "1 and 2 sigma Contours")
 
-    plt.xlim(np.min(results[f"{a}"])*0.9, np.max(results[f"{a}"])*1.1)
-    plt.ylim(np.min(results[f"{b}"])*0.9, np.max(results[f"{b}"])*1.1)
+    #from scipy.stats import multivariate_normal
+
+    list_of_xj = [np.array([results[a].iloc[i], results[b].iloc[i]]) for i in range(len(results))]
+    list_of_Cj = [np.array([[results[f"{a}_error"].iloc[i]**2, results[f"cov_{a}_{b}"].iloc[i]],
+                            [results[f"cov_{a}_{b}"].iloc[i], results[f"{b}_error"].iloc[i]**2]]) for i in range(len(results))]
+    weighted_average, mean_cov = mean_of_correlated_errors(list_of_xj, list_of_Cj)
+    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=1, edgecolor='red')
+    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=2, edgecolor='blue')
+    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=3, edgecolor='green')
+
+    #plt.xlim(np.min(results[f"{a}"])*0.9, np.max(results[f"{a}"])*1.1)
+    #plt.ylim(np.min(results[f"{b}"])*0.9, np.max(results[f"{b}"])*1.1)
+
+    plt.xlim(2.1e-5, 2.3e-5)
+    plt.ylim(1.6, 1.8)
 
     plt.xlabel(r"$\alpha$")
     plt.ylabel(r"$\beta$")
