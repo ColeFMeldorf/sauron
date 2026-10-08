@@ -24,6 +24,8 @@ SDSS_DATALIKE_SIM = "/project2/rkessler/SURVEYS/ROMAN/USERS/cmeldorf/CFM-SDSS-JH
 POWER_LAW_DTD_CONFIG="/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again_dtd.yml"
 APLUSB_CONFIG = "/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again_AplusB.yml"
 HOURGLASS_CONFIG = "/home/colefmeldorf/sauron/config_files/config_hourglass_photoz.yml"
+HOURGLASS_PROMPT_CONFIG = "/home/colefmeldorf/sauron/config_files/config_hourglass_prompt.yml"
+HOURGLASS_PROMPT_BINNED_CONFIG = "/home/colefmeldorf/sauron/config_files/config_hourglass_prompt_binned.yml"
 
 def get_function_name():
     return sys._getframe(2).f_code.co_name
@@ -51,7 +53,7 @@ def fetch_from_path_and_check_new(path, starttime, caller):
     return path
 
 
-def run_a_cmd(config_path, files_to_get):
+def run_a_cmd(config_path, files_to_get, debug=False):
     caller = get_function_name()
     print(f"Running command for {caller}")
     outpath_loc = caller + ".csv"
@@ -59,7 +61,9 @@ def run_a_cmd(config_path, files_to_get):
     outpath = OUTPUT_DIR / outpath_loc
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5", "--plot"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    #if debug:
+    #    cmd.append("--debug")
+    result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
             f"Command failed with exit code {result.returncode}\n"
@@ -69,6 +73,8 @@ def run_a_cmd(config_path, files_to_get):
     print(f"Successfully ran {get_function_name()}")
     for f in files_to_get:
         fetch_from_path_and_check_new(outpath / f, starttime, caller)
+
+    return outpath
 
 
 def update_rcParams(key, val):
@@ -319,6 +325,184 @@ def binned_rate_hourglass(df):
     generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
     plt.savefig(generated_figures_dir / "roman_forecast_vs_s20_data_compendium.png")
 
+from dtd_functions import csfr_double_power_law_uncorrected, build_response_matrix, recover_dtd
+
+
+def SNR(t, eta_Ia, fP):
+    K = 7.132
+    # t is measured in Gyr
+    rate = np.zeros_like(t)
+    rate = np.atleast_1d(rate)  # Ensure rate is at least 1D
+
+    if len(rate) == 1:
+        if t < 0.04:
+            rate = 0
+        elif 0.04 <= t < 0.5:
+            rate = eta_Ia * fP * K / (1 - fP)
+        else:  # t >= 0.5
+            rate = eta_Ia * t**-1
+        return rate
+
+    rate[t < 0.04] = 0
+    rate[(0.04 <= t) & (t < 0.5)] = eta_Ia * fP * K / (1 - fP)
+    rate[t >= 0.5] = eta_Ia * t[t >= 0.5]**-1
+
+    return rate
+
+def binned_dtd_plot(df):
+    LaurenNicePlots()
+    #z_bins = np.linspace(0.2, 2.8, 16)
+    z_sn_edges = np.load(r"/home/colefmeldorf/sauron/plots/z_bin_edges_HOURGLASS.npy")
+    z_centers = 0.5 * (z_sn_edges[1:] + z_sn_edges[:-1])
+    print("df shape:", df.shape)
+    plt.figure(figsize=(4, 4), dpi = 300)
+
+    for k, tau_edges_Gyr in enumerate([[0.04, 0.42, 2.4, 14]]):
+        tau_edges_Gyr = np.array(tau_edges_Gyr)
+        #measured_84 = np.load(r"C:\Users\cmeldorf\Downloads\binned_rate_84_HOURGLASS_new.npy")
+        #measured_16 = np.load(r"C:\Users\cmeldorf\Downloads\binned_rate_16_HOURGLASS_new.npy")
+        #covariance_matrix = np.load(r"C:\Users\cmeldorf\Downloads\cov_mat_in_rate_HOURGLASS_.npy")
+        #measured_rate = np.load(r"C:\Users\cmeldorf\Downloads\binned_rate_HOURGLASS_new.npy")
+
+        all_results = np.zeros((len(df), len(z_centers)))
+        for row in df.iterrows():
+            rate_vals = [row[1][f"param_{i}"] for i in range(len(z_centers))]
+            all_results[row[0], :] = rate_vals
+
+        print(all_results)
+        print("all_results shape:", all_results.shape)
+        mean_rate = np.mean(all_results, axis=0)
+        percentiles = np.percentile(all_results, [16, 84], axis=0)
+        measured_84 = percentiles[1]
+        measured_16 = percentiles[0]
+        measured_rate = mean_rate
+
+
+
+        z_csfr_edges = np.linspace(0.001, 4.0, 400)  # fine grid, edges
+        z_csfr_center = 0.5 * (z_csfr_edges[:-1] + z_csfr_edges[1:])
+
+        psi_csfr_peryr = csfr_double_power_law_uncorrected(z_csfr_center)
+        psi_csfr = psi_csfr_peryr
+
+        # print("z_sn_edges:", z_sn_edges[:5])
+        # print("z_csfr_edges:", z_csfr_edges[:5])
+        # print("psi_csfr:", psi_csfr[5])
+        # print("tau_edges_Gyr:", tau_edges_Gyr[:5])
+
+
+        A, t_sn_center = build_response_matrix(
+            z_sn_edges, z_csfr_edges, psi_csfr, tau_edges_Gyr
+        )
+
+        sigma = (measured_84 - measured_16) / 2
+        # print("measured_rate:", measured_rate)
+        # print("measured_84", measured_84)
+        # print("measured_16", measured_16)
+        print("measured rate", np.shape(measured_rate))
+        print("sigma", np.shape(sigma))
+        print("A shape", np.shape(A))
+        Phi, cov_analytic = recover_dtd_weighted(measured_rate, sigma, A, nonnegative=True)
+
+
+        print("Delay bins (Gyr):     ", list(zip(tau_edges_Gyr[:-1], tau_edges_Gyr[1:])))
+        print("Recovered Phi with weights (SNe/Msun/Gyr):", Phi)
+        print("Analytic covariance matrix:\n", cov_analytic)
+        print("errors on recovered Phi:", np.sqrt(np.diag(cov_analytic)))
+
+        print("Recover dtd no weights")
+
+        Phi_no_weights = recover_dtd(measured_rate, A, nonnegative=True)
+
+        tau_centers = 0.5 * (tau_edges_Gyr[:-1] + tau_edges_Gyr[1:])
+        tau_widths = np.diff(tau_edges_Gyr)
+        print("tau_centers:", tau_centers)
+        plt.errorbar(
+            tau_centers, Phi, yerr=np.sqrt(np.diag(cov_analytic)), label="Recovered DTD", lw = 2, color = "C" + str(k)
+        )
+
+        print("Recovered phi with weights:", Phi)
+        print("Phi errors:", np.sqrt(np.diag(cov_analytic)))
+
+        eta_val = 1.38e-4    # strip the astropy unit once here
+        fP = 0.59
+        t = np.linspace(0, 10, 100000)
+
+        plt.yscale('log')
+        plt.xscale('log')
+        plt.xlim(0.04, 10)
+        plt.title("Recovered DTD vs True DTD")
+        plt.xlabel("Delay time (Gyr)")
+        plt.ylabel(r"$\Phi(\tau)$ [SNe / M$_\odot$ / Gyr]")
+        plt.legend()
+
+        z_sn_edges_fine = np.linspace(0, 3, 100)
+
+        psi_csfr_peryr = csfr_double_power_law_uncorrected(z_csfr_center)
+        psi_csfr = psi_csfr_peryr
+        A, t_sn_center = build_response_matrix(
+            z_sn_edges, z_csfr_edges, psi_csfr, tau_edges_Gyr
+        )
+
+        z_sn_centers = 0.5 * (z_sn_edges_fine[:-1] + z_sn_edges_fine[1:])
+        simulated_rate = SNR(t_sn_center, eta_val, fP) * 1e-9  # convert to SNe/yr/Mpc^3
+        sigma = 0.001 * simulated_rate  # 10% uncertainty
+        Phi, cov_analytic = recover_dtd_weighted(measured_rate, sigma, A, nonnegative=True)
+        for t in range(len(tau_edges_Gyr)-1):
+            tau_lo = tau_edges_Gyr[t]
+            tau_hi = tau_edges_Gyr[t+1]
+            print(f"phi t {Phi[t]}")
+            if t == 0:
+                label = "True DTD binned"
+            else:
+                label = None
+            plt.plot([tau_lo, tau_hi], [Phi[t], Phi[t]], '--', color = "C" + str(k), lw = 1,zorder = 10, label = label)
+
+    plt.legend()
+    generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
+    plt.savefig(generated_figures_dir / "roman_forecast_binned_dtd.png")
+    print("saved to", generated_figures_dir / "roman_forecast_binned_dtd.png")
+
+
+from scipy.optimize import nnls
+def recover_dtd_weighted(R_sn_peryr, sigma_R_peryr, A, nonnegative=True):
+    """ Same as recover_dtd, but downweights noisy SN rate bins using their
+    reported uncertainty sigma_R_peryr (same units as R_sn_peryr).
+
+    Internally this "whitens" the system: divide every row of A and the
+    corresponding entry of R by sigma_i, which turns weighted least
+    squares into ordinary least squares on the rescaled system. This is
+    also the correct way to feed uncertainty into nnls, since nnls has
+    no native `sigma=` argument.
+
+    Returns
+    -------
+    Phi        : recovered DTD, SNe/Msun/Gyr
+    cov_analytic : (n_dtd, n_dtd) covariance matrix, valid ONLY for the
+                   unconstrained (nonnegative=False) solution, or for the
+                   nonnegative solution if you've separately confirmed no
+                   bin is sitting at the Phi_j = 0 boundary.
+    """
+    R_perGyr = R_sn_peryr * 1e9
+    sigma_perGyr = sigma_R_peryr * 1e9
+
+    # plt.errorbar(np.linspace(0,1,len(R_perGyr)), R_perGyr, yerr=sigma_perGyr, fmt='o')
+    # plt.savefig("R_perGyr_vs_sigma_perGyr.png")
+    # plt.close()
+
+    #whiten: divide each equation by its uncertainty
+    A_w = A / sigma_perGyr[:, None]
+    R_w = R_perGyr / sigma_perGyr
+
+    if nonnegative:
+        Phi, resid = nnls(A_w, R_w)
+    else:
+        Phi, *_ = np.linalg.lstsq(A_w, R_w, rcond=None)
+    print("Phi:", Phi)
+    #analytic covariance: (A_w^T A_w)^-1  (equivalent to (A^T C^-1 A)^-1)
+    cov_analytic = np.linalg.inv(A_w.T @ A_w)
+
+    return Phi, cov_analytic
 
 def fig_1_left_3_left_and_8():
     run_a_cmd(DES_ONLY_RATE_CONFIG,
@@ -362,11 +546,18 @@ def fig_12():
 
 
 def fig_13():
-    run_a_cmd(HOURGLASS_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
-    binned_rate_hourglass(pd.read_csv("sauron_output.csv"))
+    outpath = run_a_cmd(HOURGLASS_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
+    binned_rate_hourglass(pd.read_csv(outpath))
+
 
 def fig_14():
-    pass
+    run_a_cmd(HOURGLASS_PROMPT_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
+
+
+def fig_15():
+    outpath = "/home/colefmeldorf/sauron/plotting_scripts/output/fig_15.csv"
+    #outpath = run_a_cmd(HOURGLASS_PROMPT_BINNED_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"] )
+    binned_dtd_plot(pd.read_csv(outpath))
 
 def run_all_fig_scripts():
     # Figure 2 is a diagram
@@ -379,7 +570,9 @@ def run_all_fig_scripts():
     # fig_10()
     # fig_11()
     # fig_12()
-    fig_13()
+    # fig_13()
+    # fig_14()
+    fig_15()
 
 
 
