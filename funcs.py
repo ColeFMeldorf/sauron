@@ -323,10 +323,9 @@ def mean_of_correlated_errors(xj, Cj):
     """ Given a list of n dimensional data vectors (xj) and each n by n covariance matrix (Cj),
     calculate the mean of the data vectors taking into account the correlations.
 
-    Parameters:
-    xk : list of np.ndarray
+    xj : list of np.ndarray
         List of n-dimensional data vectors.
-    Ck : list of np.ndarray
+    Cj : list of np.ndarray
         List of n by n covariance matrices corresponding to each data vector.
 
     Returns:

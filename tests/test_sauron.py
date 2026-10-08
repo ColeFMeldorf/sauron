@@ -124,7 +124,7 @@ def _check_regression(results_path, regression_path, cols, rtol=None, atol=None)
         logger.debug(f"regression[col]: {regression[col]}")
         logger.debug(f"rtol: {rtol}, atol: {atol}")
         # , rtol=rtol, atol=atol
-        np.testing.assert_allclose(results[col], regression[col])
+        np.testing.assert_allclose(results[col], regression[col], rtol=rtol, **({} if atol is None else {"atol": atol}))
 
 def _run_cmd(cmd):
     result = subprocess.run(cmd, capture_output=False, text=True)
