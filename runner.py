@@ -671,18 +671,18 @@ class sauron_runner:
         binned_rate = n_data / (np.sum(null_counts * eff_ij * f_norms, axis=0))
 
 
-        fJ_0 = self.rate_function(z_centers, self.x0)
-        Ei = np.sum(null_counts * eff_ij * f_norm * fJ_0, axis=0)
-        var_Ei = np.abs(Ei)
-        var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ_0**2, axis=0)
+        # fJ_0 = self.rate_function(z_centers, self.x0)
+        # Ei = np.sum(null_counts * eff_ij * f_norm * fJ_0, axis=0)
+        # var_Ei = np.abs(Ei)
+        # var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ_0**2, axis=0)
 
-        cov_stat = np.diag(var_Ei + var_Si)
+        # cov_stat = np.diag(var_Ei + var_Si)
 
-        cov = cov_stat + cov_sys
+        # cov = cov_stat + cov_sys
 
-        cov_mat_in_rate = cov / (np.sum(null_counts * eff_ij * f_norms, axis=0)[:, None] *
-             np.sum(null_counts * eff_ij * f_norms, axis=0)[None, :])
-        np.save(f"plots/cov_mat_in_rate_{survey}.npy", cov_mat_in_rate)
+        # cov_mat_in_rate = cov / (np.sum(null_counts * eff_ij * f_norms, axis=0)[:, None] *
+        #      np.sum(null_counts * eff_ij * f_norms, axis=0)[None, :])
+        # np.save(f"plots/cov_mat_in_rate_{survey}.npy", cov_mat_in_rate)
 
         np.save(f"plots/binned_rate_{survey}.npy", binned_rate)
         if "non_parametric" in self.rate_function_name:
@@ -875,8 +875,12 @@ class sauron_runner:
 #        self.final_counts[survey]["binned_rate_84"] = Ei_84  # Come back and fix this! !!!!! XXX !!! XXX
 #        self.final_counts[survey]["binned_rate_16"] = Ei_16 # This should work
 
-        binned_rate_84 = Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
-        binned_rate_16 = Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        #binned_rate_84 = Ei_84 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        #binned_rate_16 = Ei_16 / (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        binned_rate_84 = (n_data + np.sqrt(n_data)) / \
+         (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        binned_rate_16 = (n_data - np.sqrt(n_data)) / \
+        (np.sum(null_counts * eff_ij * f_norms, axis=0))
         np.save(f"plots/binned_rate_84_{survey}.npy", binned_rate_84)
         np.save(f"plots/binned_rate_16_{survey}.npy", binned_rate_16)
         Ei_50 = np.percentile(Ei_draws, 50, axis=1)
@@ -1273,8 +1277,15 @@ class sauron_runner:
                         ax1.plot(z_centers_fine, rate_fine, label=label, color = "C"+str(color_index))
                     else:
                         ax1.plot(z_centers, rate_fine, label=label, color = "C"+str(color_index))
-                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color="C"+str(color_index), alpha=0.5)
-                    # , label="1 sigma confidence region"
+
+                    if len(things_to_plot) == 1:
+                        label = "1 sigma confidence region"
+                        color = "gray"
+                    else:
+                        label = None
+                        color = "C"+str(color_index)
+
+                    ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color=color, alpha=0.5, label=label)
 
                     if ii == 0:
                         props = dict(boxstyle="round", facecolor="white", alpha=0.8)
@@ -1334,7 +1345,6 @@ class sauron_runner:
                         extent_chi_1s.append(extent_chi[1])
                         extent_chi_2s.append(extent_chi[2])
                         extent_chi_3s.append(extent_chi[3])
-                        logging.debug(f"current df {df}")
                         chi2_map = self.generate_chi2_map(s, extent=extent_chi, index =1, csfr = c) # this needs to be fixed
                         chi2_map -= np.min(chi2_map)
 
@@ -1388,7 +1398,6 @@ class sauron_runner:
                         ax2.errorbar(5.4e-4, 1.5e-14, xerr=2e-4, yerr=0.7e-14, color = "cyan", fmt="o", ms=5, label = "K08")
                         ax2.errorbar(3.9e-4, 5.3e-14, xerr=0.7e-4, yerr=1.1e-14, color = "green", fmt="o", ms=5, label = "S06")
                     if "power_law_dtd" in self.rate_function_name:
-                        #ax2.errorbar(2.11e-13, -1.13,  yerr=0.05,xerr=.05e-13, label = "Wiseman (2020)", color = "C0", fmt="o", ms=5)
                         results_dict = {"G11": (-1.1, 0.1),
                                         "P12": (-0.98, 0.05),
                                         "M12": (-1.12, 0.08),
@@ -1411,10 +1420,6 @@ class sauron_runner:
                     ax2.set_xlabel(label_names[1])
                     ax2.set_ylabel(label_names[0])
 
-                    #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
-                    #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
-                    #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-
 
                     # Adaptively define the ticks
                     extent_chi_0s = np.array(extent_chi_0s)
@@ -1435,7 +1440,7 @@ class sauron_runner:
                     y_range = y_limits[1] - y_limits[0]
                     y_tick_spacing = y_range / 5  # Aim for around 5 ticks
                     y_ticks = np.arange(np.ceil(y_limits[0] / y_tick_spacing) * y_tick_spacing, np.floor(y_limits[1] / y_tick_spacing) * y_tick_spacing + y_tick_spacing, y_tick_spacing)
-                    #ax2.set_yticks(y_ticks)
+                    ax2.set_yticks(y_ticks)
 
 
                     log_norm = np.floor(np.log10(np.abs(max(y_ticks))))
