@@ -7,43 +7,180 @@ import logging
 from scipy.stats import binned_statistic as binstat
 from scipy.stats import chi2 as chi2_dist
 from scipy.special import erfinv
-from dtd_functions import (power_law_DTD, binned_DTD, prompt_fraction_DTD)
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Set to DEBUG for detailed output
 
 
-def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=False):
+def calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function):
+    """Calculate the variance of the predicted counts."""
+    fJ = rate_function(zJ, x)
+    var_predict = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+    return var_predict
+
+
+def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
     zJ = z_centers
     fJ = rate_function(zJ, x)
     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
-    var_Ei = np.abs(Ei)
-    var_Si = np.sum(null_counts * eff_ij * f_norm**2 * fJ**2, axis=0)
+    var_data = n_data
+    var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+    var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
 
-    cov_stat = np.diag(var_Ei + var_Si)
+
+    cov_stat = np.diag(var_data + var_predict)
+    cov_stat_x0 = np.diag(var_data + var_predict_x0)
     if cov_sys is None:
         cov_sys = 0
     cov = cov_stat + cov_sys
+    cov_x0 = cov_stat_x0 + cov_sys
 
     inv_cov = np.linalg.pinv(cov)
-
     resid_vector = n_data - Ei
-
     chi_squared = resid_vector.T @ inv_cov @ resid_vector
 
-    # This is the X^2 contribution for each z bin. It has ALREADY been squared.
-    # This is what scipy.optimize.minimize needs.
+    # Gaussian normalization term: ln(det(Sigma(x))), using the FULL
+    # covariance matrix (including any off-diagonal cov_sys terms).
+    sign, logdet = np.linalg.slogdet(cov)
+    sign_x0, logdet_x0 = np.linalg.slogdet(cov_x0)
+    logdet = logdet - logdet_x0  # Normalize by the log determinant at x0
+    if (sign <= 0 or sign_x0 <= 0 or
+            np.min(np.linalg.eigvalsh(cov)) <= 0 or
+            np.min(np.linalg.eigvalsh(cov_x0)) <= 0):
+        logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}, sign_x0={sign_x0}); "
+                      "this usually means cov_sys is being applied in a way that makes "
+                      "the total covariance singular or indefinite.")
+        raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")
 
-    if debug:
-        logger.debug(f"Ei: {Ei}")
-        logger.debug(f"var_Ei: {var_Ei}")
-        logger.debug(f"var_Si: {var_Si}")
-        logger.debug(f"resid_vector: {resid_vector}")
-        logger.debug(f"cov_stat: {cov_stat}")
-        logger.debug(f"cov_sys: {cov_sys}")
-        logger.debug(f"cov: {cov}")
-        logger.debug(f"Chi-squared: {chi_squared}")
+    chi_squared += logdet
+
+    if np.isnan(chi_squared):
+        logger.error("Chi-squared is NaN. Check inputs and calculations.")
+        logger.error(f"x: {x}")
+        logger.error(f"var_predict: {var_predict}, logdet: {logdet}")
+        raise ValueError("Chi-squared calculation resulted in NaN.")
 
     return chi_squared
 
+#     inv_cov = np.linalg.pinv(cov)
+
+#     resid_vector = n_data - Ei
+
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # This is the X^2 contribution for each z bin. It has ALREADY been squared.
+#     # This is what scipy.optimize.minimize needs.
+
+#     # Now we calculate the Gaussian normalization term.
+#     var_predict_x0 = calc_var_predict(null_counts, eff_ij, f_norm, x0, zJ, rate_function)
+#     logger.debug(f"x: {x}, x0: {x0}")
+#     print(f"x: {x}, x0: {x0}")
+#     #logger.debug(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
+#     #log_argument = np.sqrt(var_predict / var_predict_x0)
+#     #log_argument_quadrature_summed = np.sqrt(np.sum(log_argument**2))
+
+#     #num = np.sqrt(np.sum(var_predict))
+#     #denom = np.sqrt(np.sum(var_predict_x0))
+#     #gauss_norm = 2 * np.log(num / denom)
+
+#     num = np.sqrt(var_predict)
+#     denom = np.sqrt(var_predict_x0)
+
+
+
+#    # print("###############################################")
+#     #print("x:", x, "x0:", x0)
+#     #logger.debug("num: " + str(num))
+#     #logger.debug("denom: " + str(denom))
+#     #logger.debug("Num / Denom:" + str(num / denom))
+#     gauss_norm = 2 * np.log(num / denom)
+#     gauss_norm[np.where((denom == 0) & (num == 0))] = 0  # If both are zero, set to zero.
+#     #logger.debug("gauss_norm:" + str(gauss_norm))
+#     gauss_norm = np.sum(gauss_norm)
+#     #logger.debug("gauss_norm summed:" + str(gauss_norm))
+#     #logger.debug("chi sq alone:" + str(chi_squared))
+
+#     chi_squared += np.sum(gauss_norm)
+#     #logger.debug("chi sq with gauss norm:" + str(chi_squared))
+
+#     if debug:
+#         #logger.debug(f"Ei: {Ei}")
+#         logger.debug(f"var_data: {var_data}")
+#         logger.debug(f"var_predict: {var_predict}")
+#         logger.debug(f"cov stat diag: {np.diag(cov_stat)}")
+#         #logger.debug(f"resid_vector: {resid_vector}")
+#         #logger.debug(f"cov_stat: {cov_stat}")
+#         #logger.debug(f"cov_sys: {cov_sys}")
+#         #logger.debug(f"cov: {cov}")
+#         #logger.debug(f"Chi-squared: {chi_squared}")
+
+#     if np.isnan(chi_squared):
+#         logger.error("Chi-squared is NaN. Check inputs and calculations.")
+#         logger.error(f"x: {x}, x0: {x0}")
+#         logger.error(f"var_predict: {var_predict}, var_predict_x0: {var_predict_x0}")
+#         logger.error(f"num: {num}, denom: {denom}, gauss_norm: {gauss_norm}")
+#         raise ValueError("Chi-squared calculation resulted in NaN.")
+
+    #return chi_squared
+
+# def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, cov_sys=0, debug=True):
+
+#     zJ = z_centers
+#     fJ = rate_function(zJ, x)
+#     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+
+#     var_data = n_data
+#     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+
+#     cov_stat = np.diag(var_data + var_predict)
+#     if cov_sys is None:
+#         cov_sys = 0
+#     cov = cov_stat + cov_sys
+
+#     inv_cov = np.linalg.pinv(cov)
+#     resid_vector = n_data - Ei
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # Gaussian normalization term: ln(det(Sigma(x))), using the FULL
+#     # covariance matrix (including any off-diagonal cov_sys terms).
+#     sign, logdet = np.linalg.slogdet(cov)
+#     if sign <= 0:
+#         logger.error(f"cov matrix is not positive definite at x={x} (sign={sign}); "
+#                       "this usually means cov_sys is being applied in a way that makes "
+#                       "the total covariance singular or indefinite.")
+#         raise ValueError("Non-positive-definite covariance matrix in chi2 normalization term.")
+
+#     chi_squared += logdet
+
+#     if np.isnan(chi_squared):
+#         logger.error("Chi-squared is NaN. Check inputs and calculations.")
+#         logger.error(f"x: {x}")
+#         logger.error(f"var_predict: {var_predict}, logdet: {logdet}")
+#         raise ValueError("Chi-squared calculation resulted in NaN.")
+
+#     return chi_squared
+
+# def chi2(x, null_counts, f_norm, z_centers, eff_ij, n_data, rate_function, x0, cov_sys=0, debug=False):
+#     zJ = z_centers
+#     fJ = rate_function(zJ, x)
+#     Ei = np.sum(null_counts * eff_ij * f_norm * fJ, axis=0)
+#     var_data = n_data
+#     var_predict = calc_var_predict(null_counts, eff_ij, f_norm, x, zJ, rate_function)
+
+#     cov_stat = np.diag(var_data + var_predict)
+#     if cov_sys is None:
+#         cov_sys = 0
+#     cov = cov_stat + cov_sys
+
+#     inv_cov = np.linalg.pinv(cov)
+#     resid_vector = n_data - Ei
+#     chi_squared = resid_vector.T @ inv_cov @ resid_vector
+
+#     # ln det(Cov(x)) -- correct normalization when Cov itself depends on x
+#     sign, logdet = np.linalg.slogdet(cov)
+#     chi_squared += logdet
+
+#     return chi_squared
 
 def calculate_covariance_matrix_term(sys_func, sys_params, z_bins, *args):
     # Calculate covariance matrix term for a given systematic function and its parameters
@@ -80,6 +217,7 @@ def rescale_CC_for_cov(rescale_vals_and_seeds, PROB_THRESH, index, survey, datas
         sim_IA = datasets[f"{survey}_SIM_IA"]
         sim_CC_df_no_cut = datasets[f"{survey}_SIM_CC"].df
         types = sim_CC_df_no_cut.TYPE.unique()
+
         # Separate the CC SNe by type
         sim_CC_sep_on_type = [sim_CC_df_no_cut[sim_CC_df_no_cut.TYPE == t] for t in types]
         # Resample each type according to the rescale values
@@ -181,38 +319,43 @@ def chi2_to_sigma(chi2_diff, dof):
     return sigma
 
 
-func_name_dictionary = {
-    "power_law": power_law,
-    "turnover_power_law": turnover_power_law,
-    "dual_power_law": turnover_power_law,
-    "turnover_power_law_forced_cty": turnover_power_law_forced_cty,
-    "non_parametric_histogram": non_parametric_histogram,
-    "file": "file"
-}
+def mean_of_correlated_errors(xj, Cj):
+    """ Given a list of n dimensional data vectors (xj) and each n by n covariance matrix (Cj),
+    calculate the mean of the data vectors taking into account the correlations.
 
-dtd_func_name_dictionary = {
-    "power_law_dtd": power_law_DTD,
-    "binned_dtd": binned_DTD,
-    "AplusB_dtd": "placeholder",
-    "prompt_fraction_dtd": prompt_fraction_DTD
-}
+    xj : list of np.ndarray
+        List of n-dimensional data vectors.
+    Cj : list of np.ndarray
+        List of n by n covariance matrices corresponding to each data vector.
 
-default_x0_dictionary = {
-    "power_law": (2.27e-5, 1.7), # Does this cause issues in error sometimes?
-    "turnover_power_law": (2.27e-5, 1.7, 7.5e-5, -0.1),
-    "dual_power_law": (1, 0, 1, -2),
-    "AplusB_dtd": (2.8e-14, 9.3e-4),
-    "power_law_dtd": (-1, 1e-14),
-    "prompt_fraction_dtd": (1.5e-4, 0.5)
-}
+    Returns:
+    mean : np.ndarray
+        The mean of the data vectors considering the correlations.
+    mean_cov : np.ndarray
+        The covariance matrix of the mean.
+    """
+    # Mj = []
+    # for C in Cj:
+    #     inv_term = (np.sum(np.diag(C) ** -1))**-1
+    #     main_diag_only = C * np.eye(C.shape[0], dtype=int)
+    #     Mj.append(inv_term * main_diag_only)
 
-default_parameter_name_dictionary = {
-    "power_law": ["$\\alpha$", "$\\beta$"],
-    "AplusB_dtd": ["A", "B"],
-    "turnover_power_law": ["$\\alpha$", "$\\beta_1$", "$\\alpha_2$", "$\\beta_2$"],
-    "power_law_dtd": ["$\\beta$", "$R_1$"],
-    "prompt_fraction_dtd": ["$\\eta_{Ia}$", "$f_P$"]}
+    # a = np.zeros_like(xj[0])
+    # for M_j in Mj:
+    #     a += M_j @ xj[Mj.index(M_j)]
 
-default_bounds_dictionary = {
-    "AplusB_dtd": ((0, 0), (np.inf, np.inf)),
-}
+    # mean_cov =
+    cov_combined = np.zeros_like(Cj[0])
+    for C in Cj:
+        cov_combined += np.linalg.inv(C)
+    cov_combined = np.linalg.inv(cov_combined)
+
+    logger.debug(f"Combined covariance matrix: {cov_combined}")
+
+    mean = np.zeros_like(xj[0])
+    for x, C in zip(xj, Cj):
+        mean += np.linalg.inv(C) @ x
+    mean = cov_combined @ mean
+    logger.debug(f"Weighted mean: {mean}")
+
+    return mean, cov_combined

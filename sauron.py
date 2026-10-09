@@ -39,8 +39,8 @@ def main():
     parser.add_argument("--fit-only-one-combined", "--fit1", action=argparse.BooleanOptionalAction,
                         help="Only fit one combined dataset across all"
                         " surveys, instead of fitting as many as there are datasets. I.e., if I have 5"
-                        "simulated datasets and 10 for another,"
-                        " I could do 5 combined datasets if this is set to False.", default=True)
+                        "simulated datasets and 10 for another, I could do 5 combined datasets if this is set to False.", default=False)
+    parser.add_argument("--marginalize", "-m", action=argparse.BooleanOptionalAction, help="Calculate marginalized errors.", default=False)
     args = parser.parse_args()
 
     runner = sauron_runner(args)
@@ -95,7 +95,9 @@ def main():
             logging.info("Fitting only one combined dataset across all surveys.")
             indices = [0]
         else:
-            total_possible_indexes = math.prod([runner.fit_args_dict["n_datasets"][s] for s in surveys])
+            # NEW
+            #total_possible_indexes = math.prod([runner.fit_args_dict["n_datasets"][s] for s in surveys])
+            total_possible_indexes = min(runner.fit_args_dict["n_datasets"][s] for s in surveys)
             indices = range(1, total_possible_indexes + 1)
 
         runner.fit_args_dict["n_datasets"]["combined"] = len(indices)  # Update the number of datasets
@@ -115,7 +117,7 @@ def main():
         surveys.extend(["combined"])
 
     if args.plot:
-        summary_plot(runner)
+        runner.summary_plot()
     runner.save_results()
 
 
