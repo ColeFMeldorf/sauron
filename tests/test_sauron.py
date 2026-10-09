@@ -137,8 +137,8 @@ def _run_cmd(cmd):
 # ##########################TESTS BELOW############################################################
 
 def test_regression_specz():
-    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
-    """
+    """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data.
+     Spec Zs. """
     outpath = pathlib.Path(__file__).parent / "test_output/test_regnopz_output.csv"
     if os.path.exists(outpath):
         os.remove(outpath)
@@ -168,7 +168,8 @@ def test_regression_pz_5datasets():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_5pz.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.5", "--no-sanity-check"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath),
+           "--no-sys_cov", "--prob_thresh", "0.5", "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -416,7 +417,7 @@ def test_coverage_no_sys():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_coverage_cc_fixed.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), '--no-sys_cov', "--prob_thresh", "0.5"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--no-sys_cov", "--prob_thresh", "0.5"]
     # Added --no-sys_cov flag here
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
@@ -486,7 +487,7 @@ def test_coverage_no_sys():
     # We also perform some additional strict testing with these tolerances.
 
     # Finally we also check using a KS test that the observed distribution is consistent with chi2 with 2 dofs.
-    np.random.seed(seed=42)
+    # rng = np.random.default_rng(seed=42)
     simulated_data = scipy_chi2.rvs(df=2, size=50, scale=1.0)
     p_value = ks_2samp(simulated_data, product_2)
     np.testing.assert_array_less(0.05, p_value.pvalue)
@@ -546,7 +547,7 @@ def test_coverage_with_sys():
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.08)
 
     # Finally we also check using a KS test that the observed distribution is consistent with chi2 with 2 dofs.
-    np.random.seed(seed=42)
+    # rng = np.random.default_rng(seed=42)
     simulated_data = scipy_chi2.rvs(df = 2, size=50, scale=1.0)
     p_value = ks_2samp(simulated_data, product_2)
     np.testing.assert_array_less(0.05, p_value.pvalue)
@@ -562,7 +563,8 @@ def test_perfect_recovery_multisurvey():
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     config_path = pathlib.Path(__file__).parent / "test_configs/test_config_sim_multisurvey.yml"
-    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov", "--no-sanity-check"]
+    cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--cheat_cc", "--no-sys_cov",
+          "--no-sanity-check"]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -715,11 +717,8 @@ def test_cc_decontam():
 
     logger.debug(f"MEANS: {means}")
 
-    mean_ntrue = np.mean(all_ntrue, axis=0)
-    mean_ncalc = np.mean(all_ncalc, axis=0)
     mean_res = np.mean(all_ntrue - all_ncalc, axis=0)
     std_ntrue = np.std(all_ntrue, axis=0)
-    std_ncalc = np.std(all_ncalc, axis=0)
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
     plot = False
@@ -731,10 +730,10 @@ def test_cc_decontam():
         print("mean_res = ", list(mean_res))
         print("std_ntrue = ", list(std_ntrue))
 
-        plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
-        plt.axhline(0, color='k', linestyle='--')
-        plt.xlabel('Redshift')
-        plt.ylabel('CC Counts')
+        plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt="o", label="True - Calculated CC Counts")
+        plt.axhline(0, color="k", linestyle="--")
+        plt.xlabel("Redshift")
+        plt.ylabel("CC Counts")
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts.png")
 
     np.testing.assert_allclose(means, 0.0, atol=1/np.sqrt(50))
@@ -778,14 +777,18 @@ def test_cc_decontam_small():
         plt.yscale("log")
         plt.legend()
 
-        bias_cor = runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins) / runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh = 0.5)
+        bias_cor = runner.datasets[f"{survey}_SIM_IA"].z_counts(runner.z_bins) / \
+        runner.datasets[f"{survey}_SIM_ALL"].z_counts(runner.z_bins, prob_thresh = 0.5)
         plt.subplot(1, 2, 2)
         plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins), label="Data IA Counts")
         plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins), label="Data CC Counts")
         plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins), label="Data All Counts")
-        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH), ls = "--", label="Data IA Counts Cut")
-        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH), ls = "--", label="Data CC Counts Cut")
-        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH)*bias_cor, color = "k", lw= 3, ls = "--", label="Data All Counts Cut w/ BCor")
+        plt.plot(runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),
+         ls = "--", label="Data IA Counts Cut")
+        plt.plot(runner.datasets[f"{survey}_DATA_CC_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH),
+         ls = "--", label="Data CC Counts Cut")
+        plt.plot(runner.datasets[f"{survey}_DATA_ALL_{index}"].z_counts(runner.z_bins, prob_thresh = PROB_THRESH)
+            *bias_cor, color = "k", lw= 3, ls = "--", label="Data All Counts Cut w/ BCor")
         plt.yscale("log")
         plt.legend()
         plt.savefig(pathlib.Path(__file__).parent / f"test_plots/aaaa_test_cc_decontam_simcounts_{index}_small.png")
@@ -807,7 +810,6 @@ def test_cc_decontam_small():
     pulls = np.array(pulls)
 
     means = np.mean(pulls, axis=0)
-    stds = np.std(pulls, axis=0)
 
     logger.debug(f"MEANS: {means}")
 
@@ -957,12 +959,12 @@ def test_coverage_SDSS_plus_DES():
     if plot:
         import matplotlib.pyplot as plt
 
-        plt.hist(product_2, bins=10, density=True, alpha=0.7, color='blue', label='Observed')
+        plt.hist(product_2, bins=10, density=True, alpha=0.7, color="blue", label="Observed")
         x = np.linspace(0, 12, 100)
         # Dof = 6, 8 bins - 2 fitted parameters
-        plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
-        plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
-        plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+        plt.plot(x, scipy_chi2.pdf(x, 2), color="red", linestyle="dashed", label="Expected")
+        plt.axvline(sigma_1, color="r", linestyle="dashed", linewidth=1)
+        plt.axvline(sigma_2, color="g", linestyle="dashed", linewidth=1)
         plt.xlabel("Chi-squared statistic")
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_coverage_sys_hist_SDSS_plus_DES.png")
 
@@ -981,7 +983,7 @@ def test_coverage_SDSS_plus_DES():
     np.testing.assert_allclose(np.size(sub_two_sigma[0])/np.size(product_2), 0.95, atol=0.08)
 
     # Finally we also check using a KS test that the observed distribution is consistent with chi2 with 2 dofs.
-    np.random.seed(seed=42)
+    # rng = np.random.default_rng(seed=42)
     simulated_data = scipy_chi2.rvs(df = 2, size=50, scale=1.0)
     p_value = ks_2samp(simulated_data, product_2)
     np.testing.assert_array_less(0.05, p_value.pvalue)
@@ -1008,7 +1010,7 @@ def test_cc_decontam_SDSS():
     for i in range(50):
         index = i+1
         logger.debug(f"Working on survey {survey}, dataset {index} -------------------")
-        runner.fit_args_dict['z_bins'][survey] = runner.z_bins
+        runner.fit_args_dict["z_bins"][survey] = runner.z_bins
         args.cheat_cc = False
         n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
 
@@ -1027,11 +1029,8 @@ def test_cc_decontam_SDSS():
 
     logger.debug(f"MEANS: {means}")
 
-    mean_ntrue = np.mean(all_ntrue, axis=0)
-    mean_ncalc = np.mean(all_ncalc, axis=0)
     mean_res = np.mean(all_ntrue - all_ncalc, axis=0)
     std_ntrue = np.std(all_ntrue, axis=0)
-    std_ncalc = np.std(all_ncalc, axis=0)
 
     z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
     plot = False
@@ -1043,10 +1042,10 @@ def test_cc_decontam_SDSS():
         logging.debug("mean_res = ", list(mean_res))
         logging.debug("std_ntrue = ", list(std_ntrue))
 
-        plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
-        plt.axhline(0, color='k', linestyle='--')
-        plt.xlabel('Redshift')
-        plt.ylabel('CC Counts')
+        plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt="o", label="True - Calculated CC Counts")
+        plt.axhline(0, color="k", linestyle="--")
+        plt.xlabel("Redshift")
+        plt.ylabel("CC Counts")
         plt.savefig(pathlib.Path(__file__).parent / "test_plots/test_cc_decontam_counts_SDSS.png")
 
 
@@ -1368,7 +1367,8 @@ def test_regression_CSFR_list():
     # Ensure the multi-CSFR loop actually ran
     assert {"B13_uncorrected", "S20"}.issubset(set(results["csfr"].unique()))
 
-    regression = pd.read_csv(pathlib.Path(__file__).parent / "test_regression/DES_SDSS_CSFR_list_regression.csv").reset_index(drop=True)
+    regression = pd.read_csv(pathlib.Path(__file__).parent /
+     "test_regression/DES_SDSS_CSFR_list_regression.csv").reset_index(drop=True)
     for i, col in enumerate([r"beta", r"R_1", r"beta_error", r"R_1_error", r"cov_beta_R_1", "reduced_chi_squared"]):
         try:
             np.testing.assert_allclose(results[col], regression[col], rtol=warning_rtol)
