@@ -134,7 +134,7 @@ def _run_cmd(cmd):
             f"stdout:\n{result.stdout}\n"
             f"stderr:\n{result.stderr}"
         )
-# ##########################TESTS BELOW############################################################
+# ##########################TESTS BELOW###########################################################
 
 def test_regression_specz():
     """In this test, we simply test that nothing has changed. This is using CC decontam and realistic data. Spec Zs.
@@ -1204,9 +1204,10 @@ save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scat
 
     labels = [r"< 1 $\sigma$", r"1-2 $\sigma$", r"> 2 $\sigma$"]
     for sig in [1, 2, 3]:
+        print(np.size(results[f"{a}"][integer_sigma == sig]))
         plt.errorbar(results[f"{a}"][integer_sigma == sig], results[f"{b}"][integer_sigma == sig],
         xerr = results[f"{a}_error"][integer_sigma == sig], yerr = results[f"{b}_error"][integer_sigma == sig],
-        fmt = "o", label = labels[sig-1], zorder = 0, ms = 3, alpha = 0.3)
+        fmt = "o", label = labels[sig-1], zorder = 0, ms = 3, alpha = 1.0)
 
     #chivals = pos.T @ np.linalg.inv(average_covariance_matrix) @ pos
     plt.contour(X, Y, chivals, levels=[2.30, 6.18], colors=['blue', 'red'], linestyles=['--', '--'], label = "1 and 2 sigma Contours")
@@ -1217,15 +1218,15 @@ save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scat
     list_of_Cj = [np.array([[results[f"{a}_error"].iloc[i]**2, results[f"cov_{a}_{b}"].iloc[i]],
                             [results[f"cov_{a}_{b}"].iloc[i], results[f"{b}_error"].iloc[i]**2]]) for i in range(len(results))]
     weighted_average, mean_cov = mean_of_correlated_errors(list_of_xj, list_of_Cj)
-    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=1, edgecolor='red')
-    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=2, edgecolor='blue')
-    plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=3, edgecolor='green')
+    # plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=1, edgecolor='red')
+    # plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=2, edgecolor='blue')
+    # plot_covariance_ellipse(ax=plt.gca(), mean=weighted_average, cov=mean_cov, n_std=3, edgecolor='green')
 
     #plt.xlim(np.min(results[f"{a}"])*0.9, np.max(results[f"{a}"])*1.1)
     #plt.ylim(np.min(results[f"{b}"])*0.9, np.max(results[f"{b}"])*1.1)
 
-    plt.xlim(2.1e-5, 2.3e-5)
-    plt.ylim(1.6, 1.8)
+    plt.xlim(2.27e-5 - 5e-6, 2.27e-5 + 5e-6)
+    plt.ylim(1.7-0.5, 1.7+0.5)
 
     plt.xlabel(r"$\alpha$")
     plt.ylabel(r"$\beta$")

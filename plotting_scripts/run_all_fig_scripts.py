@@ -2,13 +2,16 @@ import os
 import pathlib
 import subprocess
 import sys
-import matplotlib as mpl
 import numpy as np
 import yaml
 import pandas as pd
 from matplotlib import pyplot as plt
-from matplotlib import rcParams
 import time
+from tests.test_sauron import sauron_coverage_scatterplot
+from runner import LaurenNicePlots
+from scipy.optimize import nnls
+from runner import sauron_runner
+from types import SimpleNamespace
 
 
 OUTPUT_DIR = pathlib.Path(__file__).parent / "output"
@@ -16,6 +19,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 SDSS_ONLY_RATE_CONFIG = "/home/colefmeldorf/sauron/config_files/config_SDSS_only_Oct2026.yml"
 DES_ONLY_RATE_CONFIG = "/home/colefmeldorf/sauron/config_files/config_DES_only_Oct2026.yml"
 SDSS_PLUS_DES_RATE_CONFIG = "/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again.yml"
+SDSS_PLUS_DES_COVERAGE_CONFIG = "/home/colefmeldorf/sauron/tests/test_configs/test_config_SDSS_DES_coverage.yml"
 DES_DATALIKE_SIM = "/project2/rkessler/SURVEYS/" \
     "ROMAN/USERS/cmeldorf/D5YR_RATEPZ_NEWCC_ANALYSIS/5_MERGE/MERGE_Dsys_DATADES_SIM_IA/output/" \
     "PIP_D5YR_RATEPZ_NEWCC_SIM_NOMINAL_DATADESSIM_IA-0001/FITOPT000.FITRES.gz"
@@ -26,6 +30,7 @@ APLUSB_CONFIG = "/home/colefmeldorf/sauron/config_files/config_SDSS_redo_again_A
 HOURGLASS_CONFIG = "/home/colefmeldorf/sauron/config_files/config_hourglass_photoz.yml"
 HOURGLASS_PROMPT_CONFIG = "/home/colefmeldorf/sauron/config_files/config_hourglass_prompt.yml"
 HOURGLASS_PROMPT_BINNED_CONFIG = "/home/colefmeldorf/sauron/config_files/config_hourglass_prompt_binned.yml"
+
 
 def get_function_name():
     return sys._getframe(2).f_code.co_name
@@ -53,7 +58,7 @@ def fetch_from_path_and_check_new(path, starttime, caller):
     return path
 
 
-def run_a_cmd(config_path, files_to_get, debug=False):
+def run_a_cmd(config_path, files_to_get):
     caller = get_function_name()
     print(f"Running command for {caller}")
     outpath_loc = caller + ".csv"
@@ -61,8 +66,6 @@ def run_a_cmd(config_path, files_to_get, debug=False):
     outpath = OUTPUT_DIR / outpath_loc
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath), "--prob_thresh", "0.5", "--plot"]
-    #if debug:
-    #    cmd.append("--debug")
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -75,42 +78,6 @@ def run_a_cmd(config_path, files_to_get, debug=False):
         fetch_from_path_and_check_new(outpath / f, starttime, caller)
 
     return outpath
-
-
-def update_rcParams(key, val):
-    if key in rcParams:
-        rcParams[key] = val
-
-
-def LaurenNicePlots():
-    update_rcParams('font.size', 10)
-    update_rcParams('font.family', 'serif')
-    update_rcParams('xtick.major.size', 8)
-    update_rcParams('xtick.labelsize', 'large')
-    update_rcParams('xtick.direction', "in")
-    update_rcParams('xtick.minor.visible', True)
-    update_rcParams('xtick.top', True)
-    update_rcParams('ytick.major.size', 8)
-    update_rcParams('ytick.labelsize', 'large')
-    update_rcParams('ytick.direction', "in")
-    update_rcParams('ytick.minor.visible', True)
-    update_rcParams('ytick.right', True)
-    update_rcParams('xtick.minor.size', 4)
-    update_rcParams('ytick.minor.size', 4)
-    update_rcParams('xtick.major.pad', 10)
-    update_rcParams('ytick.major.pad', 10)
-    update_rcParams('legend.numpoints', 1)
-    update_rcParams('mathtext.fontset', 'cm')
-    update_rcParams('mathtext.rm', 'serif')
-    update_rcParams('axes.labelsize', 'x-large')
-    update_rcParams('lines.marker', 'None')
-    update_rcParams('lines.markersize', 5)
-    update_rcParams('lines.markeredgewidth', 1.0)
-    update_rcParams('lines.markeredgecolor', 'auto')
-
-    cycle_colors = ["348ABD", "A60628", "7A68A6", "467821", "D55E00", "CC79A7", "56B4E9", "009E73", "F0E442", "0072B2"]
-    cycle_markers = ['o','^','*','s','X','d', '1','2', '3']
-    update_rcParams('axes.prop_cycle', mpl.cycler(color=cycle_colors) )
 
 
 def load_dataframes_and_cut(config_file, survey, base_path_sim):
@@ -151,26 +118,70 @@ def load_dataframes_and_cut(config_file, survey, base_path_sim):
     return sim_df, data_df
 
 
+def run_decontamination(config_path, survey):
+    LaurenNicePlots()
+    args = SimpleNamespace()
+    args.config = config_path
+    args.cheat_cc = False
+    runner = sauron_runner(args)
+    runner.z_bins = np.linspace(0.1, 1.0, 11)
+    datasets, surveys = runner.unpack_dataframes()
+
+    PROB_THRESH = 0.5
+
+    pulls = []
+
+    pulls = np.empty((50, len(runner.z_bins)-1))
+    all_ntrue = np.empty((50, len(runner.z_bins)-1))
+    all_ncalc = np.empty((50, len(runner.z_bins)-1))
+    for i in range(50):
+        index = i+1
+        runner.fit_args_dict["z_bins"][survey] = runner.z_bins
+        n_calc = runner.calculate_CC_contamination(PROB_THRESH, index, survey, debug=False)
+
+        n_true = runner.datasets[f"{survey}_DATA_IA_{index}"].z_counts(runner.z_bins)
+        residual = n_true - n_calc
+        pull = residual / np.sqrt(n_true)
+
+        pulls[i, :] = pull
+        all_ntrue[i, :] = n_true
+        all_ncalc[i, :] = n_calc
+
+    pulls = np.array(pulls)
+
+    mean_res = np.mean(all_ntrue - all_ncalc, axis=0)
+    std_ntrue = np.std(all_ntrue, axis=0)
+    z_centers = (runner.z_bins[:-1] + runner.z_bins[1:]) / 2
+    plt.clf()
+
+
+    plt.errorbar(z_centers, mean_res, yerr=std_ntrue/np.sqrt(50), fmt='o', label='True - Calculated CC Counts')
+    plt.axhline(0, color='k', linestyle='--')
+    plt.xlabel('Redshift')
+    plt.ylabel('CC Counts')
+    plt.legend()
+
+
 def phot_redshift_plot(config_file, survey, base_path_sim):
     LaurenNicePlots()
 
     sim_df, data_df = load_dataframes_and_cut(config_file, survey, base_path_sim)
     bins = np.linspace(0, 0.9, 38)
     plt.figure(figsize = (15, 4))
-    plt.subplot(1,3,1)
+    plt.subplot(1, 3, 1)
     a, _, _ , _= plt.hist2d(sim_df["SIM_ZCMB"], sim_df["zPHOT"], bins=(bins, bins), cmap = "Blues", label = "Sim")
     plt.plot([0, 0.9], [0, 0.9], "k--")
     plt.xlabel("Simulated Redshift")
     plt.ylabel("Photometric Redshift")
     plt.title("Simulated Truth vs Recovered")
     plt.colorbar(label = "Counts")
-    plt.subplot(1,3,2)
+    plt.subplot(1, 3, 2)
     plt.xlabel("Spectroscopic Redshift")
     b, _, _, _ = plt.hist2d(data_df["HOST_ZSPEC"], data_df["zPHOT"], bins=(bins, bins), cmap = "Reds", label = "Data")
     plt.plot([0, 0.9], [0, 0.9], "k--")
     plt.title("Data Spectroscopic vs Recovered")
     plt.colorbar(label = "Counts")
-    plt.subplot(1,3,3)
+    plt.subplot(1, 3, 3)
 
     norm_factor = np.sum(a) / np.sum(b)
     normalized_a = a / norm_factor
@@ -179,7 +190,7 @@ def phot_redshift_plot(config_file, survey, base_path_sim):
     plt.imshow((b - normalized_a).T, origin = "lower", extent = [0, 0.9, 0, 0.9], aspect = "auto", cmap = "seismic", vmin = -30, vmax = 30)
     # vmin = -np.max(np.abs(normalized_a-b)), vmax = np.max(np.abs(normalized_a-b)))
     plt.xlabel("Truth or Spectroscopic Redshift")
-    #plt.ylabel("Recovered/phot redshift")
+    # plt.ylabel("Recovered/phot redshift")
     plt.colorbar(label = "Data - Simulated Counts")
     plt.plot([0, 0.9], [0, 0.9], "k--")
 
@@ -192,15 +203,16 @@ def phot_redshift_plot(config_file, survey, base_path_sim):
     plt.title("Data - Simulation")
 
     # Put the chi squared in a colored box in the bottom right corner
-    props = dict(boxstyle='round', facecolor='white', alpha=0.8)
+    props = dict(boxstyle="round", facecolor="white", alpha=0.8)
     plt.text(0.95, 0.05, r"$\chi^2$ = {:.2f}\nReduced $\chi^2$ = {:.2f}".format(chi_2, chi_2 / (len(chi))),
-    transform=plt.gca().transAxes, fontsize=10, verticalalignment='bottom', horizontalalignment='right', bbox=props)
+    transform=plt.gca().transAxes, fontsize=10, verticalalignment="bottom", horizontalalignment="right", bbox=props)
 
     plt.subplots_adjust(wspace = 0.4)
     plt.tight_layout()
     plt.suptitle("DES Photometric Redshift Performance Compared to Simulation", y = 1.02)
     generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
     plt.savefig(generated_figures_dir / f"photometric_redshift_performance_{survey}.png")
+
 
 def fetch_binned_rate_data(starttime):
     root_path = "/home/colefmeldorf/sauron/plots/"
@@ -244,24 +256,24 @@ def binned_rate_plot(starttime):
     print("dof: ", len(chi_2))
     print("reduced Chi-2: ", np.sum(chi_2) / len(chi_2))
 
-    plt.errorbar(z_centers, sdss_median, yerr=sdss_err, fmt='o', label='SDSS')
-    plt.errorbar(z_centers, des_median, yerr=des_err, fmt='o', label='DES')
+    plt.errorbar(z_centers, sdss_median, yerr=sdss_err, fmt="o", label="SDSS")
+    plt.errorbar(z_centers, des_median, yerr=des_err, fmt="o", label="DES")
     plt.grid()
     plt.legend(loc = "lower right", fontsize = 14)
     z_fine = np.linspace(0.05, 0.4, 100)
-    plt.xlabel('Redshift')
+    plt.xlabel("Redshift")
     plt.ylabel("Volumetric Rate (SNe yr$^{-1}$ Mpc$^{-3}$)")
 
-    props = dict(boxstyle='round', facecolor='white', alpha=0.8)
+    props = dict(boxstyle="round", facecolor="white", alpha=0.8)
     plt.text(.69, 0.15, r"$\chi^2$ = {:.2f}\nReduced $\chi^2$ = {:.2f}".format(np.sum(chi_2), np.sum(chi_2) / len(chi_2)),
-    transform=plt.gca().transAxes, fontsize=14, verticalalignment='bottom', horizontalalignment='right', bbox=props)
+    transform=plt.gca().transAxes, fontsize=14, verticalalignment="bottom", horizontalalignment="right", bbox=props)
 
     plt.title("Binned Volumetric Rate Comparison between SDSS and DES", fontsize = 16, y=1.08)
     generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
     plt.savefig(generated_figures_dir / "binned_rate_comparison.png")
 
 
-def turnover_power_law(z, x,z_turn=1):
+def turnover_power_law(z, x, z_turn=1):
     alpha1, beta1, alpha2, beta2 = x
     fJ = np.where(z < z_turn,
                 alpha1 * (1 + z)**beta1,
@@ -291,7 +303,7 @@ def binned_rate_hourglass(df):
 
     unc_high = percentiles[1] - mean_rate
     unc_low = mean_rate - percentiles[0]
-    plt.errorbar(z_centers, mean_rate, yerr=[unc_low, unc_high], fmt='o', color='black', label="Roman Forecast")
+    plt.errorbar(z_centers, mean_rate, yerr=[unc_low, unc_high], fmt="o", color="black", label="Roman Forecast")
     plt.xlabel("Redshift")
     plt.ylabel("Volumetric Rate (SNe yr$^{-1}$ Mpc$^{-3}$)")
 
@@ -307,16 +319,16 @@ def binned_rate_hourglass(df):
     # plt.errorbar expects asymmetric errors as shape (2, N): [lower, upper]
     R_Ia_err = np.array([R_Ia_err_lo, R_Ia_err_hi])
 
-    plt.errorbar(redshift, R_Ia, xerr=redshift_err, yerr=R_Ia_err, fmt='o', label = "S20 Data Compendium")
+    plt.errorbar(redshift, R_Ia, xerr=redshift_err, yerr=R_Ia_err, fmt="o", label = "S20 Data Compendium")
     plt.legend(loc="lower right")
     ########################################################################
 
     plt.subplot(1, 2, 2)
     plt.grid(True)
-    plt.errorbar(redshift, (R_Ia_err_hi + R_Ia_err_lo)/2, xerr=redshift_err, fmt='o', label="S20 Data Compendium")
+    plt.errorbar(redshift, (R_Ia_err_hi + R_Ia_err_lo)/2, xerr=redshift_err, fmt="o", label="S20 Data Compendium")
     mean_err = (unc_high + unc_low) / 2
-    plt.errorbar(z_centers, mean_err, xerr  = np.diff(z_centers)[0]/2, fmt='o', color='black', label="Roman Forecast")
-    plt.ylabel("1$\sigma$ Uncertainty in Rate (SNe yr$^{-1}$ Mpc$^{-3}$)")
+    plt.errorbar(z_centers, mean_err, xerr  = np.diff(z_centers)[0]/2, fmt="o", color="black", label="Roman Forecast")
+    plt.ylabel(r"1$\sigma$ Uncertainty in Rate (SNe yr$^{-1}$ Mpc$^{-3}$)")
     plt.xlabel("Redshift")
     plt.legend()
     plt.ylim(0, 1.5e-5)
@@ -324,6 +336,7 @@ def binned_rate_hourglass(df):
     plt.tight_layout()
     generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
     plt.savefig(generated_figures_dir / "roman_forecast_vs_s20_data_compendium.png")
+
 
 from dtd_functions import csfr_double_power_law_uncorrected, build_response_matrix, recover_dtd
 
@@ -349,9 +362,10 @@ def SNR(t, eta_Ia, fP):
 
     return rate
 
+
 def binned_dtd_plot(df):
     LaurenNicePlots()
-    #z_bins = np.linspace(0.2, 2.8, 16)
+    # z_bins = np.linspace(0.2, 2.8, 16)
     z_sn_edges = np.load(r"/home/colefmeldorf/sauron/plots/z_bin_edges_HOURGLASS.npy")
     z_centers = 0.5 * (z_sn_edges[1:] + z_sn_edges[:-1])
     print("df shape:", df.shape)
@@ -359,10 +373,8 @@ def binned_dtd_plot(df):
 
     for k, tau_edges_Gyr in enumerate([[0.04, 0.42, 2.4, 14]]):
         tau_edges_Gyr = np.array(tau_edges_Gyr)
-        #measured_84 = np.load(r"C:\Users\cmeldorf\Downloads\binned_rate_84_HOURGLASS_new.npy")
-        #measured_16 = np.load(r"C:\Users\cmeldorf\Downloads\binned_rate_16_HOURGLASS_new.npy")
-        #covariance_matrix = np.load(r"C:\Users\cmeldorf\Downloads\cov_mat_in_rate_HOURGLASS_.npy")
-        #measured_rate = np.load(r"C:\Users\cmeldorf\Downloads\binned_rate_HOURGLASS_new.npy")
+        # covariance_matrix = np.load(r"C:\Users\cmeldorf\Downloads\cov_mat_in_rate_HOURGLASS_.npy")
+        # measured_rate = np.load(r"C:\Users\cmeldorf\Downloads\binned_rate_HOURGLASS_new.npy")
 
         all_results = np.zeros((len(df), len(z_centers)))
         for row in df.iterrows():
@@ -428,8 +440,8 @@ def binned_dtd_plot(df):
         fP = 0.59
         t = np.linspace(0, 10, 100000)
 
-        plt.yscale('log')
-        plt.xscale('log')
+        plt.yscale("log")
+        plt.xscale("log")
         plt.xlim(0.04, 10)
         plt.title("Recovered DTD vs True DTD")
         plt.xlabel("Delay time (Gyr)")
@@ -444,7 +456,6 @@ def binned_dtd_plot(df):
             z_sn_edges, z_csfr_edges, psi_csfr, tau_edges_Gyr
         )
 
-        z_sn_centers = 0.5 * (z_sn_edges_fine[:-1] + z_sn_edges_fine[1:])
         simulated_rate = SNR(t_sn_center, eta_val, fP) * 1e-9  # convert to SNe/yr/Mpc^3
         sigma = 0.001 * simulated_rate  # 10% uncertainty
         Phi, cov_analytic = recover_dtd_weighted(measured_rate, sigma, A, nonnegative=True)
@@ -456,7 +467,7 @@ def binned_dtd_plot(df):
                 label = "True DTD binned"
             else:
                 label = None
-            plt.plot([tau_lo, tau_hi], [Phi[t], Phi[t]], '--', color = "C" + str(k), lw = 1,zorder = 10, label = label)
+            plt.plot([tau_lo, tau_hi], [Phi[t], Phi[t]], "--", color = "C" + str(k), lw = 1, zorder = 10, label = label)
 
     plt.legend()
     generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
@@ -464,7 +475,6 @@ def binned_dtd_plot(df):
     print("saved to", generated_figures_dir / "roman_forecast_binned_dtd.png")
 
 
-from scipy.optimize import nnls
 def recover_dtd_weighted(R_sn_peryr, sigma_R_peryr, A, nonnegative=True):
     """ Same as recover_dtd, but downweights noisy SN rate bins using their
     reported uncertainty sigma_R_peryr (same units as R_sn_peryr).
@@ -490,7 +500,7 @@ def recover_dtd_weighted(R_sn_peryr, sigma_R_peryr, A, nonnegative=True):
     # plt.savefig("R_perGyr_vs_sigma_perGyr.png")
     # plt.close()
 
-    #whiten: divide each equation by its uncertainty
+    # whiten: divide each equation by its uncertainty
     A_w = A / sigma_perGyr[:, None]
     R_w = R_perGyr / sigma_perGyr
 
@@ -499,10 +509,11 @@ def recover_dtd_weighted(R_sn_peryr, sigma_R_peryr, A, nonnegative=True):
     else:
         Phi, *_ = np.linalg.lstsq(A_w, R_w, rcond=None)
     print("Phi:", Phi)
-    #analytic covariance: (A_w^T A_w)^-1  (equivalent to (A^T C^-1 A)^-1)
+    # analytic covariance: (A_w^T A_w)^-1  (equivalent to (A^T C^-1 A)^-1)
     cov_analytic = np.linalg.inv(A_w.T @ A_w)
 
     return Phi, cov_analytic
+
 
 def fig_1_left_3_left_and_8():
     run_a_cmd(DES_ONLY_RATE_CONFIG,
@@ -519,7 +530,14 @@ def fig_1_right_3_right_and_9():
 
 
 def fig_4_and_6():
-    pass
+    outpath = run_a_cmd(SDSS_PLUS_DES_COVERAGE_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"])
+    generated_figures_dir = pathlib.Path(__file__).parent / "generated_figures"
+
+    df = pd.read_csv(outpath)
+    df = df[df["survey"].str.contains("combined")]
+    sauron_coverage_scatterplot(df,
+    outpath=generated_figures_dir / "test_coverage_sys_scatter_SDSS_plus_DES.png")
+
 
 
 def fig_5():
@@ -528,7 +546,6 @@ def fig_5():
 
 
 def fig_7():
-    starttime = time.time()
     run_a_cmd("/home/colefmeldorf/sauron/config_files/config_SDSS_plus_DES_lowbins_Oct2026.yml", ["/home/colefmeldorf/sauron/summary_plot.png"])
     binned_rate_plot(0)
 
@@ -555,23 +572,23 @@ def fig_14():
 
 
 def fig_15():
-    outpath = "/home/colefmeldorf/sauron/plotting_scripts/output/fig_15.csv"
-    #outpath = run_a_cmd(HOURGLASS_PROMPT_BINNED_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"] )
+    outpath = run_a_cmd(HOURGLASS_PROMPT_BINNED_CONFIG, ["/home/colefmeldorf/sauron/summary_plot.png"] )
     binned_dtd_plot(pd.read_csv(outpath))
+
 
 def run_all_fig_scripts():
     # Figure 2 is a diagram
 
-    # fig_1_left_3_left_and_8()
-    # fig_1_right_3_right_and_9()
-    # fig_4_and_6()
-    # fig_5()
-    # fig_7()
-    # fig_10()
-    # fig_11()
-    # fig_12()
-    # fig_13()
-    # fig_14()
+    fig_1_left_3_left_and_8()
+    fig_1_right_3_right_and_9()
+    fig_4_and_6()
+    fig_5()
+    fig_7()
+    fig_10()
+    fig_11()
+    fig_12()
+    fig_13()
+    fig_14()
     fig_15()
 
 
