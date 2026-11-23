@@ -310,8 +310,74 @@ def age_at_z(z):
 # ----------------------------------------------------------------------
 # 2. Build the response matrix A such that  R_sn = A @ Phi
 # ----------------------------------------------------------------------
+# def build_response_matrix(z_sn_edges, z_csfr_edges, psi_csfr_peryr, tau_edges_Gyr):
+#     """Parameters
+#     ----------
+#     z_sn_edges : array (n_sn+1,)
+#         Redshift bin EDGES for the SN Ia rate measurement (coarse).
+#     z_csfr_edges : array (n_csfr+1,)
+#         Redshift bin EDGES for the CSFR (fine grid).
+#     psi_csfr_peryr : array (n_csfr,)
+#         CSFR density per fine bin, in Msun / yr / Mpc^3
+#         (i.e. the usual Madau & Dickinson-style units).
+#     tau_edges_Gyr : array (n_dtd+1,)
+#         Delay time bin edges in Gyr, e.g. [0.0, 0.5, 2.0, 13.5] -> 3 bins.
+
+#     Returns
+#     -------
+#     A : array (n_sn, n_dtd)
+#         Response matrix, units such that A @ Phi_[SNe/Msun/Gyr] gives
+#         R_sn in SNe / Gyr / Mpc^3.
+#     t_sn_center : array (n_sn,)
+#         Cosmic age (Gyr) at the center of each SN redshift bin.
+#     """
+#     # --- convert redshift edges to cosmic time (age) ---
+#     t_sn_edges = age_at_z(z_sn_edges)          # decreasing as z increases
+#     t_csfr_edges = age_at_z(z_csfr_edges)
+
+#     t_sn_center = 0.5 * (t_sn_edges[:-1] + t_sn_edges[1:])
+
+#     t_csfr_center = 0.5 * (t_csfr_edges[:-1] + t_csfr_edges[1:])
+#     dt_csfr = np.abs(t_csfr_edges[1:] - t_csfr_edges[:-1])   # Gyr
+
+#     # convert CSFR to per-Gyr so units match dt_csfr (Gyr)
+#     psi_csfr_perGyr = psi_csfr_peryr * 1e9   # Msun/yr/Mpc^3 -> Msun/Gyr/Mpc^3
+
+#     # check if any t_sn_edges are out of order
+#     out_of_order = 0
+#     for i in range(len(t_sn_edges) - 1):
+#         if t_sn_edges[i] < t_sn_edges[i + 1]:
+#             out_of_order += 1
+#             logging.debug("out of order bins: " + str(t_sn_edges[i]) + " < " + str(t_sn_edges[i + 1]))
+#     n_sn = len(t_sn_center) - out_of_order
+#     n_dtd = len(tau_edges_Gyr) - 1
+#     print("n_dtd", n_dtd)
+#     A = np.zeros((n_sn, n_dtd))
+#     print("IN BINS BELOW HERE")
+#     for i, t_i in enumerate(t_sn_center):
+#         print(i, t_i)
+#         if t_sn_edges[i] < t_sn_edges[i + 1]:
+#             # We want to skip cases where the SN bin loops back to start, aka between different surveys
+#             print("skipping!")
+#             continue
+#         # delay (Gyr) between each fine CSFR bin and this SN epoch
+#         tau_k = t_i - t_csfr_center
+#         for j in range(n_dtd):
+#             tau_lo, tau_hi = tau_edges_Gyr[j], tau_edges_Gyr[j + 1]
+#             # only mass formed BEFORE the SN epoch (tau_k >= 0) can contribute
+#             in_bin = (tau_k >= tau_lo) & (tau_k < tau_hi) & (tau_k >= 0)
+#             print("in bin", np.sum(in_bin))
+#             A[i, j] = np.sum(psi_csfr_perGyr[in_bin] * dt_csfr[in_bin])
+
+#     if np.all(A == 0):
+#         print("t sn centers was", t_sn_center)
+#         print("psi_csfr_perGyr:", psi_csfr_perGyr)
+#         raise ValueError("Response matrix A is all zeros!!!")
+#     return A, t_sn_center
+
 def build_response_matrix(z_sn_edges, z_csfr_edges, psi_csfr_peryr, tau_edges_Gyr):
-    """Parameters
+    """
+    Parameters
     ----------
     z_sn_edges : array (n_sn+1,)
         Redshift bin EDGES for the SN Ia rate measurement (coarse).
@@ -327,7 +393,7 @@ def build_response_matrix(z_sn_edges, z_csfr_edges, psi_csfr_peryr, tau_edges_Gy
     -------
     A : array (n_sn, n_dtd)
         Response matrix, units such that A @ Phi_[SNe/Msun/Gyr] gives
-        R_sn in SNe / Gyr / Mpc^3.
+        R_sn in SNe / Gyr / Mpc^3 (see unit note at bottom of file).
     t_sn_center : array (n_sn,)
         Cosmic age (Gyr) at the center of each SN redshift bin.
     """
@@ -343,20 +409,12 @@ def build_response_matrix(z_sn_edges, z_csfr_edges, psi_csfr_peryr, tau_edges_Gy
     # convert CSFR to per-Gyr so units match dt_csfr (Gyr)
     psi_csfr_perGyr = psi_csfr_peryr * 1e9   # Msun/yr/Mpc^3 -> Msun/Gyr/Mpc^3
 
-    # check if any t_sn_edges are out of order
-    out_of_order = 0
-    for i in range(len(t_sn_edges) - 1):
-        if t_sn_edges[i] < t_sn_edges[i + 1]:
-            out_of_order += 1
-            logging.debug("out of order bins: " + str(t_sn_edges[i]) + " < " + str(t_sn_edges[i + 1]))
-    n_sn = len(t_sn_center) - out_of_order
+    n_sn = len(t_sn_center)
     n_dtd = len(tau_edges_Gyr) - 1
     A = np.zeros((n_sn, n_dtd))
 
+
     for i, t_i in enumerate(t_sn_center):
-        if t_sn_edges[i] > t_sn_edges[i + 1]:
-            # We want to skip cases where the SN bin loops back to start, aka between different surveys
-            continue
         # delay (Gyr) between each fine CSFR bin and this SN epoch
         tau_k = t_i - t_csfr_center
         for j in range(n_dtd):
@@ -364,6 +422,7 @@ def build_response_matrix(z_sn_edges, z_csfr_edges, psi_csfr_peryr, tau_edges_Gy
             # only mass formed BEFORE the SN epoch (tau_k >= 0) can contribute
             in_bin = (tau_k >= tau_lo) & (tau_k < tau_hi) & (tau_k >= 0)
             A[i, j] = np.sum(psi_csfr_perGyr[in_bin] * dt_csfr[in_bin])
+
 
     return A, t_sn_center
 
