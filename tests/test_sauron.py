@@ -1263,8 +1263,8 @@ save = True, outpath = pathlib.Path(__file__).parent / "test_plots/coverage_scat
     x = np.linspace(0, 14, 100)
     # Dof = 6, 8 bins - 2 fitted parameters
     plt.plot(x, scipy_chi2.pdf(x, 2), color='red', linestyle='dashed', label='Expected')
-    #plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
-    #plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
+    plt.axvline(sigma_1, color='r', linestyle='dashed', linewidth=1)
+    plt.axvline(sigma_2, color='g', linestyle='dashed', linewidth=1)
     plt.legend()
     plt.xlabel("$\\chi^2$ statistic")
     plt.ylabel("Density")

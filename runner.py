@@ -300,6 +300,55 @@ class sauron_runner:
 
         return csfr_names
 
+    def _get_area_correction(self, args_dict, survey):
+        area_correction = args_dict.get("AREA_FRAC", None)
+        logging.debug(args_dict)
+        if area_correction is None:
+            logging.warning(f"AREA_FRAC not specified in FIT_OPTIONS for {survey}."
+                             " Defaulting to 1.0 (no area correction).")
+            area_correction = 1.0
+        if self.fit_args_dict.get("area_frac") is None:
+            self.fit_args_dict["area_frac"] = {}
+        return area_correction
+
+    def _get_f_norm(self, args_dict, survey):
+        raw_f_norm = args_dict.get("F_NORM", None)
+        if raw_f_norm is None:
+            return None
+        else:
+            try:
+                f_norm = float(raw_f_norm)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float; got {raw_f_norm!r}."
+                )
+            if f_norm <= 0:
+                raise ValueError(
+                    f"F_NORM for survey {survey} must be a positive float greater than zero; got {f_norm!r}."
+                )
+
+        return f_norm
+
+    def _get_z_bins(self, args_dict, survey):
+        zbins = np.arange(0.0, 1.4, 0.1)
+        if "Z_BINS" in args_dict:
+            if isinstance(args_dict["Z_BINS"], list):
+                zbins = np.array(args_dict["Z_BINS"])
+            elif isinstance(args_dict["Z_BINS"], int):
+                if "MIN_Z" not in args_dict or "MAX_Z" not in args_dict:
+                    logging.warning("When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
+                                    " Defaulting to MIN_Z=0 and MAX_Z=1.4")
+                min_z = args_dict.get("MIN_Z", 0)
+                max_z = args_dict.get("MAX_Z", 1.4)
+                zbins = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
+            logging.debug(f"Using z_bin edges for {survey}: {zbins}")
+
+        else:
+            logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
+
+        return zbins
+
+
     def parse_survey_fit_options(self, args_dict, survey):
         """ Parse survey-specific fit options from the config file.
 
@@ -312,41 +361,14 @@ class sauron_runner:
             Name of the survey.
         """
 
-        raw_f_norm = args_dict.get("F_NORM", None)
-        if raw_f_norm is None:
-            self.fit_args_dict["f_norm"][survey] = None
-        else:
-            try:
-                f_norm = float(raw_f_norm)
-            except (TypeError, ValueError):
-                raise ValueError(
-                    f"F_NORM for survey {survey} must be a positive float; got {raw_f_norm!r}."
-                )
-            if f_norm <= 0:
-                raise ValueError(
-                    f"F_NORM for survey {survey} must be a positive float greater than zero; got {f_norm!r}."
-                )
-            self.fit_args_dict["f_norm"][survey] = f_norm
+        self.fit_args_dict["area_frac"][survey] = self._get_area_correction(args_dict, survey)
+        self.fit_args_dict["f_norm"][survey] = self._get_f_norm(args_dict, survey)
 
 
         self.fit_args_dict["cc_are_sep"][survey] = args_dict.get("CC_ARE_SEPARATE", None)
         logging.debug(f"Setting CC_ARE_SEPARATE for {survey} to {args_dict.get('CC_ARE_SEPARATE', None)}")
-        self.fit_args_dict["z_bins"][survey] = np.arange(0.0, 1.4, 0.1)
-        if "Z_BINS" in args_dict:
-            if isinstance(args_dict["Z_BINS"], list):
-                self.fit_args_dict["z_bins"][survey] = np.array(args_dict["Z_BINS"])
-            elif isinstance(args_dict["Z_BINS"], int):
-                if "MIN_Z" not in args_dict or "MAX_Z" not in args_dict:
-                    logging.warning("When specifying Z_BINS as an integer, MIN_Z and MAX_Z must also be specified."
-                                    " Defaulting to MIN_Z=0 and MAX_Z=1.4")
-                min_z = args_dict.get("MIN_Z", 0)
-                max_z = args_dict.get("MAX_Z", 1.4)
-                self.fit_args_dict["z_bins"][survey] = np.linspace(min_z, max_z, args_dict["Z_BINS"] + 1)
-            logging.debug(f"Using z_bin edges for {survey}: {self.fit_args_dict['z_bins'][survey]}")
 
-        else:
-            logging.warning(f"No Z_BINS specified in FIT_OPTIONS. Using default z_bins for {survey}:")
-
+        self.fit_args_dict["z_bins"][survey] = self._get_z_bins(args_dict, survey)
         self.fit_args_dict["z_centers"][survey] = (self.fit_args_dict["z_bins"][survey][1:] +
                                                    self.fit_args_dict["z_bins"][survey][:-1]) / 2
 
@@ -575,6 +597,12 @@ class sauron_runner:
             logging.warning("Specifically, these are the bin edges of the zero count bins:", z_bins[unique_bad_bins])
 
         eff_ij = num/dump_counts
+
+        area_frac = self.fit_args_dict["area_frac"][survey]
+        logging.debug(f"Applying area fraction correction for {survey}: {area_frac}")
+        eff_ij *= self.fit_args_dict["area_frac"][survey] # Account for pixel-level losses not included in the
+        # simulation: masked pixels, dead CCDs, overlap, etc.
+
 
         self.fit_args_dict["eff_ij"][survey] = eff_ij
 
@@ -1197,15 +1225,11 @@ class sauron_runner:
         ax1 = plt.subplot(gs[0])
         ax2 = plt.subplot(gs[1])
 
+
         plt.tight_layout()
         fig.tight_layout(pad=3.0)
 
 
-        #x = [0.1582277103980981, 0.2594937254128336, 0.35443046846833953, 0.4514767741491768, 0.5590717690815249, 0.6497890948447501, 0.7552742351101487, 0.8481014155403231, 0.9535865558057216, 1.044303881568947]
-        #y = [0.1433249567286628, 0.28672876407995695, 0.35811541217385745, 0.35434417851059935, 0.4816801295127702, 0.4740914969087896, 0.5889995743470519, 0.5615976557344384, 0.7922286438044143, 0.7474175568260809]
-
-        #y = np.array(y) * 1e-4
-        #ax1.scatter(x, y, label="Perret", color="C0", s=10)
         surveys = list(surveys)
         for i, survey in enumerate(surveys):
             s = survey
@@ -1276,6 +1300,17 @@ class sauron_runner:
                     ax1.fill_between(z_centers, predicted_rate_16, predicted_rate_84, color="C"+str(color_index), alpha=0.5)
                     # , label="1 sigma confidence region"
 
+
+
+
+                    #f_x = [0.05504582463125854, 0.0703363706701545, 0.10193679720668135, 0.15494386472749114, 0.2008154146511998, 0.262996845072539, 0.25178381325454047, 0.3058103034270645, 0.35473994491995636, 0.45157989344700566, 0.548419841974055, 0.6523953080982056, 0.7502545910839893, 0.8521913882906709, 0.9531090274245768]
+                    #f_y = [0.000027570946957244527, 0.000024788513671054033, 0.000025562153065155003, 0.000030521056092238684, 0.00003435059259758193, 0.00002883758002898668, 0.00003601373074021692, 0.00004269628409450243, 0.00003775739234030398, 0.00003749055951201835, 0.00005061882337679413, 0.000051829737326348544, 0.00006262020770162846, 0.00006144704100200326, 0.00008121774138035307]
+                    #f_y = np.array(f_y)
+
+                   # x = [0.05935261062199595, 0.1708633544113032, 0.30395690813771875, 0.4118706466097882, 0.5971223335035152, 0.7949640058277835, 1.0269784735197014, 1.7356115508125238]
+                    #y = [0.00002534543015880397, 0.000029563247583904124, 0.000037965330504586786, 0.00003470483939484611, 0.000046914721332389875, 0.000060055326655245245, 0.00007638503126417242, 0.0000624115001994188]
+                    #ax1.plot(f_x, f_y, label="Frohmaier Data", color="C"+str(color_index))
+                    #ax1.plot(x, y, label = "Strolger Data", color="C"+str(color_index))
                     if ii == 0:
                         props = dict(boxstyle="round", facecolor="white", alpha=0.8)
 
@@ -1411,10 +1446,6 @@ class sauron_runner:
                     ax2.set_xlabel(label_names[1])
                     ax2.set_ylabel(label_names[0])
 
-                    #ax2.set_yticks([1.9e-5, 2e-5, 2.1e-5, 2.2e-5, 2.3e-5, 2.4e-5, 2.5e-5])
-                    #ax2.set_yticklabels(["1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"])
-                    #ax2.set_ylabel(r"$\alpha [\times 10^{-5}$ SNe yr$^{-1}$ Mpc$^{-3}]$")
-
 
                     # Adaptively define the ticks
                     extent_chi_0s = np.array(extent_chi_0s)
@@ -1455,7 +1486,7 @@ class sauron_runner:
                     while len(set([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])) < len(y_ticks):
                         precision += 1
 
-                    ax2.set_yticklabels([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])
+                   # ax2.set_yticklabels([f"{y_tick/norm:.{precision}f}" for y_tick in y_ticks])
 
                     # # Do the same for x ticks
                     # #x_limits = smallest_x, biggest_x
@@ -1577,6 +1608,9 @@ class sauron_runner:
                     plt.savefig(path)
             else:
                 cov_sys = None
+
+            #logging.debug(f"Including a 5% systematic uncertainty due to area uncertainty.")
+            #cov_sys *= np.eye(cov_sys.shape[0]) * 1.05
             self.fit_args_dict["cov_sys"][survey] = cov_sys
 
     def calculate_f_norm(self, survey, index):
