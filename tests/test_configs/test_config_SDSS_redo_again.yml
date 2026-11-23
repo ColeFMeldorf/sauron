@@ -12,6 +12,7 @@ SDSS:
     MAX_Z: 0.40
     CC_ARE_SEPARATE: false
     F_NORM: 0.0416666
+    AREA_FRAC: 0.98
 # Masao doesn't make these cuts in the SDSS paper, should I not?
   CUTS:
     x1: -3, 3

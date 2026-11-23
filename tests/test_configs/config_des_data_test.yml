@@ -13,6 +13,7 @@ DES:
     MIN_Z: 0.1
     MAX_Z: 0.9
     F_NORM: 0.02
+    AREA_FRAC: 0.826
   CUTS:
     x1: -3, 3
     c: -0.3, 0.3
