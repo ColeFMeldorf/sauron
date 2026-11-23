@@ -3,6 +3,7 @@
 
 # Standard Library
 import argparse
+import copy
 import logging
 import math
 
@@ -59,10 +60,14 @@ def main():
         runner.get_counts(survey)  # This only gets dump counts, which have no cuts applied
         if args.sanity_check:
             runner.perform_sanity_checks(survey)
+        # Snapshot this survey's datasets before the nominal CUTS so that CUT_SYSTEMATICS variants
+        # (which may be looser than the nominal cuts) can be applied from scratch.
+        uncut_datasets = {k: copy.copy(v) for k, v in runner.datasets.items() if k.startswith(f"{survey}_")}
         if not args.skip_cuts:
             runner.apply_cuts(survey)
 
         runner.calculate_transfer_matrix(survey)
+        runner.calculate_cut_systematics(survey, uncut_datasets, PROB_THRESH)
 
         n_datasets = runner.fit_args_dict["n_datasets"][survey]
         runner.load_and_decontaminate_datasets(survey, PROB_THRESH=PROB_THRESH)

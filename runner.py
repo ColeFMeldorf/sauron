@@ -1,6 +1,7 @@
 # Standard Library
 import yaml
 
+import copy
 import glob
 import logging
 import pandas as pd
@@ -566,14 +567,20 @@ class sauron_runner:
         self.final_counts["combined"] = {}
 
 
-    def calculate_transfer_matrix(self, survey):
+    def calculate_transfer_matrix(self, survey, datasets=None, store=True):
         """Calculate the transfer matrix, epsilon_ij, for a given survey.
         Inputs
         ------
         survey : str
-            Name of the survey."""
-        dump = self.datasets[f"{survey}_DUMP_IA"]
-        sim = self.datasets[f"{survey}_SIM_IA"]
+            Name of the survey.
+        datasets : dict, optional
+            Datasets to use. Defaults to self.datasets.
+        store : bool
+            If False, just return eff_ij without saving it to fit_args_dict or plotting. Used by
+            calculate_cut_systematics."""
+        datasets = self.datasets if datasets is None else datasets
+        dump = datasets[f"{survey}_DUMP_IA"]
+        sim = datasets[f"{survey}_SIM_IA"]
         z_bins = self.fit_args_dict["z_bins"][survey]
 
         logging.info(f"Using true col: {sim.true_z_col} and recovered col: {sim.z_col}")
@@ -603,6 +610,8 @@ class sauron_runner:
         eff_ij *= self.fit_args_dict["area_frac"][survey] # Account for pixel-level losses not included in the
         # simulation: masked pixels, dead CCDs, overlap, etc.
 
+        if not store:
+            return eff_ij
 
         self.fit_args_dict["eff_ij"][survey] = eff_ij
 
@@ -1613,6 +1622,114 @@ class sauron_runner:
             #cov_sys *= np.eye(cov_sys.shape[0]) * 1.05
             self.fit_args_dict["cov_sys"][survey] = cov_sys
 
+    def calculate_cut_systematics(self, survey, uncut_datasets, PROB_THRESH):
+        """Add a covariance term from the CUT_SYSTEMATICS block of the config to cov_sys[survey].
+
+        For each cut variant (the nominal CUTS with some columns overridden), the variant cuts are applied
+        to copies of the datasets *before* the nominal cuts, the normal CC decontamination is run, and the
+        transfer matrix is recomputed. The variant counts are mapped onto the nominal efficiency via
+            n_equiv_j = n_v_j * P_nom_j / P_v_j,   P_j = sum_i N_gen_i * eff_ij
+        and Delta_v = n_equiv - n_nom. Each variant is an independent systematic: C = sum_v outer(Delta_v, Delta_v).
+
+        Must be called after the nominal apply_cuts, get_counts and calculate_transfer_matrix for this survey.
+
+        Inputs
+        ------
+        survey : str
+            Name of the survey.
+        uncut_datasets : dict
+            Shallow copies of this survey's datasets taken before the nominal CUTS were applied (SUBSET cuts
+            already applied).
+        PROB_THRESH : float
+            Probability threshold used in the CC decontamination.
+
+        Returns
+        -------
+        cov_cut : np.ndarray or None
+        """
+        variants = self._parse_cut_systematics(survey)
+        if len(variants) == 0:
+            return None
+        if not getattr(self.args, "sys_cov", False):
+            logging.info(f"CUT_SYSTEMATICS found for {survey} but --no-sys_cov is set. Skipping.")
+            return None
+        if getattr(self.args, "skip_cuts", False):
+            logging.warning(f"CUT_SYSTEMATICS found for {survey} but --skip-cuts is set. Skipping cut systematics.")
+            return None
+
+        logging.info(f"Calculating cut systematics for {survey} with {len(variants)} variant(s)...")
+        index = 1  # Same hardcoded index as the other systematic terms in calculate_covariance.
+        z_centers = self.fit_args_dict["z_centers"][survey]
+        N_gen = np.asarray(self.fit_args_dict["N_gen"][survey], dtype=float)
+        eff_nom = self.fit_args_dict["eff_ij"][survey]
+        # Predicted counts at the simulated rate (null_counts * f_sim = N_gen), combined with eff_ij exactly as
+        # in fit_rate/chi2 (np.sum(null_counts * eff_ij * ..., axis=0)), so the ratio matches the fit's model.
+        P_nom = np.sum(N_gen * eff_nom, axis=0)
+        n_nom = np.asarray(self.calculate_CC_contamination(PROB_THRESH, index, survey), dtype=float)
+
+        nominal_cuts = dict(self.config[survey].get("CUTS", None) or {})
+        cov_cut = np.zeros((len(n_nom), len(n_nom)))
+        deltas = []
+        labels = []
+        for variant in variants:
+            label = ", ".join(f"{c}: {s}" for c, s in variant.items())
+            labels.append(label)
+            cuts = {**nominal_cuts, **variant}
+            tmp = {k: copy.copy(v) for k, v in uncut_datasets.items()}
+            self.apply_cuts(survey, datasets=tmp, cuts=cuts)
+            n_v = np.asarray(self.calculate_CC_contamination(PROB_THRESH, index, survey, datasets=tmp), dtype=float)
+            eff_v = self.calculate_transfer_matrix(survey, datasets=tmp, store=False)
+            P_v = np.sum(N_gen * eff_v, axis=0)
+
+            bad = P_v <= 0
+            if np.any(bad):
+                logging.warning(f"Cut variant [{label}] for {survey} leaves no simulated events in bins "
+                                f"{np.where(bad)[0]}. Setting Delta=0 there.")
+            ratio = np.divide(P_nom, P_v, out=np.ones_like(P_nom), where=~bad)
+            n_equiv = n_v * ratio
+            delta = np.where(bad, 0.0, n_equiv - n_nom)
+            delta = np.nan_to_num(delta, nan=0.0, posinf=0.0, neginf=0.0)
+            deltas.append(delta)
+            cov_cut += np.outer(delta, delta)
+
+            frac = np.divide(delta, n_nom, out=np.zeros_like(delta), where=n_nom != 0)
+            logging.info(f"Cut variant [{label}] for {survey}:")
+            logging.info(f"   n_nom:            {n_nom}")
+            logging.info(f"   n_variant (raw):  {n_v}")
+            logging.info(f"   eff ratio P_nom/P_v: {ratio}")
+            logging.info(f"   Delta:            {delta}")
+            logging.info(f"   Delta / n_nom:    {frac}")
+
+        logging.info(f"Cut systematic sigma per bin for {survey}: {np.sqrt(np.diag(cov_cut))}")
+
+        if getattr(self.args, "debug", False):
+            plt.clf()
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+            d = np.sqrt(np.diag(cov_cut))
+            denom = np.outer(d, d)
+            denom[denom == 0] = 1
+            im = ax1.imshow(cov_cut / denom, origin="lower", vmin=-1, vmax=1, cmap="RdBu_r")
+            fig.colorbar(im, ax=ax1, label="Reduced Covariance")
+            ax1.set_title(f"Reduced Cut Systematic Covariance for {survey}")
+            ax1.set_xlabel("Redshift Bin")
+            ax1.set_ylabel("Redshift Bin")
+            for delta, label in zip(deltas, labels):
+                frac = np.divide(delta, n_nom, out=np.zeros_like(delta), where=n_nom != 0)
+                ax2.plot(z_centers, frac, marker="o", label=label)
+            ax2.axhline(0, color="k", linestyle="--", lw=1)
+            ax2.set_xlabel("Redshift")
+            ax2.set_ylabel(r"$\Delta$ / n$_{\mathrm{nom}}$")
+            ax2.legend(fontsize=8)
+            path = f"plots/cov_cut_sys_{survey}.png"
+            logging.debug(f"Saving cut systematic covariance plot to {path}")
+            fig.savefig(path)
+            plt.close(fig)
+
+        existing = self.fit_args_dict["cov_sys"].get(survey)
+        self.fit_args_dict["cov_sys"][survey] = cov_cut if existing is None else existing + cov_cut
+        self.fit_args_dict.setdefault("cov_cut_sys", {})[survey] = cov_cut
+        return cov_cut
+
     def calculate_f_norm(self, survey, index):
         """Calculate f_norm, the factor by which the real data is smaller than the simulation,
            for a given survey and dataset index.
@@ -1727,7 +1844,54 @@ class sauron_runner:
 
         self.results[survey].append(pd.DataFrame(result_to_add, index=np.array([0])))
 
-    def apply_cuts(self, survey, subset_version=False):
+    def _parse_cut_spec(self, survey, col, raw_spec):
+        """Parse a 'min, max' cut specification into a (min_val, max_val) tuple of floats."""
+        try:
+            parts = [p.strip() for p in str(raw_spec).split(",")]
+            if len(parts) != 2:
+                raise ValueError(
+                    f"Expected two comma-separated values for cut, got {len(parts)} part(s)"
+                )
+            min_val = float(parts[0])
+            max_val = float(parts[1])
+        except (ValueError, IndexError, TypeError) as exc:
+            logging.error(
+                "Invalid cut specification for survey %s, column %s: %r. "
+                "Expected format 'min,max' with numeric values.",
+                survey,
+                col,
+                raw_spec,
+            )
+            raise ValueError(
+                f"Invalid cut specification for survey '{survey}', column '{col}': "
+                f"{raw_spec!r}. Expected format 'min,max' with numeric values."
+            ) from exc
+        return min_val, max_val
+
+    def _parse_cut_systematics(self, survey):
+        """Read the CUT_SYSTEMATICS block for a survey and return a list of variants, each a dict of
+        {column: 'min, max'} overriding the nominal CUTS. Accepts either a dict (one variant per column)
+        or a list of dicts (each dict is one variant, possibly changing several columns at once)."""
+        raw = self.config[survey].get("CUT_SYSTEMATICS", None)
+        if raw is None:
+            return []
+        if isinstance(raw, dict):
+            variants = [{col: spec} for col, spec in raw.items()]
+        elif isinstance(raw, list):
+            variants = []
+            for v in raw:
+                if not isinstance(v, dict) or len(v) == 0:
+                    raise ValueError(f"Each entry of CUT_SYSTEMATICS for {survey} must be a non-empty mapping "
+                                     f"of column: 'min, max'. Got {v!r}.")
+                variants.append(dict(v))
+        else:
+            raise ValueError(f"CUT_SYSTEMATICS for {survey} must be a mapping or a list of mappings. Got {raw!r}.")
+        for v in variants:
+            for col, spec in v.items():
+                self._parse_cut_spec(survey, col, spec)  # validate early
+        return variants
+
+    def apply_cuts(self, survey, subset_version=False, datasets=None, cuts=None):
         """Apply any cuts specified in the config to the datasets for a given survey.
         The cuts are determined by the CUTS field for each survey in the config file,
         of the form:
@@ -1751,8 +1915,12 @@ class sauron_runner:
             including DUMP datasets, and the cuts will be fetched from the SUBSET category in the config file
             instead of the CUTS category. If False, cuts will only be applied to the SIM and DATA datasets only, and
             the cuts will be fetched from the CUTS category in the config file.
+        datasets : dict, optional
+            Datasets to cut. Defaults to self.datasets. Used by calculate_cut_systematics to cut copies.
+        cuts : dict, optional
+            Cuts of the form {column: 'min, max'} to use instead of the ones in the config file.
         """
-        datasets = self.datasets
+        datasets = self.datasets if datasets is None else datasets
         files_input = self.config[survey]
         n_datasets = self.fit_args_dict["n_datasets"][survey]
         # if n_datasets == 1:
@@ -1776,31 +1944,11 @@ class sauron_runner:
         # Something to think about: Should cuts be applied to ALL datasets, CC datasets and IA datasets,
         # or just IA datasets? For now, I am applying to all datasets.
         key = "SUBSET" if subset_version else "CUTS"
-        cuts = files_input.get(key, None)
+        cuts = files_input.get(key, None) if cuts is None else cuts
         logging.debug(f"I found the following cuts for survey {survey} with subset_version={subset_version}: {cuts}")
         if cuts is not None:
             for col in list(cuts.keys()):
-                raw_spec = cuts[col]
-                try:
-                    parts = [p.strip() for p in str(raw_spec).split(",")]
-                    if len(parts) != 2:
-                        raise ValueError(
-                            f"Expected two comma-separated values for cut, got {len(parts)} part(s)"
-                        )
-                    min_val = float(parts[0])
-                    max_val = float(parts[1])
-                except (ValueError, IndexError, TypeError) as exc:
-                    logging.error(
-                        "Invalid cut specification for survey %s, column %s: %r. "
-                        "Expected format 'min,max' with numeric values.",
-                        survey,
-                        col,
-                        raw_spec,
-                    )
-                    raise ValueError(
-                        f"Invalid cut specification for survey '{survey}', column '{col}': "
-                        f"{raw_spec!r}. Expected format 'min,max' with numeric values."
-                    ) from exc
+                min_val, max_val = self._parse_cut_spec(survey, col, cuts[col])
 
                 logging.info(f"Applying cut on {col} for survey {survey}: min={min_val}, max={max_val}")
 

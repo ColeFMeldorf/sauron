@@ -65,6 +65,15 @@ class SN_dataset:
 
         cuts = survey_dict.get("CUTS", None) if survey_dict is not None else None
         subsets = survey_dict.get("SUBSET", None) if survey_dict is not None else None
+        # Columns named in CUT_SYSTEMATICS (dict form, or list of dicts) must also be loaded.
+        cut_sys = survey_dict.get("CUT_SYSTEMATICS", None) if survey_dict is not None else None
+        cut_sys_cols = []
+        if isinstance(cut_sys, dict):
+            cut_sys_cols = list(cut_sys.keys())
+        elif isinstance(cut_sys, list):
+            for variant in cut_sys:
+                if isinstance(variant, dict):
+                    cut_sys_cols.extend(variant.keys())
 
         # Initialize these here so they exist. If z_col fails because it is None, it is likely due to this
         # never being set.
@@ -88,8 +97,9 @@ class SN_dataset:
 
             if "DUMP" not in data_name: # If this is a dump dataset, cuts aren't applied.
                 potential_cols.extend(list(cuts.keys()) if cuts is not None else []) # Need to get the cols being cut on
+                potential_cols.extend(cut_sys_cols)  # Cols varied in CUT_SYSTEMATICS
 
-            cols = [c for c in potential_cols if c is not None]
+            cols = list(dict.fromkeys(c for c in potential_cols if c is not None))  # dedupe, keep order
 
             if sntype == "CC" and "SIM" in data_name:
                 if sntypecol is None:
