@@ -519,7 +519,12 @@ class sauron_runner:
             entry = survey_dict[key]
             if not isinstance(entry, dict) or entry.get("PATH") is None:
                 logging.warning(f"{survey} {key} has no PATH (DIR-based input?); skipping its fitopt check.")
-                continue
+                raw_sys = fit_options["SYSTEMATIC_FITOPTS"]
+                if isinstance(raw_sys, str) and raw_sys.strip().upper() == "NONE":
+                    continue
+                else:
+                    raise ValueError(f"{survey} {key} has no PATH (DIR-based input?) but SYSTEMATIC_FITOPTS is not NONE; "
+                                     "cannot check fitopts.")
             paths = entry["PATH"]
             file_paths[key] = [str(p) for p in (paths if isinstance(paths, list) else [paths])]
             named = sorted({int(m.group(1)) for p in file_paths[key]
