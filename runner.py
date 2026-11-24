@@ -1,8 +1,11 @@
 # Standard Library
 import yaml
 
+import copy
 import glob
 import logging
+import os
+import re
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
@@ -119,6 +122,83 @@ default_bounds_dictionary = {
 }
 
 
+# ----------------------------------------------------------------------------------------------------
+# FITOPT helpers. A Pippin output path names one fitopt (e.g. .../FITOPT001.FITRES.gz); the other fitopts
+# live in the same directory and differ only in that number.
+# ----------------------------------------------------------------------------------------------------
+_FITOPT_TOKEN = re.compile(r"FITOPT(\d{3})")
+
+
+def _parse_fitopt_list(value, key, survey):
+    """Turn a config value (int, "001", "1,3", or a list of these) into a sorted list of unique ints."""
+    if isinstance(value, (list, tuple)):
+        items = list(value)
+    elif isinstance(value, str):
+        items = [item for item in value.split(",") if item.strip() != ""]
+    else:
+        items = [value]
+
+    if len(items) == 0:
+        raise ValueError(f"{key} for survey {survey} is empty; give at least one fitopt number.")
+
+    fitopts = []
+    for item in items:
+        if isinstance(item, bool):
+            raise ValueError(f"{key} for survey {survey} must contain integers; got {item!r}.")
+        if isinstance(item, (int, np.integer)):
+            fitopt = int(item)
+        elif isinstance(item, str) and item.strip().isdigit():
+            fitopt = int(item.strip())
+        elif isinstance(item, float) and item.is_integer():
+            fitopt = int(item)
+        else:
+            raise ValueError(f"{key} for survey {survey} must contain non-negative integers; got {item!r}.")
+        if fitopt < 0:
+            raise ValueError(f"{key} for survey {survey} must contain non-negative integers; got {item!r}.")
+        fitopts.append(fitopt)
+    return sorted(set(fitopts))
+
+
+def _fitopt_path(path, fitopt):
+    """Return `path` with its FITOPTnnn token swapped for `fitopt`, or None if it has no token."""
+    path = str(path)
+    if _FITOPT_TOKEN.search(os.path.basename(path)) is None:
+        return None
+    head, tail = os.path.split(path)
+    return os.path.join(head, _FITOPT_TOKEN.sub(f"FITOPT{fitopt:03d}", tail))
+
+
+def _fitopt_file_exists(path):
+    """True if the path exists, or (for a path with wildcards) if the glob matches anything."""
+    if glob.has_magic(path):
+        return len(glob.glob(path)) > 0
+    return os.path.exists(path)
+
+
+def _available_fitopts(path):
+    """Set of fitopt numbers present next to `path` (empty if it has no FITOPTnnn token).
+
+    For a wildcard path, only fitopts present for every file the wildcard matches are returned.
+    """
+    path = str(path)
+    tail = os.path.basename(path)
+    match = _FITOPT_TOKEN.search(tail)
+    if match is None:
+        return set()
+    prefix, suffix = tail[:match.start()], tail[match.end():]
+    concrete = glob.glob(path) if glob.has_magic(path) else [path]
+    if len(concrete) == 0:
+        return set()
+
+    available = None
+    for file in concrete:
+        pattern = os.path.join(glob.escape(os.path.dirname(file)),
+                               glob.escape(prefix) + "FITOPT[0-9][0-9][0-9]" + glob.escape(suffix))
+        found = {int(_FITOPT_TOKEN.search(os.path.basename(f)).group(1)) for f in glob.glob(pattern)}
+        available = found if available is None else available & found
+    return available
+
+
 class sauron_runner:
     """Class to run SAURON analysis."""
     def __init__(self, args):
@@ -136,6 +216,10 @@ class sauron_runner:
         self.fit_args_dict["n_datasets"] = {}
         self.fit_args_dict["simulated_rate_function"] = {}
         self.fit_args_dict["rate_params"] = {}
+        self.fit_args_dict["fiducial_fitopts"] = {}
+        self.fit_args_dict["systematic_fitopts"] = {}
+        self.fit_args_dict["fitopt_paths"] = {}
+        self.fit_args_dict["fitopt_delta_counts"] = {}
         self.results = {}
         self.final_counts = {}
         # CSFR bookkeeping. Stays at these defaults ("no CSFR") unless a DTD is specified in
@@ -395,10 +479,114 @@ class sauron_runner:
         else:
             raise ValueError(f"RATE_PARAMS must be specified in FIT_OPTIONS for {survey}.")
 
+    def parse_fitopt_options(self, survey_dict, survey):
+        """Parse and validate SYSTEMATIC_FITOPTS and FIDUCIAL_FITOPT from a survey's FIT_OPTIONS.
+
+        Both keys are mandatory.
+          FIDUCIAL_FITOPT    : a number or list of numbers (e.g. 0, "0,2", [0, 2]).
+          SYSTEMATIC_FITOPTS : ALL  -> every fitopt that exists for all SIM_* and DATA_* files, minus the fiducial(s)
+                               NONE -> no systematic fitopts
+                               a number or list of numbers (e.g. 1, "1,3", [1, 3]) -> FITOPT001, FITOPT003
+        Every requested fitopt must exist for every SIM_* and DATA_* file of the survey (whether those are
+        SIM_ALL/DATA_ALL or SIM_IA/SIM_CC/DATA_IA/DATA_CC). Other fitopts are found by swapping the FITOPTnnn
+        token in each configured path.
+
+        Fills fit_args_dict["fiducial_fitopts"][survey], fit_args_dict["systematic_fitopts"][survey] and
+        fit_args_dict["fitopt_paths"][survey] = {fitopt: {file_key: [paths]}}.
+        """
+        fit_options = survey_dict.get("FIT_OPTIONS") or {}
+        config_name = getattr(self.args, "config", None)
+        missing_keys = [k for k in ("SYSTEMATIC_FITOPTS", "FIDUCIAL_FITOPT") if k not in fit_options]
+        if missing_keys:
+            raise ValueError(
+                f"{' and '.join(missing_keys)} must be specified in FIT_OPTIONS for {survey} in config file "
+                f"{config_name}. Use e.g. SYSTEMATIC_FITOPTS: NONE and FIDUCIAL_FITOPT: 0."
+            )
+
+        fiducials = _parse_fitopt_list(fit_options["FIDUCIAL_FITOPT"], "FIDUCIAL_FITOPT", survey)
+
+        # Gather the SIM_* and DATA_* paths (DUMP files have no fitopts).
+        file_keys = [key for key in survey_dict
+                     if key != "FIT_OPTIONS" and ("SIM" in key or "DATA" in key)]
+        if not any("SIM" in k for k in file_keys) or not any("DATA" in k for k in file_keys):
+            raise ValueError(
+                f"Survey {survey} in config file {config_name} needs at least one SIM_* and one DATA_* entry "
+                f"to check fitopts against; found {file_keys}."
+            )
+
+        file_paths = {}
+        for key in file_keys:
+            entry = survey_dict[key]
+            if not isinstance(entry, dict) or entry.get("PATH") is None:
+                logging.warning(f"{survey} {key} has no PATH (DIR-based input?); skipping its fitopt check.")
+                continue
+            paths = entry["PATH"]
+            file_paths[key] = [str(p) for p in (paths if isinstance(paths, list) else [paths])]
+            named = sorted({int(m.group(1)) for p in file_paths[key]
+                            for m in [_FITOPT_TOKEN.search(os.path.basename(p))] if m})
+            if named and named != fiducials:
+                logging.warning(f"{survey} {key} paths name fitopt(s) {named} but FIDUCIAL_FITOPT is {fiducials}; "
+                                "fitopt checks use the paths with the fitopt number swapped.")
+
+        # Systematics
+        raw_sys = fit_options["SYSTEMATIC_FITOPTS"]
+        if isinstance(raw_sys, str) and raw_sys.strip().upper() == "NONE":
+            systematics = []
+        elif isinstance(raw_sys, str) and raw_sys.strip().upper() == "ALL":
+            per_file = [_available_fitopts(p) for paths in file_paths.values() for p in paths
+                        if _fitopt_path(p, 0) is not None]
+            if per_file:
+                common = set.intersection(*per_file)
+                partial = sorted(set.union(*per_file) - common)
+                if partial:
+                    logging.warning(f"SYSTEMATIC_FITOPTS: ALL for {survey}: fitopts {partial} do not exist for "
+                                    "every SIM/DATA file and are skipped.")
+            else:
+                common = set()
+            systematics = sorted(common - set(fiducials))
+        else:
+            systematics = _parse_fitopt_list(raw_sys, "SYSTEMATIC_FITOPTS", survey)
+            overlap = sorted(set(systematics) & set(fiducials))
+            if overlap:
+                raise ValueError(f"Fitopt(s) {overlap} for survey {survey} are listed as both FIDUCIAL_FITOPT "
+                                 "and SYSTEMATIC_FITOPTS.")
+
+        # Check that every requested fitopt exists for every SIM/DATA file.
+        fitopt_paths = {}
+        problems = []
+        for fitopt in fiducials + systematics:
+            fitopt_paths[fitopt] = {}
+            for key, paths in file_paths.items():
+                resolved = []
+                for path in paths:
+                    new_path = _fitopt_path(path, fitopt)
+                    if new_path is None:
+                        if fitopt in fiducials:
+                            logging.warning(f"{survey} {key} path {path} has no FITOPTnnn in its name; using it "
+                                            f"as is for fiducial fitopt {fitopt}.")
+                            new_path = path
+                        else:
+                            problems.append(f"FITOPT{fitopt:03d} {key}: path has no FITOPTnnn token to swap: {path}")
+                            continue
+                    if not _fitopt_file_exists(new_path):
+                        problems.append(f"FITOPT{fitopt:03d} {key}: {new_path}")
+                    resolved.append(new_path)
+                fitopt_paths[fitopt][key] = resolved
+        if problems:
+            raise FileNotFoundError(
+                f"Missing files for requested fitopts of survey {survey} (config {config_name}):\n  "
+                + "\n  ".join(problems)
+            )
+
+        logging.info(f"{survey}: fiducial fitopt(s) {fiducials}, systematic fitopt(s) {systematics}")
+        self.fit_args_dict["fiducial_fitopts"][survey] = fiducials
+        self.fit_args_dict["systematic_fitopts"][survey] = systematics
+        self.fit_args_dict["fitopt_paths"][survey] = fitopt_paths
+        return fiducials, systematics
+
     def unpack_dataframes(self):
         """Load dataframes pointed to in the config file into SN_dataset objects. This includes DUMP, SIM,
         and DATA files, splitting and combining them based on IA vs CC as necessary.
-        TODO: Turn this into smaller functions for readability.
         """
 
         files_input = self.config
@@ -411,128 +599,8 @@ class sauron_runner:
             survey_dict = files_input[survey]
             fit_args_dict = survey_dict.get("FIT_OPTIONS", {})
             self.parse_survey_fit_options(fit_args_dict, survey)
-            for i, file in enumerate(list(survey_dict.keys())):
-                if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
-                    continue  # Skip non-data files
-
-                sntype = "IA" if "IA" in file else "CC"
-
-                if isinstance(survey_dict[file], dict):
-                    zcol = survey_dict[file].get("ZCOL", None)
-                else:
-                    zcol = None
-
-                # Either use the paths provided or glob the directory provided
-                if survey_dict[file].get("PATH") is not None:
-                    paths = survey_dict[file]["PATH"]
-                    paths = [paths] if not isinstance(paths, list) else paths  # Make it a list for later
-                    paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
-                    if len(paths) == 0:
-                        raise FileNotFoundError(f"No files found for {survey} {file} with path {survey_dict[file]['PATH']} in config file {self.args.config}.")
-                elif survey_dict[file].get("DIR") is not None:
-                    paths = []
-                    for dir in survey_dict[file]["DIR"]:
-                        paths.extend(glob.glob(dir + "/**/*.gz"))
-                        paths.extend(glob.glob(dir + "*.gz"))  # This extension can't be hardcoded
-                    logging.info(f"Found {len(paths)} files in {survey_dict[file]['DIR']}")
-
-                logging.debug(f"Paths for {survey} {file}: {paths}")
-
-                if "DATA" in file:
-                    for i, path in enumerate(paths):
-                        datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(path,
-                                                                            sntype, data_name=survey+"_"+file,
-                                                                            survey_dict=survey_dict)
-                    n_datasets = len(paths)
-                    self.fit_args_dict["n_datasets"][survey] = n_datasets
-                    all_n_datasets = []
-                    for k in self.fit_args_dict["n_datasets"].keys():
-                        if "combined" in k:
-                            continue
-                        else:
-                            all_n_datasets.append(self.fit_args_dict["n_datasets"][k])
-                    num_combined_datasets = min(all_n_datasets) if len(all_n_datasets) > 0 else 1
-
-                    self.fit_args_dict["n_datasets"]["combined"] = num_combined_datasets  # This needs to be fixed later TODO
-                    logging.info(f"Found {n_datasets} data sets for {survey}")
-
-                else:
-                    datasets[survey+"_"+file] = SN_dataset(paths, sntype, data_name=survey+"_"+file,
-                                                           survey_dict=survey_dict)
-                    logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
-
-            if self.fit_args_dict["cc_are_sep"].get(survey) is None:
-                self.fit_args_dict["cc_are_sep"][survey] = True
-                logging.warning("CC_ARE_SEPARATE not specified in config file for "f"{survey}. Defaulting to True.")
-            # Combine IA and CC files if they are separate
-
-            if self.fit_args_dict["cc_are_sep"][survey]:
-
-                if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
-
-                    logging.info("Combining IA and CC dump and sim files..")
-                    datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
-                        datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
-                    datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
-                        datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
-                    # Data files may be combined even if sim and dump are not
-                    if datasets.get(f"{survey}_DATA_CC_1") is not None:
-                        for i in range(n_datasets):
-                            datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
-                                datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
-                else:
-                    if self.args.cheat_cc:
-                        logging.info("Skipping combining IA and CC files because --cheat_cc was set.")
-                    elif datasets.get(f"{survey}_DUMP_CC") is None:
-                        logging.warning(f"Couldn't find {survey}_DUMP_CC to combine with IA file.")
-
-            # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
-            else:
-                # Validate that combined DUMP and SIM datasets exist when corecollapse_are_separate is False
-                try:
-                    dump_all_dataset = datasets[f"{survey}_DUMP_ALL"]
-                    sim_all_dataset = datasets[f"{survey}_SIM_ALL"]
-                except KeyError as exc:
-                    raise KeyError(
-                        f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL in datasets. "
-                        "If your DUMP and SIM files are already separate for IA and CC, "
-                        "set corecollapse_are_separate to True in the config."
-                    ) from exc
-                # Validate that required config keys are present to split combined samples into IA and CC
-                try:
-                    dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
-                    dump_ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
-                    sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
-                    sim_ia_vals = survey_dict["SIM_ALL"]["IA_VALS"]
-                except KeyError as exc:
-                    raise KeyError(
-                        f"Missing configuration for survey '{survey}' when corecollapse_are_separate is False. "
-                        "Expected keys in the survey's config section: "
-                        "'DUMP_ALL.SNTYPECOL', 'DUMP_ALL.IA_VALS', "
-                        "'SIM_ALL.SNTYPECOL', and 'SIM_ALL.IA_VALS'. "
-                        "These are needed to separate DUMP and SIM into IA and CC."
-                    ) from exc
-                datasets[f"{survey}_DUMP_IA"], datasets[f"{survey}_DUMP_CC"] = dump_all_dataset.split_into_IA_and_CC(
-                    dump_sn_col, dump_ia_vals)
-                datasets[f"{survey}_SIM_IA"], datasets[f"{survey}_SIM_CC"] = sim_all_dataset.split_into_IA_and_CC(
-                    sim_sn_col, sim_ia_vals)
-
-            if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
-                data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
-                ia_vals_data = survey_dict["DATA_ALL"]["IA_VALS"]
-                for i in range(n_datasets):
-                    logging.debug("Splitting DATA into IA and CC using cheat mode...")
-                    datasets[f"{survey}_DATA_IA_"+str(i+1)], _ =\
-                        datasets[f"{survey}_DATA_ALL_"+str(i+1)].split_into_IA_and_CC(
-                            data_sn_col, ia_vals_data)
-
-
-                    # data_df = datasets[f"{survey}_DATA_ALL_"+str(i+1)].df
-                    # data_ia_df = data_df[data_df[data_sn_col].isin(ia_vals_data)]
-                    # datasets[f"{survey}_DATA_IA_"+str(i+1)] =\
-                    #     SN_dataset(data_ia_df, "IA", zcol=datasets[f"{survey}_DATA_ALL_"+str(i+1)].z_col,
-                    #                data_name=survey+f"_DATA_IA_{i+1}")
-
+            self.parse_fitopt_options(survey_dict, survey)
+            datasets.update(self._load_survey_datasets(survey, survey_dict))
 
         self.datasets = datasets
         self.surveys = surveys
@@ -545,11 +613,152 @@ class sauron_runner:
                 "for the first dataset. Your f_norm is probably then nearest rational fraction to this number.")
                 raise ValueError(f"F_NORM must be specified in FIT_OPTIONS for {survey} in config file {self.args.config}.")
 
-        # for d in datasets:
-        #     counts = datasets[d].z_counts(self.fit_args_dict['z_bins'][survey])
-        #     assert np.size(np.where(counts == 0)[0]) <= 2, f"{d} has several zero count bins! {counts}"
-
         return datasets, surveys
+
+    def _load_survey_datasets(self, survey, survey_dict, dump_datasets=None, record=True):
+        """Load one survey's DUMP, SIM and DATA files into SN_dataset objects, combining or splitting IA and CC
+        as needed.
+
+        Inputs
+        ------
+        survey : str
+            Name of the survey.
+        survey_dict : dict
+            The survey's section of the config.
+        dump_datasets : dict or None
+            If given, the survey's DUMP_* datasets are shallow-copied from this dict instead of being loaded
+            (used for fitopts, which share the DUMP files). apply_cut rebinds .df, so the originals stay untouched.
+        record : bool
+            If True, record n_datasets in fit_args_dict (the main analysis). False for fitopt loads.
+
+        Returns
+        -------
+        datasets : dict
+            {f"{survey}_{key}": SN_dataset}
+        """
+        datasets = {}
+        n_datasets = None
+        if dump_datasets is not None:
+            for key, dataset in dump_datasets.items():
+                if key.startswith(f"{survey}_DUMP_"):
+                    datasets[key] = copy.copy(dataset)
+
+        for file in list(survey_dict.keys()):
+            if "DUMP" not in file and "SIM" not in file and "DATA" not in file:
+                continue  # Skip non-data files
+            if "DUMP" in file and dump_datasets is not None:
+                continue  # Already copied above
+
+            sntype = "IA" if "IA" in file else "CC"
+
+            # Either use the paths provided or glob the directory provided
+            if survey_dict[file].get("PATH") is not None:
+                paths = survey_dict[file]["PATH"]
+                paths = [paths] if not isinstance(paths, list) else paths  # Make it a list for later
+                paths = glob.glob(paths[0]) if len(paths) == 1 else paths  # Check to see if they meant to glob
+                if len(paths) == 0:
+                    raise FileNotFoundError(f"No files found for {survey} {file} with path {survey_dict[file]['PATH']} in config file {self.args.config}.")
+            elif survey_dict[file].get("DIR") is not None:
+                paths = []
+                for dir in survey_dict[file]["DIR"]:
+                    paths.extend(glob.glob(dir + "/**/*.gz"))
+                    paths.extend(glob.glob(dir + "*.gz"))  # This extension can't be hardcoded
+                logging.info(f"Found {len(paths)} files in {survey_dict[file]['DIR']}")
+
+            logging.debug(f"Paths for {survey} {file}: {paths}")
+
+            if "DATA" in file:
+                for i, path in enumerate(paths):
+                    datasets[survey+"_"+file+"_"+str(i+1)] = SN_dataset(path,
+                                                                        sntype, data_name=survey+"_"+file,
+                                                                        survey_dict=survey_dict)
+                n_datasets = len(paths)
+                if record:
+                    self.fit_args_dict["n_datasets"][survey] = n_datasets
+                    all_n_datasets = []
+                    for k in self.fit_args_dict["n_datasets"].keys():
+                        if "combined" in k:
+                            continue
+                        else:
+                            all_n_datasets.append(self.fit_args_dict["n_datasets"][k])
+                    num_combined_datasets = min(all_n_datasets) if len(all_n_datasets) > 0 else 1
+
+                    self.fit_args_dict["n_datasets"]["combined"] = num_combined_datasets  # This needs to be fixed later TODO
+                logging.info(f"Found {n_datasets} data sets for {survey}")
+
+            else:
+                datasets[survey+"_"+file] = SN_dataset(paths, sntype, data_name=survey+"_"+file,
+                                                       survey_dict=survey_dict)
+                logging.debug(f"scone col for {survey}_{file}: {getattr(datasets[survey+'_'+file], 'scone_col', None)}")
+
+        if self.fit_args_dict["cc_are_sep"].get(survey) is None:
+            self.fit_args_dict["cc_are_sep"][survey] = True
+            logging.warning("CC_ARE_SEPARATE not specified in config file for "f"{survey}. Defaulting to True.")
+        # Combine IA and CC files if they are separate
+
+        if self.fit_args_dict["cc_are_sep"][survey]:
+
+            if not self.args.cheat_cc and datasets.get(f"{survey}_DUMP_CC") is not None:
+
+                logging.info("Combining IA and CC dump and sim files..")
+                if dump_datasets is None:
+                    datasets[f"{survey}_DUMP_ALL"] = datasets[f"{survey}_DUMP_IA"].combine_with(
+                        datasets[f"{survey}_DUMP_CC"], "all", data_name=survey+"_DUMP_ALL")
+                datasets[f"{survey}_SIM_ALL"] = datasets[f"{survey}_SIM_IA"].combine_with(
+                    datasets[f"{survey}_SIM_CC"], "all", data_name=survey+"_SIM_ALL")
+                # Data files may be combined even if sim and dump are not
+                if datasets.get(f"{survey}_DATA_CC_1") is not None:
+                    for i in range(n_datasets):
+                        datasets[f"{survey}_DATA_ALL_{i+1}"] = datasets[f"{survey}_DATA_IA_"+str(i+1)].combine_with(
+                            datasets[f"{survey}_DATA_CC_"+str(i+1)], "all", data_name=survey+f"_DATA_ALL_{i+1}")
+            else:
+                if self.args.cheat_cc:
+                    logging.info("Skipping combining IA and CC files because --cheat_cc was set.")
+                elif datasets.get(f"{survey}_DUMP_CC") is None:
+                    logging.warning(f"Couldn't find {survey}_DUMP_CC to combine with IA file.")
+
+        # Otherwise, if they aren't seperate, we need to split DUMP and SIM into IA and CC
+        else:
+            # Validate that combined DUMP and SIM datasets exist when corecollapse_are_separate is False
+            try:
+                dump_all_dataset = datasets[f"{survey}_DUMP_ALL"]
+                sim_all_dataset = datasets[f"{survey}_SIM_ALL"]
+            except KeyError as exc:
+                raise KeyError(
+                    f"Couldn't find {survey}_DUMP_ALL or {survey}_SIM_ALL in datasets. "
+                    "If your DUMP and SIM files are already separate for IA and CC, "
+                    "set corecollapse_are_separate to True in the config."
+                ) from exc
+            # Validate that required config keys are present to split combined samples into IA and CC
+            try:
+                dump_sn_col = survey_dict["DUMP_ALL"]["SNTYPECOL"]
+                dump_ia_vals = survey_dict["DUMP_ALL"]["IA_VALS"]
+                sim_sn_col = survey_dict["SIM_ALL"]["SNTYPECOL"]
+                sim_ia_vals = survey_dict["SIM_ALL"]["IA_VALS"]
+            except KeyError as exc:
+                raise KeyError(
+                    f"Missing configuration for survey '{survey}' when corecollapse_are_separate is False. "
+                    "Expected keys in the survey's config section: "
+                    "'DUMP_ALL.SNTYPECOL', 'DUMP_ALL.IA_VALS', "
+                    "'SIM_ALL.SNTYPECOL', and 'SIM_ALL.IA_VALS'. "
+                    "These are needed to separate DUMP and SIM into IA and CC."
+                ) from exc
+            if dump_datasets is None:
+                datasets[f"{survey}_DUMP_IA"], datasets[f"{survey}_DUMP_CC"] = dump_all_dataset.split_into_IA_and_CC(
+                    dump_sn_col, dump_ia_vals)
+            datasets[f"{survey}_SIM_IA"], datasets[f"{survey}_SIM_CC"] = sim_all_dataset.split_into_IA_and_CC(
+                sim_sn_col, sim_ia_vals)
+
+        if self.args.cheat_cc and datasets.get(f"{survey}_DATA_IA_1") is None:
+            data_sn_col = survey_dict["DATA_ALL"]["SNTYPECOL"]
+            ia_vals_data = survey_dict["DATA_ALL"]["IA_VALS"]
+            for i in range(n_datasets):
+                logging.debug("Splitting DATA into IA and CC using cheat mode...")
+                datasets[f"{survey}_DATA_IA_"+str(i+1)], _ =\
+                    datasets[f"{survey}_DATA_ALL_"+str(i+1)].split_into_IA_and_CC(
+                        data_sn_col, ia_vals_data)
+
+        return datasets
 
     def get_counts(self, survey):
         """Get counts of generated and initialize bins for a given survey.
@@ -624,6 +833,17 @@ class sauron_runner:
 
         return eff_ij
 
+    def _null_counts(self, survey, N_gen):
+        """Null-hypothesis counts per (true z, observed z) for one survey, given the generated DUMP counts N_gen."""
+        z_bins = self.fit_args_dict["z_bins"][survey]
+        z_centers = z_bins[:-1]/2 + z_bins[1:]/2
+        true_rate_function = func_name_dictionary.get(self.fit_args_dict["simulated_rate_function"][survey])
+        logging.debug(f"Using true rate function: {true_rate_function}")
+        logging.debug(f"With params: {self.fit_args_dict['rate_params'][survey]}")
+        return calculate_null_counts(list(z_bins), np.array(z_centers), N_gen, cosmo=cosmo,
+                                     true_rate_function=true_rate_function,
+                                     rate_params=self.fit_args_dict["rate_params"][survey])
+
     def fit_rate(self, survey, index, do_just_one=False, PROB_THRESH=0.5):
         """Actually fit the rate parameters for a given survey.
         Inputs
@@ -672,12 +892,7 @@ class sauron_runner:
 
         if len(survey) == 1:
             survey = survey[0]
-            true_rate_function = func_name_dictionary.get(self.fit_args_dict["simulated_rate_function"][survey])
-            logging.debug(f"Using true rate function: {true_rate_function}")
-            logging.debug(f"With params: {self.fit_args_dict['rate_params'][survey]}")
-            null_counts = calculate_null_counts(z_bins_list, z_centers, N_gen, cosmo=cosmo,
-                                                true_rate_function=true_rate_function,
-                                                rate_params=self.fit_args_dict["rate_params"][survey])
+            null_counts = self._null_counts(survey, N_gen)
         else:
             null_counts = np.concatenate([self.fit_args_dict["null_counts"][s] for s in survey])
             survey = "combined"
@@ -726,6 +941,12 @@ class sauron_runner:
          (np.sum(null_counts * eff_ij * f_norms, axis=0))
         self.final_counts[survey]["binned_rate_16"] = (n_data - np.sqrt(n_data)) / \
         (np.sum(null_counts * eff_ij * f_norms, axis=0))
+        # Per-bin systematic error on the binned rate: cov_sys is in data-count space, so divide by the same
+        # denominator as binned_rate. Zero when no systematics are included.
+        with np.errstate(divide="ignore", invalid="ignore"):
+            self.final_counts[survey]["binned_rate_sys_err"] = np.nan_to_num(
+                np.sqrt(np.clip(np.diag(cov_sys), 0, None)) / np.sum(null_counts * eff_ij * f_norms, axis=0),
+                nan=0.0, posinf=0.0, neginf=0.0)
 
         np.save(f"plots/binned_rate_{survey}.npy", binned_rate)
         np.save(f"plots/z_bin_edges_{survey}.npy", z_bins_list)
@@ -1231,6 +1452,7 @@ class sauron_runner:
 
 
         surveys = list(surveys)
+        sys_bar_labelled = False
         for i, survey in enumerate(surveys):
             s = survey
             if survey != "combined":
@@ -1240,7 +1462,20 @@ class sauron_runner:
                     self.final_counts[survey]["binned_rate"] - self.final_counts[survey]["binned_rate_16"]])
                 index = -1
                 xerr = self.fit_args_dict["z_centers_err"][survey][index] # this needs to be fixed for multiple sim datasets
-                ax1.errorbar(z_centers, self.final_counts[survey]["binned_rate"], xerr=xerr, yerr=yerr, fmt="o", label=f" {survey} Binned Rate ", ms=5)
+
+                # Systematic error: grey bar for the total (stat ⊕ sys) behind the colored stat-only bar.
+                binned_rate = self.final_counts[survey]["binned_rate"]
+                sys_err = self.final_counts[survey].get("binned_rate_sys_err")
+                has_sys = sys_err is not None and np.any(np.asarray(sys_err) > 0)
+                if has_sys:
+                    total_err = np.sqrt(yerr**2 + np.asarray(sys_err)[None, :]**2)
+                    ax1.errorbar(z_centers, binned_rate, yerr=total_err, fmt="none", ecolor="grey", elinewidth=3,
+                                 alpha=0.6, capsize=0, zorder=1,
+                                 label=None if sys_bar_labelled else "Stat ⊕ sys")
+                    sys_bar_labelled = True
+                stat_label = f" {survey} Binned Rate (stat)" if has_sys else f" {survey} Binned Rate "
+                ax1.errorbar(z_centers, binned_rate, xerr=xerr, yerr=yerr, fmt="o", label=stat_label, ms=5,
+                             zorder=2)
 
                 ax1.set_xlabel("Redshift")
                 ax1.set_yticks([2e-5, 3e-5, 4e-5, 5e-5, 6e-5, 7e-5])
@@ -1566,6 +1801,11 @@ class sauron_runner:
                 #  (currently set to 1). This function should not need index at all.
                 cov_sys = cov_thresh + cov_rate_norm
 
+                # Systematic fitopts: run the full counts pipeline per fitopt and add sum_k outer(delta_k, delta_k)
+                cov_fitopt = self.calculate_fitopt_covariance(survey, PROB_THRESH)
+                if cov_fitopt is not None:
+                    cov_sys = cov_sys + cov_fitopt
+
                 reduced_cov = np.empty(cov_sys.shape)
                 for i in range(cov_sys.shape[0]):
                     for j in range(cov_sys.shape[1]):
@@ -1584,25 +1824,35 @@ class sauron_runner:
                 if self.args.debug:
 
                     plt.clf()
+                    ncols = 3 if cov_fitopt is None else 4
 
-                    plt.subplot(1, 3, 1)
+                    plt.subplot(1, ncols, 1)
                     plt.imshow(reduced_cov, origin="lower")
                     plt.colorbar(label="Reduced Covariance")
                     plt.title(f"Reduced Systematic Covariance Matrix for {survey}")
                     plt.xlabel("Redshift Bin")
                     plt.ylabel("Redshift Bin")
-                    plt.subplot(1, 3, 2)
+                    plt.subplot(1, ncols, 2)
                     plt.imshow(reduced_cov_thresh, origin="lower")
                     plt.colorbar(label="Reduced Covariance")
                     plt.title(f"Reduced Threshold Covariance Matrix for {survey}")
                     plt.xlabel("Redshift Bin")
                     plt.ylabel("Redshift Bin")
-                    plt.subplot(1, 3, 3)
+                    plt.subplot(1, ncols, 3)
                     plt.imshow(reduced_cov_rate_norm, origin="lower")
                     plt.colorbar(label="Reduced Covariance")
                     plt.title(f"Reduced Rate Norm Covariance Matrix for {survey}")
                     plt.xlabel("Redshift Bin")
                     plt.ylabel("Redshift Bin")
+                    if cov_fitopt is not None:
+                        plt.subplot(1, ncols, 4)
+                        fit_sd = np.sqrt(np.diag(cov_fitopt))
+                        fit_sd[fit_sd == 0] = 1
+                        plt.imshow(cov_fitopt / np.outer(fit_sd, fit_sd), origin="lower")
+                        plt.colorbar(label="Reduced Covariance")
+                        plt.title(f"Reduced FITOPT Covariance Matrix for {survey}")
+                        plt.xlabel("Redshift Bin")
+                        plt.ylabel("Redshift Bin")
                     path = f"plots/cov_sys_{survey}.png"
                     logging.debug(f"Saving systematic covariance plot to {path}")
                     plt.savefig(path)
@@ -1612,6 +1862,120 @@ class sauron_runner:
             #logging.debug(f"Including a 5% systematic uncertainty due to area uncertainty.")
             #cov_sys *= np.eye(cov_sys.shape[0]) * 1.05
             self.fit_args_dict["cov_sys"][survey] = cov_sys
+
+    def _fitopt_counts(self, survey, fitopt, PROB_THRESH):
+        """Run the main counts pipeline for one fitopt of one survey, leaving the main analysis state untouched.
+
+        The pipeline is the same as in sauron.py's main loop: load the fitopt's SIM/DATA files (DUMP files are
+        shared), apply SUBSET cuts and CUTS, compute eff_ij with calculate_transfer_matrix, and decontaminate every
+        data realization with calculate_CC_contamination.
+
+        Returns
+        -------
+        dict with
+            "n_data" : list of decontaminated counts per bin, one array per data realization (index 1..N)
+            "D"      : sum_j null_counts_j * eff_ij * f_norm, the per-bin denominator used for binned_rate in fit_rate
+        """
+        z_bins = self.fit_args_dict["z_bins"][survey]
+        survey_dict = copy.deepcopy(self.config[survey])
+        for key, paths in self.fit_args_dict["fitopt_paths"][survey][fitopt].items():
+            survey_dict[key]["PATH"] = paths
+        for key in survey_dict:
+            if ("SIM" in key or "DATA" in key) and isinstance(survey_dict[key], dict) \
+                    and key not in self.fit_args_dict["fitopt_paths"][survey][fitopt]:
+                logging.warning(f"{survey} {key} has no per-fitopt paths (DIR-based input?); FITOPT{fitopt:03d} "
+                                "reuses the configured files for it.")
+
+        dumps = {k: v for k, v in self.datasets.items() if k.startswith(f"{survey}_DUMP_")}
+        logging.info(f"Loading FITOPT{fitopt:03d} datasets for {survey}")
+        fitopt_datasets = self._load_survey_datasets(survey, survey_dict, dump_datasets=dumps, record=False)
+
+        n_datasets = self.fit_args_dict["n_datasets"][survey]
+        indices = {int(m.group(1)) for k in fitopt_datasets
+                   for m in [re.fullmatch(rf"{re.escape(survey)}_DATA_(?:ALL|IA)_(\d+)", k)] if m}
+        fitopt_n = len(indices)
+        if fitopt_n != n_datasets:
+            raise ValueError(f"FITOPT{fitopt:03d} for {survey} has {fitopt_n} data realizations but the main analysis "
+                             f"has {n_datasets}.")
+
+        saved_datasets = self.datasets
+        saved_eff_ij = self.fit_args_dict["eff_ij"].get(survey)
+        saved_N_gen = self.fit_args_dict["N_gen"].get(survey)
+        saved_plot = getattr(self.args, "plot", None)
+        try:
+            self.datasets = {**saved_datasets, **fitopt_datasets}
+            if saved_plot is not None:
+                self.args.plot = False
+            # Same cut sequence as sauron.py main
+            self.apply_cuts(survey, subset_version=True)
+            if not getattr(self.args, "skip_cuts", False):
+                self.apply_cuts(survey)
+            N_gen = self.datasets[f"{survey}_DUMP_IA"].z_counts(z_bins)  # As in get_counts
+            eff_ij = self.calculate_transfer_matrix(survey)
+            n_data = [self.calculate_CC_contamination(PROB_THRESH, index, survey, datasets=self.datasets)
+                      for index in range(1, n_datasets + 1)]
+            D = np.sum(self._null_counts(survey, N_gen) * eff_ij * self.fit_args_dict["f_norm"][survey], axis=0)
+        finally:
+            self.datasets = saved_datasets
+            self.fit_args_dict["eff_ij"][survey] = saved_eff_ij
+            self.fit_args_dict["N_gen"][survey] = saved_N_gen
+            if saved_plot is not None:
+                self.args.plot = saved_plot
+            if saved_eff_ij is None:
+                self.fit_args_dict["eff_ij"].pop(survey, None)
+            if saved_N_gen is None:
+                self.fit_args_dict["N_gen"].pop(survey, None)
+
+        return {"n_data": [np.asarray(n, dtype=float) for n in n_data], "D": np.asarray(D, dtype=float)}
+
+    def calculate_fitopt_covariance(self, survey, PROB_THRESH):
+        """Systematic covariance in data counts per bin from the survey's SYSTEMATIC_FITOPTS.
+
+        Each fitopt (and the fiducial) goes through the full counts pipeline (see _fitopt_counts). The fitopt's
+        counts are mapped into the fiducial efficiency frame and differenced with the fiducial:
+            delta_k = n_data_k * D_fid / D_k - n_data_fid,   D = sum_j null_counts_j * eff_ij * f_norm
+        averaged over all data realizations. Each fitopt is an independent 1-sigma shift, so
+            C = sum_k outer(delta_k, delta_k).
+
+        The deltas are stored in fit_args_dict["fitopt_delta_counts"][survey] = {fitopt: delta_k}.
+
+        Returns
+        -------
+        np.ndarray (n_bins x n_bins), or None if the survey has no systematic fitopts.
+        """
+        systematics = self.fit_args_dict["systematic_fitopts"].get(survey, [])
+        if not systematics:
+            logging.info(f"No systematic fitopts for {survey}; skipping fitopt covariance.")
+            self.fit_args_dict["fitopt_delta_counts"][survey] = {}
+            return None
+        fiducials = self.fit_args_dict["fiducial_fitopts"][survey]
+        if len(fiducials) != 1:
+            raise ValueError(f"Fitopt covariance for {survey} needs exactly one FIDUCIAL_FITOPT; got {fiducials}.")
+
+        fiducial = self._fitopt_counts(survey, fiducials[0], PROB_THRESH)
+        n_bins = len(self.fit_args_dict["z_bins"][survey]) - 1
+        cov = np.zeros((n_bins, n_bins))
+        deltas = {}
+        for fitopt in systematics:
+            shifted = self._fitopt_counts(survey, fitopt, PROB_THRESH)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                frame_correction = fiducial["D"] / shifted["D"]
+            bad = ~np.isfinite(frame_correction)
+            if np.any(bad):
+                logging.warning(f"FITOPT{fitopt:03d} for {survey}: zero efficiency in bins {np.where(bad)[0]}; "
+                                "setting their delta to 0.")
+            per_index = []
+            for n_k, n_fid in zip(shifted["n_data"], fiducial["n_data"]):
+                delta = n_k * frame_correction - n_fid
+                delta[bad | ~np.isfinite(delta)] = 0.0
+                per_index.append(delta)
+            delta_k = np.mean(per_index, axis=0)
+            deltas[fitopt] = delta_k
+            cov += np.outer(delta_k, delta_k)
+            logging.info(f"FITOPT{fitopt:03d} delta counts per bin for {survey}: {delta_k}")
+
+        self.fit_args_dict["fitopt_delta_counts"][survey] = deltas
+        return cov
 
     def calculate_f_norm(self, survey, index):
         """Calculate f_norm, the factor by which the real data is smaller than the simulation,
