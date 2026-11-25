@@ -1971,6 +1971,7 @@ class sauron_runner:
             logging.info(f"   eff ratio P_nom/P_v: {ratio}")
             logging.info(f"   Delta:            {delta}")
             logging.info(f"   Delta / n_nom:    {frac}")
+            logging.info(f"---------------------------")
 
         logging.info(f"Cut systematic sigma per bin for {survey}: {np.sqrt(np.diag(cov_cut))}")
 
