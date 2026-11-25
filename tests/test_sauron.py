@@ -1435,3 +1435,378 @@ def test_regression_AplusB():
                            f"Please check if this is expected. ")
             logger.warning(str(e))
         np.testing.assert_allclose(results[col], regression[col], rtol=global_rtol)
+
+
+# ----------------------------------------------------------------------------------------------------
+# FITOPT parsing (SYSTEMATIC_FITOPTS / FIDUCIAL_FITOPT)
+# ----------------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("value, expected", [
+    (0, [0]),
+    ("001", [1]),
+    ("1,3", [1, 3]),
+    ("3, 1,", [1, 3]),
+    ([3, 1, 1], [1, 3]),
+    (["2", 0], [0, 2]),
+])
+def test_parse_fitopt_list(value, expected):
+    """FIDUCIAL_FITOPT / SYSTEMATIC_FITOPTS values become sorted lists of unique ints."""
+    from runner import _parse_fitopt_list
+    assert _parse_fitopt_list(value, "FIDUCIAL_FITOPT", "DES") == expected
+
+
+@pytest.mark.parametrize("value", ["a", -1, [], "", "1.5", True])
+def test_parse_fitopt_list_bad(value):
+    from runner import _parse_fitopt_list
+    with pytest.raises(ValueError):
+        _parse_fitopt_list(value, "SYSTEMATIC_FITOPTS", "DES")
+
+
+def _make_fitopt_files(root, name, fitopts, n_realizations=1):
+    """Write empty FITOPTnnn.FITRES.gz files for one SIM/DATA entry; return the FITOPT000 path(s)."""
+    paths = []
+    for i in range(n_realizations):
+        d = root / f"{name}-{i + 1:04d}"
+        d.mkdir(parents=True, exist_ok=True)
+        for fitopt in fitopts:
+            (d / f"FITOPT{fitopt:03d}.FITRES.gz").touch()
+        paths.append(str(d / "FITOPT000.FITRES.gz"))
+    return paths
+
+
+def _fitopt_survey_dict(paths, systematic=None, fiducial=None):
+    survey_dict = {"FIT_OPTIONS": {"RATE_FUNC": "power_law"}}
+    if systematic is not None:
+        survey_dict["FIT_OPTIONS"]["SYSTEMATIC_FITOPTS"] = systematic
+    if fiducial is not None:
+        survey_dict["FIT_OPTIONS"]["FIDUCIAL_FITOPT"] = fiducial
+    survey_dict["DUMP_IA"] = {"PATH": "/does/not/matter/DUMP.gz"}  # DUMP files have no fitopts
+    for key, p in paths.items():
+        survey_dict[key] = {"PATH": p if len(p) > 1 else p[0], "ZCOL": "zHD"}
+    return survey_dict
+
+
+def test_parse_fitopt_options(tmp_path):
+    """parse_fitopt_options resolves ALL / NONE / explicit fitopts and checks the sim and data files exist."""
+    import yaml
+    from runner import sauron_runner
+
+    fitopts = [0, 1, 2, 3]
+    sep = {
+        "SIM_IA": _make_fitopt_files(tmp_path, "SIM_IA", fitopts),
+        "SIM_CC": _make_fitopt_files(tmp_path, "SIM_CC", fitopts),
+        "DATA_IA": _make_fitopt_files(tmp_path, "DATA_IA", fitopts, n_realizations=2),
+        "DATA_CC": _make_fitopt_files(tmp_path, "DATA_CC", fitopts, n_realizations=2),
+    }
+    combined = {
+        "SIM_ALL": _make_fitopt_files(tmp_path, "SIM_ALL", fitopts),
+        "DATA_ALL": _make_fitopt_files(tmp_path, "DATA_ALL", fitopts, n_realizations=2),
+    }
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(yaml.safe_dump({"DES": _fitopt_survey_dict(sep, "ALL", 0)}))
+    runner = sauron_runner(SimpleNamespace(config=config_path, cheat_cc=False))
+
+    # ALL -> every available fitopt except the fiducial
+    fid, sys = runner.parse_fitopt_options(_fitopt_survey_dict(sep, "ALL", 0), "DES")
+    assert fid == [0] and sys == [1, 2, 3]
+    assert runner.fit_args_dict["fiducial_fitopts"]["DES"] == [0]
+    assert runner.fit_args_dict["systematic_fitopts"]["DES"] == [1, 2, 3]
+    assert set(runner.fit_args_dict["fitopt_paths"]["DES"]) == {0, 1, 2, 3}
+    assert "DUMP_IA" not in runner.fit_args_dict["fitopt_paths"]["DES"][0]
+
+    # Case-insensitive ALL / NONE
+    assert runner.parse_fitopt_options(_fitopt_survey_dict(sep, "all", 0), "DES")[1] == [1, 2, 3]
+    assert runner.parse_fitopt_options(_fitopt_survey_dict(sep, "NONE", 0), "DES")[1] == []
+    assert runner.parse_fitopt_options(_fitopt_survey_dict(sep, "none", 0), "DES")[1] == []
+    assert set(runner.fit_args_dict["fitopt_paths"]["DES"]) == {0}
+
+    # Explicit list, as YAML gives "1,3" (a string), and the paths it resolves to
+    fid, sys = runner.parse_fitopt_options(_fitopt_survey_dict(sep, "1,3", 0), "DES")
+    assert sys == [1, 3]
+    data_ia_3 = runner.fit_args_dict["fitopt_paths"]["DES"][3]["DATA_IA"]
+    assert len(data_ia_3) == 2
+    assert all(p.endswith("FITOPT003.FITRES.gz") for p in data_ia_3)
+    assert all(os.path.exists(p) for p in data_ia_3)
+
+    # Single number and YAML list
+    assert runner.parse_fitopt_options(_fitopt_survey_dict(sep, 2, 0), "DES")[1] == [2]
+    assert runner.parse_fitopt_options(_fitopt_survey_dict(sep, [3, 1], 0), "DES")[1] == [1, 3]
+
+    # Fiducial as a list; ALL excludes every fiducial
+    fid, sys = runner.parse_fitopt_options(_fitopt_survey_dict(sep, "ALL", [0, 2]), "DES")
+    assert fid == [0, 2] and sys == [1, 3]
+    fid, sys = runner.parse_fitopt_options(_fitopt_survey_dict(sep, "ALL", "0,2"), "DES")
+    assert fid == [0, 2] and sys == [1, 3]
+
+    # Combined SIM_ALL / DATA_ALL layout
+    fid, sys = runner.parse_fitopt_options(_fitopt_survey_dict(combined, "ALL", 1), "DES")
+    assert fid == [1] and sys == [0, 2, 3]
+    assert set(runner.fit_args_dict["fitopt_paths"]["DES"][1]) == {"SIM_ALL", "DATA_ALL"}
+
+    # A fitopt missing for one data realization: explicit request fails, ALL skips it
+    os.remove(pathlib.Path(sep["DATA_CC"][1]).parent / "FITOPT003.FITRES.gz")
+    with pytest.raises(FileNotFoundError, match="FITOPT003 DATA_CC"):
+        runner.parse_fitopt_options(_fitopt_survey_dict(sep, "1,3", 0), "DES")
+    assert runner.parse_fitopt_options(_fitopt_survey_dict(sep, "ALL", 0), "DES")[1] == [1, 2]
+
+    # A missing fiducial file also fails
+    with pytest.raises(FileNotFoundError, match="FITOPT003"):
+        runner.parse_fitopt_options(_fitopt_survey_dict(sep, "NONE", 3), "DES")
+    # A fitopt that doesn't exist anywhere fails
+    with pytest.raises(FileNotFoundError, match="FITOPT007"):
+        runner.parse_fitopt_options(_fitopt_survey_dict(sep, 7, 0), "DES")
+
+    # Both keys are mandatory
+    with pytest.raises(ValueError, match="SYSTEMATIC_FITOPTS"):
+        runner.parse_fitopt_options(_fitopt_survey_dict(sep, fiducial=0), "DES")
+    with pytest.raises(ValueError, match="FIDUCIAL_FITOPT"):
+        runner.parse_fitopt_options(_fitopt_survey_dict(sep, systematic="ALL"), "DES")
+    with pytest.raises(ValueError, match="SYSTEMATIC_FITOPTS and FIDUCIAL_FITOPT"):
+        runner.parse_fitopt_options(_fitopt_survey_dict(sep), "DES")
+
+    # A systematic can't also be the fiducial
+    with pytest.raises(ValueError, match="both FIDUCIAL_FITOPT and SYSTEMATIC_FITOPTS"):
+        runner.parse_fitopt_options(_fitopt_survey_dict(sep, "0,1", 0), "DES")
+
+    # Need both sim and data entries
+    with pytest.raises(ValueError, match="at least one SIM_\\* and one DATA_\\*"):
+        runner.parse_fitopt_options(_fitopt_survey_dict({"SIM_ALL": combined["SIM_ALL"]}, "NONE", 0), "DES")
+
+
+def test_parse_fitopt_options_wildcard_path(tmp_path):
+    """Globbed DATA paths (e.g. .../PIP_..-00*/FITOPT000.FITRES.gz) are checked per matched realization."""
+    from runner import sauron_runner
+
+    sim = _make_fitopt_files(tmp_path, "SIM_ALL", [0, 1, 2])
+    _make_fitopt_files(tmp_path, "DATA_ALL", [0, 1, 2], n_realizations=3)
+    os.remove(tmp_path / "DATA_ALL-0002" / "FITOPT002.FITRES.gz")
+    paths = {"SIM_ALL": sim, "DATA_ALL": [str(tmp_path / "DATA_ALL-000*" / "FITOPT000.FITRES.gz")]}
+
+    runner = sauron_runner(SimpleNamespace(config=None, cheat_cc=False))
+    assert runner.parse_fitopt_options(_fitopt_survey_dict(paths, "ALL", 0), "DES")[1] == [1]
+
+
+def test_unpack_dataframes_requires_fitopt_keys(tmp_path):
+    """Configs without SYSTEMATIC_FITOPTS / FIDUCIAL_FITOPT fail while the yaml is being parsed."""
+    import yaml
+    from runner import sauron_runner
+
+    config = yaml.safe_load(open(pathlib.Path(__file__).parent / "test_configs/test_config.yml"))
+    del config["DES"]["FIT_OPTIONS"]["SYSTEMATIC_FITOPTS"]
+    config_path = tmp_path / "config_missing_fitopts.yml"
+    config_path.write_text(yaml.safe_dump(config))
+
+    runner = sauron_runner(SimpleNamespace(config=config_path, cheat_cc=False))
+    with pytest.raises(ValueError, match="SYSTEMATIC_FITOPTS must be specified in FIT_OPTIONS for DES"):
+        runner.unpack_dataframes()
+
+
+# ----------------------------------------------------------------------------------------------------
+# FITOPT systematic covariance (calculate_fitopt_covariance)
+# ----------------------------------------------------------------------------------------------------
+
+def _halve_fitres(src, dst):
+    """Write a copy of a FITRES file keeping every other row, in the same whitespace-separated format."""
+    df = pd.read_csv(src, comment="#", sep=r"\s+")
+    df.iloc[::2].to_csv(dst, sep=" ", index=False, compression="gzip")
+
+
+def _fitopt_test_config(tmp_path, halve=(), systematic="1", fiducial=0):
+    """Build a config from test_config.yml whose SIM/DATA files live in tmp_path as FITOPT000 (symlink to the
+    real file) and FITOPT001 (a symlink too, or a copy with half the rows for the keys in `halve`)."""
+    import yaml
+    config = yaml.safe_load(open(pathlib.Path(__file__).parent / "test_configs/test_config.yml"))
+    des = config["DES"]
+    for key in ["SIM_IA", "SIM_CC", "DATA_IA", "DATA_CC"]:
+        real = des[key]["PATH"]
+        d = tmp_path / key
+        d.mkdir(parents=True)
+        (d / "FITOPT000.FITRES.gz").symlink_to(real)
+        if key in halve:
+            _halve_fitres(real, d / "FITOPT001.FITRES.gz")
+        else:
+            (d / "FITOPT001.FITRES.gz").symlink_to(real)
+        des[key]["PATH"] = str(d / "FITOPT000.FITRES.gz")
+    des["FIT_OPTIONS"]["SYSTEMATIC_FITOPTS"] = systematic
+    des["FIT_OPTIONS"]["FIDUCIAL_FITOPT"] = fiducial
+    config_path = tmp_path / "config_fitopt.yml"
+    config_path.write_text(yaml.safe_dump(config))
+    return config_path
+
+
+def _fitopt_runner(config_path):
+    args = SimpleNamespace(config=config_path, cheat_cc=False, sys_cov=True, debug=False, plot=False,
+                           skip_cuts=False)
+    runner = sauron_runner(args)
+    runner.unpack_dataframes()
+    return runner
+
+
+def test_fitopt_covariance_zero_for_identical_fitopt(tmp_path):
+    """A fitopt whose files are identical to the fiducial gives zero delta counts and zero covariance."""
+    runner = _fitopt_runner(_fitopt_test_config(tmp_path))
+    n_bins = len(runner.fit_args_dict["z_bins"]["DES"]) - 1
+
+    cov = runner.calculate_fitopt_covariance("DES", PROB_THRESH=0.5)
+
+    delta = runner.fit_args_dict["fitopt_delta_counts"]["DES"][1]
+    assert delta.shape == (n_bins,)
+    np.testing.assert_allclose(delta, 0, atol=1e-8)
+    np.testing.assert_allclose(cov, 0, atol=1e-8)
+
+
+def test_fitopt_covariance_shift(tmp_path):
+    """Halving the fitopt's data gives a real shift; C = outer(delta, delta); main state is left untouched."""
+    runner = _fitopt_runner(_fitopt_test_config(tmp_path, halve=("DATA_IA", "DATA_CC")))
+    survey = "DES"
+    keys_before = set(runner.datasets)
+    lengths_before = {k: len(v.df) for k, v in runner.datasets.items()}
+
+    cov = runner.calculate_fitopt_covariance(survey, PROB_THRESH=0.5)
+    delta = runner.fit_args_dict["fitopt_delta_counts"][survey][1]
+
+    # Halving the data roughly halves the decontaminated counts, so delta is clearly negative
+    fid_counts = runner._fitopt_counts(survey, 0, 0.5)["n_data"][0]
+    assert np.sum(delta) < -0.3 * np.sum(fid_counts)
+    np.testing.assert_allclose(cov, np.outer(delta, delta))
+    np.testing.assert_allclose(cov, cov.T)
+    assert np.min(np.linalg.eigvalsh(cov)) > -1e-6 * np.max(np.abs(cov))
+
+    # The main analysis datasets and fit args are untouched (no cuts applied, no eff_ij/N_gen stored)
+    assert set(runner.datasets) == keys_before
+    assert {k: len(v.df) for k, v in runner.datasets.items()} == lengths_before
+    assert survey not in runner.fit_args_dict["eff_ij"]
+    assert survey not in runner.fit_args_dict["N_gen"]
+
+
+def test_fitopt_covariance_efficiency_frame(tmp_path):
+    """If the fitopt's sims lose events along with the data, eff_ij drops too, and the efficiency-frame
+    correction removes most of the shift compared with halving only the data."""
+    data_only = _fitopt_runner(_fitopt_test_config(tmp_path / "a", halve=("DATA_IA", "DATA_CC")))
+    data_only.calculate_fitopt_covariance("DES", PROB_THRESH=0.5)
+    delta_data_only = data_only.fit_args_dict["fitopt_delta_counts"]["DES"][1]
+
+    both = _fitopt_runner(_fitopt_test_config(tmp_path / "b", halve=("DATA_IA", "DATA_CC", "SIM_IA", "SIM_CC")))
+    both.calculate_fitopt_covariance("DES", PROB_THRESH=0.5)
+    delta_both = both.fit_args_dict["fitopt_delta_counts"]["DES"][1]
+
+    assert np.linalg.norm(delta_both) < 0.3 * np.linalg.norm(delta_data_only)
+
+
+def test_fitopt_covariance_in_calculate_covariance(tmp_path, monkeypatch):
+    """calculate_covariance adds the fitopt covariance to cov_sys (other terms stubbed out to zero)."""
+    import runner as runner_module
+    monkeypatch.setattr(runner_module, "calculate_covariance_matrix_term",
+                        lambda func, params, z_bins, *args: np.zeros((len(z_bins) - 1, len(z_bins) - 1)))
+    runner = _fitopt_runner(_fitopt_test_config(tmp_path, halve=("DATA_IA",)))
+    runner.calculate_covariance(PROB_THRESH=0.5)
+    delta = runner.fit_args_dict["fitopt_delta_counts"]["DES"][1]
+    np.testing.assert_allclose(runner.fit_args_dict["cov_sys"]["DES"], np.outer(delta, delta))
+
+
+def test_fitopt_covariance_none_and_multi_fiducial(tmp_path):
+    """NONE gives no fitopt covariance; more than one fiducial with systematics raises."""
+    runner = _fitopt_runner(_fitopt_test_config(tmp_path / "none", systematic="NONE"))
+    assert runner.calculate_fitopt_covariance("DES", PROB_THRESH=0.5) is None
+
+    runner = _fitopt_runner(_fitopt_test_config(tmp_path / "multi", systematic="ALL", fiducial=[0, 1]))
+    runner.fit_args_dict["systematic_fitopts"]["DES"] = [1]  # ALL minus both fiducials is empty; force one
+    with pytest.raises(ValueError, match="exactly one FIDUCIAL_FITOPT"):
+        runner.calculate_fitopt_covariance("DES", PROB_THRESH=0.5)
+
+
+def test_binned_rate_sys_err(tmp_path, monkeypatch):
+    """fit_rate records the per-bin systematic error on the binned rate: sqrt(diag(cov_sys)) / D."""
+    import runner as runner_module
+    from scipy.sparse import block_diag
+    monkeypatch.setattr(runner_module, "calculate_covariance_matrix_term",
+                        lambda func, params, z_bins, *args: np.zeros((len(z_bins) - 1, len(z_bins) - 1)))
+    runner = _fitopt_runner(_fitopt_test_config(tmp_path, halve=("DATA_IA", "DATA_CC")))
+    runner.args.marginalize = False
+    runner.parse_global_fit_options()
+    survey = "DES"
+
+    runner.calculate_covariance(PROB_THRESH=0.5)
+    # Same per-survey steps as sauron.py main
+    runner.apply_cuts(survey, subset_version=True)
+    runner.get_counts(survey)
+    runner.apply_cuts(survey)
+    runner.calculate_transfer_matrix(survey)
+    runner.load_and_decontaminate_datasets(survey, PROB_THRESH=0.5)
+    runner.fit_rate(survey, 1, PROB_THRESH=0.5)
+
+    cov_sys = runner.fit_args_dict["cov_sys"][survey]
+    null_counts = runner.fit_args_dict["null_counts"][survey]
+    eff_ij = runner.fit_args_dict["eff_ij"][survey]
+    D = np.sum(null_counts * eff_ij * runner.fit_args_dict["f_norm"][survey], axis=0)
+    sys_err = runner.final_counts[survey]["binned_rate_sys_err"]
+    np.testing.assert_allclose(sys_err, np.sqrt(np.diag(cov_sys)) / D)
+    assert np.any(sys_err > 0)
+
+
+# ----------------------------------------------------------------------------------------------------
+# Cut systematics (CUT_SYSTEMATICS / calculate_cut_systematics)
+# ----------------------------------------------------------------------------------------------------
+
+def test_cut_systematics_covariance(tmp_path):
+    """CUT_SYSTEMATICS variants add sum_v outer(Delta_v, Delta_v) to cov_sys, where Delta_v is the variant's
+    decontaminated counts mapped onto the nominal efficiency minus the nominal counts. A variant identical to
+    the nominal cuts contributes nothing, and the nominal analysis state is left untouched."""
+    import copy
+    import yaml
+
+    config = yaml.safe_load(open(pathlib.Path(__file__).parent / "test_configs/test_config.yml"))
+    nominal_cuts = dict(config["DES"]["CUTS"])
+    assert nominal_cuts["x1"].replace(" ", "") == "-3,3", "Test assumes nominal x1 cut of -3, 3."
+    tight_c = "-0.2, 0.2"
+    # Variant 1 is identical to the nominal x1 cut (Delta must be 0); variant 2 tightens the c cut.
+    config["DES"]["CUT_SYSTEMATICS"] = [{"x1": "-3, 3"}, {"c": tight_c}]
+    config_path = tmp_path / "config_cut_sys.yml"
+    config_path.write_text(yaml.safe_dump(config))
+
+    runner = _fitopt_runner(config_path)
+    survey = "DES"
+    PROB_THRESH = 0.5
+
+    # Same per-survey steps as sauron.py main
+    runner.apply_cuts(survey, subset_version=True)
+    runner.get_counts(survey)
+    uncut = {k: copy.copy(v) for k, v in runner.datasets.items() if k.startswith(f"{survey}_")}
+    runner.apply_cuts(survey)
+    runner.calculate_transfer_matrix(survey)
+
+    lengths_before = {k: len(v.df) for k, v in runner.datasets.items()}
+    eff_nom = runner.fit_args_dict["eff_ij"][survey].copy()
+
+    cov = runner.calculate_cut_systematics(survey, uncut, PROB_THRESH)
+
+    # Independently compute Delta for the tightened-c variant using the same building blocks.
+    N_gen = np.asarray(runner.fit_args_dict["N_gen"][survey], dtype=float)
+    n_nom = np.asarray(runner.calculate_CC_contamination(PROB_THRESH, 1, survey), dtype=float)
+    tmp = {k: copy.copy(v) for k, v in uncut.items()}
+    runner.apply_cuts(survey, datasets=tmp, cuts={**nominal_cuts, "c": tight_c})
+    n_v = np.asarray(runner.calculate_CC_contamination(PROB_THRESH, 1, survey, datasets=tmp), dtype=float)
+    eff_v = runner.calculate_transfer_matrix(survey, datasets=tmp, store=False)
+    P_nom = np.sum(N_gen * eff_nom, axis=0)
+    P_v = np.sum(N_gen * eff_v, axis=0)
+    assert np.all(P_v > 0)
+    delta = n_v * P_nom / P_v - n_nom
+
+    assert np.any(np.abs(delta) > 1e-6), "Tightening the c cut should change the counts."
+    # Only the tightened-c variant contributes; the identical-x1 variant adds zero.
+    np.testing.assert_allclose(cov, np.outer(delta, delta), rtol=1e-8, atol=1e-10)
+    np.testing.assert_allclose(cov, cov.T)
+    assert np.min(np.linalg.eigvalsh(cov)) > -1e-6 * np.max(np.abs(cov))
+
+    # cov_sys started empty (calculate_covariance not called), so it is exactly the cut term.
+    np.testing.assert_allclose(runner.fit_args_dict["cov_sys"][survey], cov)
+    np.testing.assert_allclose(runner.fit_args_dict["cov_cut_sys"][survey], cov)
+
+    # The nominal datasets and transfer matrix are untouched.
+    assert {k: len(v.df) for k, v in runner.datasets.items()} == lengths_before
+    np.testing.assert_array_equal(runner.fit_args_dict["eff_ij"][survey], eff_nom)
+
+    # Turned off when systematics are disabled.
+    runner.args.sys_cov = False
+    assert runner.calculate_cut_systematics(survey, uncut, PROB_THRESH) is None
