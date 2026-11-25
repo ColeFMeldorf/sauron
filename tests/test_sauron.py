@@ -1743,3 +1743,70 @@ def test_binned_rate_sys_err(tmp_path, monkeypatch):
     sys_err = runner.final_counts[survey]["binned_rate_sys_err"]
     np.testing.assert_allclose(sys_err, np.sqrt(np.diag(cov_sys)) / D)
     assert np.any(sys_err > 0)
+
+
+# ----------------------------------------------------------------------------------------------------
+# Cut systematics (CUT_SYSTEMATICS / calculate_cut_systematics)
+# ----------------------------------------------------------------------------------------------------
+
+def test_cut_systematics_covariance(tmp_path):
+    """CUT_SYSTEMATICS variants add sum_v outer(Delta_v, Delta_v) to cov_sys, where Delta_v is the variant's
+    decontaminated counts mapped onto the nominal efficiency minus the nominal counts. A variant identical to
+    the nominal cuts contributes nothing, and the nominal analysis state is left untouched."""
+    import copy
+    import yaml
+
+    config = yaml.safe_load(open(pathlib.Path(__file__).parent / "test_configs/test_config.yml"))
+    nominal_cuts = dict(config["DES"]["CUTS"])
+    assert nominal_cuts["x1"].replace(" ", "") == "-3,3", "Test assumes nominal x1 cut of -3, 3."
+    tight_c = "-0.2, 0.2"
+    # Variant 1 is identical to the nominal x1 cut (Delta must be 0); variant 2 tightens the c cut.
+    config["DES"]["CUT_SYSTEMATICS"] = [{"x1": "-3, 3"}, {"c": tight_c}]
+    config_path = tmp_path / "config_cut_sys.yml"
+    config_path.write_text(yaml.safe_dump(config))
+
+    runner = _fitopt_runner(config_path)
+    survey = "DES"
+    PROB_THRESH = 0.5
+
+    # Same per-survey steps as sauron.py main
+    runner.apply_cuts(survey, subset_version=True)
+    runner.get_counts(survey)
+    uncut = {k: copy.copy(v) for k, v in runner.datasets.items() if k.startswith(f"{survey}_")}
+    runner.apply_cuts(survey)
+    runner.calculate_transfer_matrix(survey)
+
+    lengths_before = {k: len(v.df) for k, v in runner.datasets.items()}
+    eff_nom = runner.fit_args_dict["eff_ij"][survey].copy()
+
+    cov = runner.calculate_cut_systematics(survey, uncut, PROB_THRESH)
+
+    # Independently compute Delta for the tightened-c variant using the same building blocks.
+    N_gen = np.asarray(runner.fit_args_dict["N_gen"][survey], dtype=float)
+    n_nom = np.asarray(runner.calculate_CC_contamination(PROB_THRESH, 1, survey), dtype=float)
+    tmp = {k: copy.copy(v) for k, v in uncut.items()}
+    runner.apply_cuts(survey, datasets=tmp, cuts={**nominal_cuts, "c": tight_c})
+    n_v = np.asarray(runner.calculate_CC_contamination(PROB_THRESH, 1, survey, datasets=tmp), dtype=float)
+    eff_v = runner.calculate_transfer_matrix(survey, datasets=tmp, store=False)
+    P_nom = np.sum(N_gen * eff_nom, axis=0)
+    P_v = np.sum(N_gen * eff_v, axis=0)
+    assert np.all(P_v > 0)
+    delta = n_v * P_nom / P_v - n_nom
+
+    assert np.any(np.abs(delta) > 1e-6), "Tightening the c cut should change the counts."
+    # Only the tightened-c variant contributes; the identical-x1 variant adds zero.
+    np.testing.assert_allclose(cov, np.outer(delta, delta), rtol=1e-8, atol=1e-10)
+    np.testing.assert_allclose(cov, cov.T)
+    assert np.min(np.linalg.eigvalsh(cov)) > -1e-6 * np.max(np.abs(cov))
+
+    # cov_sys started empty (calculate_covariance not called), so it is exactly the cut term.
+    np.testing.assert_allclose(runner.fit_args_dict["cov_sys"][survey], cov)
+    np.testing.assert_allclose(runner.fit_args_dict["cov_cut_sys"][survey], cov)
+
+    # The nominal datasets and transfer matrix are untouched.
+    assert {k: len(v.df) for k, v in runner.datasets.items()} == lengths_before
+    np.testing.assert_array_equal(runner.fit_args_dict["eff_ij"][survey], eff_nom)
+
+    # Turned off when systematics are disabled.
+    runner.args.sys_cov = False
+    assert runner.calculate_cut_systematics(survey, uncut, PROB_THRESH) is None
