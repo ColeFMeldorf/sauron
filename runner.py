@@ -1179,6 +1179,8 @@ class sauron_runner:
 
         self.final_counts[survey]["result"] = fit_params
         self.final_counts[survey]["covariance"] = cov_x
+        # Stat-only covariance (fit without cov_sys); used to split stat vs. total error in outputs/plots.
+        self.final_counts[survey]["stat_covariance"] = no_sys_cov_x
         if marginalization_calculation:
             self.final_counts[survey]["grid_result"] = grid_result
             self.final_counts[survey]["high_uncs"] = high_uncs
@@ -1601,6 +1603,7 @@ class sauron_runner:
                     extent_chi_1s = []
                     extent_chi_2s = []
                     extent_chi_3s = []
+                    sys_bar_labelled_ax2 = False
                     for i, c in enumerate(csfrs):
                         logging.debug(f"Processing CSFR: {c}")
                         df = df_list[i]
@@ -1658,8 +1661,23 @@ class sauron_runner:
                                 if letter.isalpha() and (i == 0 or csfr_label[i-1] == " "):
                                     csfr_label = csfr_label[:i] + csfr_label[i].upper() + csfr_label[i+1:]
                             chi_plot_label += f" ({csfr_label} CSFR)"
-                        ax2.errorbar(df[param_names[1]], df[param_names[0]], xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"], fmt="o",
-                                     ms=5, label=chi_plot_label)
+                        # "{p}_error" is the total (stat ⊕ sys) error; "{p}_stat_error" is stat-only.
+                        # If stat-only is available, draw the total in white underneath the colored stat bar.
+                        stat_cols = [f"{param_names[1]}_stat_error", f"{param_names[0]}_stat_error"]
+                        has_stat_split = all(col in df.columns for col in stat_cols)
+                        if has_stat_split:
+                            ax2.errorbar(df[param_names[1]], df[param_names[0]],
+                                         xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"],
+                                         fmt="none", ecolor="white", elinewidth=3, capsize=0, zorder=3,
+                                         label=None if sys_bar_labelled_ax2 else "Stat ⊕ sys")
+                            sys_bar_labelled_ax2 = True
+                            ax2.errorbar(df[param_names[1]], df[param_names[0]],
+                                         xerr=df[stat_cols[0]], yerr=df[stat_cols[1]], fmt="o",
+                                         ms=5, label=chi_plot_label + " (stat)", zorder=4)
+                        else:
+                            ax2.errorbar(df[param_names[1]], df[param_names[0]],
+                                         xerr=df[f"{param_names[1]}_error"], yerr=df[f"{param_names[0]}_error"],
+                                         fmt="o", ms=5, label=chi_plot_label)
                     if self.rate_function_name == "power_law":
                         ax2.errorbar(1.82, 2e-5, yerr=.32 * 1e-5, xerr=.386, color = "red", fmt="o", ms=10, label="Lasker (2020)")
                         ax2.errorbar(1.7, 2.27e-5, yerr=0.19e-5, xerr=0.21, color="cyan", fmt="o", ms=10, label="Frohmaier (2019)")
@@ -2176,6 +2194,11 @@ class sauron_runner:
             result_to_add[p] = result[i]
         for i, p in enumerate(param_names):
             result_to_add[f"{p}_error"] = np.sqrt(cov[i, i])
+        # Stat-only error ({p}_error above is the total stat+sys error).
+        stat_cov = self.final_counts[survey].get("stat_covariance")
+        if stat_cov is not None:
+            for i, p in enumerate(param_names):
+                result_to_add[f"{p}_stat_error"] = np.sqrt(stat_cov[i, i])
 
         # Optional asymmetric (split normal) errors. Computing them is someone else's job (or not
         # done at all) -- this just stores whatever gets passed in.
