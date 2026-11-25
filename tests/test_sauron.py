@@ -835,7 +835,7 @@ def test_regression_SDSS():
     if os.path.exists(outpath):
         os.remove(outpath)
     sauron_path = pathlib.Path(__file__).parent / "../sauron.py"
-    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_SDSS_redo_again.yml"
+    config_path = pathlib.Path(__file__).parent / "test_configs/test_config_DES_SDSS_master.yml"
     cmd = ["python", str(sauron_path), str(config_path), "-o", str(outpath)]
     result = subprocess.run(cmd, capture_output=False, text=True)
     if result.returncode != 0:
